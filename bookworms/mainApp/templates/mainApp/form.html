@@ -1,0 +1,25 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Форма{% endblock %}
+
+{% block content %}
+
+<h2>Создать пост</h2>
+
+<form method="post">
+    {% csrf_token %}
+
+    <div class="mb-3">
+        <label>Заголовок</label>
+        <input type="text" name="title" class="form-control">
+    </div>
+
+    <div class="mb-3">
+        <label>Текст</label>
+        <textarea name="text" class="form-control"></textarea>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Отправить</button>
+</form>
+
+{% endblock %}

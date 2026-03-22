@@ -1,0 +1,25 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Главная{% endblock %}
+
+{% block content %}
+
+<h1 class="text-center">📚 Bookworms</h1>
+
+<hr>
+
+<h3>Пости</h3>
+
+{% for post in posts %}
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">{{ post.title }}</h5>
+            <p class="card-text">{{ post.text }}</p>
+            <small>Автор: {{ post.author.username }}</small>
+        </div>
+    </div>
+{% empty %}
+    <p>Постов пока нет</p>
+{% endfor %}
+
+{% endblock %}
