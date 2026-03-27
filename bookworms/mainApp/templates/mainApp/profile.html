@@ -8,6 +8,7 @@
 
 <p><strong>Имя:</strong> {{ user.username }}</p>
 <p><strong>Биография:</strong> {{ user.biography }}</p>
+<a href="{% url 'edit_profile' %}" class="btn btn-primary">Редагувати профіль</a>
 
 {% if user.avatar %}
     <img src="{{ user.avatar.url }}" width="150">

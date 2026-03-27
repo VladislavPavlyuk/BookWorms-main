@@ -11,12 +11,12 @@
 
     <div class="mb-3">
         <label>Заголовок</label>
-        <input type="text" name="title" class="form-control">
+        <input type="text" name="title" class="form-control" value="{{ post.title|default:'' }}">
     </div>
 
     <div class="mb-3">
         <label>Текст</label>
-        <textarea name="text" class="form-control"></textarea>
+        <textarea name="text" class="form-control">{{ post.text|default:'' }}</textarea>
     </div>
 
     <button type="submit" class="btn btn-primary">Отправить</button>
