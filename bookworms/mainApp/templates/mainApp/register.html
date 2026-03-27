@@ -1,0 +1,29 @@
+{% extends 'mainApp/base.html' %}
+
+{% block title %} Реєстрація {% endblock %}
+{% block content %}
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% for field in form %}
+        <div class="mb-3">
+            <label class="form-label">{{ field.label }}</label>
+            {{ field }}
+
+            {# Добавляем вывод конкретных ошибок для поля #}
+            {% if field.errors %}
+                <div class="text-danger small">
+                    {{ field.errors }}
+                </div>
+            {% endif %}
+
+            {% if field.help_text %}
+                <div class="form-text small">{{ field.help_text|safe }}</div>
+            {% endif %}
+        </div>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-success w-100">Зареєструватися</button>
+</form>
+{% endblock %}

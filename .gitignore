@@ -31,3 +31,4 @@ local_settings.py
 # OS
 .DS_Store
 Thumbs.db
+/doc_2026-03-19_23-10-03.env

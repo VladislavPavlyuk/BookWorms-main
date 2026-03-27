@@ -21,11 +21,11 @@
             <ul class="navbar-nav me-auto">
 
                 <li class="nav-item">
-                    <a class="nav-link" href="/">🏠 Главная</a>
+                    <a class="nav-link" href="/">🏠 Головна </a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="/profile/">👤 Профиль</a>
+                    <a class="nav-link" href="{% url 'profile' %}">👤 Профіль </a>
                 </li>
 
             </ul>
@@ -39,13 +39,16 @@
                     </li>
 
                     <li class="nav-item">
-                        <a class="nav-link text-danger" href="/logout/">🚪 Выйти</a>
+                        <a class="nav-link text-danger" href="{% url 'logout' %}">🚪 Вийти </a>
                     </li>
 
                 {% else %}
 
                     <li class="nav-item">
-                        <a class="nav-link" href="/login/">🔑 Войти</a>
+                        <a class="nav-link" href="{% url 'login' %}">➡️ Вхід </a>
+                    </li>
+                     <li class="nav-item">
+                        <a class="nav-link" href="{% url 'register' %}">🔑 Реєстрація </a>
                     </li>
 
                 {% endif %}
