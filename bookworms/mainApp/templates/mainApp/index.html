@@ -1,22 +1,15 @@
 {% extends "mainApp/base.html" %}
 
-{% block title %}Главная{% endblock %}
+{% block title %}Головна{% endblock %}
 
 {% block content %}
 
 <h1 class="text-center">📚 Bookworms</h1>
 
 <hr>
+
 {% if user.is_authenticated %}
-    <a href="{% url 'create_post' %}" class="btn btn-primary mb-3">
-        Створити пост
-    </a>
-{% if post.author == user %}
-    <a href="{% url 'delete_post' post.id %}" class="btn btn-danger btn-sm mt-2">
-        Удалить
-    </a>
-<a href="{% url 'edit_post' post.id %}" class="text-primary ms-2">Редактировать</a>
-{% endif %}
+    <a href="/posts/create/" class="btn btn-success mb-3">➕ Створити пост</a>
 {% endif %}
 
 <h3>Пости</h3>
@@ -24,15 +17,18 @@
 {% for post in posts %}
     <div class="card mb-3">
         <div class="card-body">
+
             <h5 class="card-title">{{ post.title }}</h5>
             <p class="card-text">{{ post.text }}</p>
-            <small>
-                    Автор: {{ post.author.username }} | {{ post.created_ad|date:"d.m.Y H:i" }}
-                    {% if post.author == user %}
-                        <a href="{% url 'edit_post' post.id %}" class="text-primary ms-2">Редактировать</a>
-                        <a href="{% url 'delete_post' post.id %}" class="text-danger ms-2">Удалить</a>
-                    {% endif %}
-            </small>
+            <small>Автор: {{ post.author.username }}</small>
+
+            <br><br>
+
+            {% if post.author == user %}
+                <a href="/posts/edit/{{ post.id }}/" class="btn btn-warning btn-sm">✏️ Редагувати</a>
+                <a href="/posts/delete/{{ post.id }}/" class="btn btn-danger btn-sm">🗑 Видалити</a>
+            {% endif %}
+
         </div>
     </div>
 {% empty %}

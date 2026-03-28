@@ -1,25 +1,29 @@
 {% extends "mainApp/base.html" %}
 
-{% block title %}Форма{% endblock %}
+{% block title %}Пост{% endblock %}
 
 {% block content %}
 
-<h2>Создать пост</h2>
+<h2>{% if post %}Редагувати пост{% else %}Створити пост{% endif %}</h2>
 
 <form method="post">
     {% csrf_token %}
 
     <div class="mb-3">
-        <label>Заголовок</label>
-        <input type="text" name="title" class="form-control" value="{{ post.title|default:'' }}">
+        <input type="text" name="title" class="form-control"
+               placeholder="Заголовок"
+               value="{{ post.title|default:'' }}">
     </div>
 
     <div class="mb-3">
-        <label>Текст</label>
-        <textarea name="text" class="form-control">{{ post.text|default:'' }}</textarea>
+        <textarea name="text" class="form-control"
+                  placeholder="Текст">{{ post.text|default:'' }}</textarea>
     </div>
 
-    <button type="submit" class="btn btn-primary">Отправить</button>
+    <button type="submit" class="btn btn-success">
+        {% if post %}Зберегти{% else %}Створити{% endif %}
+    </button>
+
 </form>
 
 {% endblock %}
