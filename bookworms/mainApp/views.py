@@ -1,13 +1,25 @@
+from django.contrib import messages
 from django.contrib.auth import login
-from django.shortcuts import render, redirect
-from .models import Post, CustomUser
+from django.db import IntegrityError
+from django.db.models import Q
+from django.shortcuts import render, redirect, get_object_or_404
+from .models import BookExchangeRequest, Post, Shelf
 from django.contrib.auth.views import LoginView
-from .forms import UserLoginForm, UserRegisterForm
+from .forms import UserLoginForm, UserRegisterForm, AddIsbnForm
 from django.views.generic import CreateView
-from django.urls import reverse_lazy, reverse
+from django.urls import reverse_lazy
 from django.contrib.auth.decorators import login_required
-from .models import Post
 from .forms import UserUpdateForm
+from .openlibrary import fetch_book_by_isbn
+# Бізнес-правила обміну/позик винесені в exchange_service — тут лише HTTP і шаблони.
+from .exchange_service import (
+    accept_exchange_request,
+    cancel_exchange_request,
+    create_exchange_request,
+    get_or_create_book_from_payload,
+    reject_exchange_request,
+    return_borrowed_book,
+)
 
 def home(request):
     posts = Post.objects.all().order_by('-created_ad')
@@ -83,3 +95,212 @@ def edit_profile(request):
         form = UserUpdateForm(instance=request.user)
 
     return render(request, 'mainApp/profile_edit.html', {'form': form})
+
+
+@login_required
+def my_library(request):
+    """
+    Сторінка «Моя полиця»: додавання книги за ISBN (Open Library) + список записів Shelf поточного користувача.
+    """
+    form = AddIsbnForm()
+    if request.method == "POST" and "add_isbn" in request.POST:
+        form = AddIsbnForm(request.POST)
+        if form.is_valid():
+            payload, err = fetch_book_by_isbn(form.cleaned_data["isbn"])
+            if err:
+                messages.error(request, err)
+            else:
+                # Спочатку єдиний запис Book за ISBN, потім зв’язок «я маю цю книгу» — Shelf.
+                book, _ = get_or_create_book_from_payload(payload)
+                try:
+                    Shelf.objects.create(user=request.user, book=book)
+                    messages.success(request, f"Додано: {book.title}")
+                    return redirect("my_library")
+                except IntegrityError:
+                    # Спрацювало обмеження unique (user, book).
+                    messages.warning(request, "Ця книга вже є на вашій полиці.")
+                    form = AddIsbnForm()
+
+    # borrowed_from підтягуємо одним запитом — щоб у шаблоні знати, позичена книга чи власна.
+    shelves = (
+        request.user.shelf_entries.select_related("book", "borrowed_from").all()
+    )
+    return render(
+        request,
+        "mainApp/library.html",
+        {"form": form, "shelves": shelves},
+    )
+
+
+@login_required
+def remove_shelf_entry(request, shelf_id):
+    """Видалити з полиці лише власну книгу; позичену — заборонено (тільки return)."""
+    if request.method != "POST":
+        return redirect("my_library")
+    shelf = get_object_or_404(Shelf, pk=shelf_id, user=request.user)
+    if shelf.borrowed_from_id:
+        messages.error(
+            request,
+            "Позичену книгу не можна видалити з полиці - лише повернути власнику.",
+        )
+        return redirect("my_library")
+    shelf.delete()
+    messages.success(request, "Книгу видалено з полиці.")
+    return redirect("my_library")
+
+
+@login_required
+def return_borrowed_shelf_book(request, shelf_id):
+    if request.method != "POST":
+        return redirect("my_library")
+    ok, err = return_borrowed_book(shelf_id, request.user)
+    if ok:
+        messages.success(request, "Книгу повернуто власнику.")
+    else:
+        messages.error(request, err or "Помилка.")
+    return redirect("my_library")
+
+
+@login_required
+def browse_shelves(request):
+    """
+    Каталог чужих книг, доступних для запиту: не показуємо позичені у когось записи
+    і даємо випадати лише власні (не позичені) книги для поля «обмін».
+    """
+    others = (
+        Shelf.objects.exclude(user=request.user)
+        .filter(borrowed_from__isnull=True)
+        .select_related("user", "book")
+        .order_by("-added_at")
+    )
+    my_owned_shelves = (
+        request.user.shelf_entries.filter(borrowed_from__isnull=True)
+        .select_related("book")
+    )
+    return render(
+        request,
+        "mainApp/browse_shelves.html",
+        {"others": others, "my_owned_shelves": my_owned_shelves},
+    )
+
+
+@login_required
+def create_exchange(request):
+    """Приймає POST з форми на сторінці browse: id чужої полиці + опційно id своєї для обміну."""
+    if request.method != "POST":
+        return redirect("browse_shelves")
+    try:
+        target_id = int(request.POST.get("target_shelf_id", ""))
+    except (TypeError, ValueError):
+        messages.error(request, "Некоректний запит.")
+        return redirect("browse_shelves")
+
+    target_shelf = get_object_or_404(Shelf, pk=target_id)
+    offer_shelf = None
+    raw_offer = request.POST.get("offer_shelf_id") or ""
+    if raw_offer.strip():
+        try:
+            oid = int(raw_offer)
+            offer_shelf = get_object_or_404(Shelf, pk=oid, user=request.user)
+        except (TypeError, ValueError):
+            messages.error(request, "Некоректна книга для обміну.")
+            return redirect("browse_shelves")
+
+    req, err = create_exchange_request(request.user, target_shelf, offer_shelf)
+    if err:
+        messages.error(request, err)
+    else:
+        messages.success(request, "Запит надіслано.")
+    return redirect("exchange_requests")
+
+
+@login_required
+def exchange_requests(request):
+    """Вхідні / вихідні запити та остання історія рішень для поточного користувача."""
+    pending_in = (
+        BookExchangeRequest.objects.filter(
+            status=BookExchangeRequest.Status.PENDING,
+            shelf_owner=request.user,
+        )
+        .select_related("requester", "target_shelf__book", "offer_shelf__book")
+    )
+    pending_out = (
+        BookExchangeRequest.objects.filter(
+            status=BookExchangeRequest.Status.PENDING,
+            requester=request.user,
+        )
+        .select_related("target_shelf__user", "target_shelf__book", "offer_shelf__book")
+    )
+    history = (
+        BookExchangeRequest.objects.filter(
+            status__in=[
+                BookExchangeRequest.Status.ACCEPTED,
+                BookExchangeRequest.Status.REJECTED,
+                BookExchangeRequest.Status.CANCELLED,
+            ]
+        )
+        .filter(Q(requester=request.user) | Q(shelf_owner=request.user))
+        .select_related(
+            "requester",
+            "target_shelf__user",
+            "target_shelf__book",
+            "offer_shelf__book",
+        )[:50]
+    )
+    return render(
+        request,
+        "mainApp/exchange_requests.html",
+        {
+            "pending_in": pending_in,
+            "pending_out": pending_out,
+            "history": history,
+        },
+    )
+
+
+@login_required
+def exchange_accept(request, request_id):
+    """Перед accept дивимось, був offer чи ні — щоб показати різне повідомлення (обмін vs позика)."""
+    if request.method != "POST":
+        return redirect("exchange_requests")
+    req = BookExchangeRequest.objects.filter(
+        pk=request_id, status=BookExchangeRequest.Status.PENDING
+    ).first()
+    had_offer = bool(req and req.offer_shelf_id)
+    ok, err = accept_exchange_request(request_id, request.user)
+    if ok:
+        messages.success(
+            request,
+            "Обмін прийнято: полиці оновлено."
+            if had_offer
+            else "Запит прийнято: книгу видано в позику (повернення - з полиці позичальника).",
+        )
+    else:
+        messages.error(request, err or "Помилка.")
+    return redirect("exchange_requests")
+
+
+@login_required
+def exchange_reject(request, request_id):
+    """Власник відмовляє у запиті — статус запиту rejected, полиці не змінюються."""
+    if request.method != "POST":
+        return redirect("exchange_requests")
+    ok, err = reject_exchange_request(request_id, request.user)
+    if ok:
+        messages.success(request, "Запит відхилено.")
+    else:
+        messages.error(request, err or "Помилка.")
+    return redirect("exchange_requests")
+
+
+@login_required
+def exchange_cancel(request, request_id):
+    """Відправник запиту передумав — статус cancelled."""
+    if request.method != "POST":
+        return redirect("exchange_requests")
+    ok, err = cancel_exchange_request(request_id, request.user)
+    if ok:
+        messages.success(request, "Запит скасовано.")
+    else:
+        messages.error(request, err or "Помилка.")
+    return redirect("exchange_requests")

@@ -52,3 +52,12 @@ class UserUpdateForm(forms.ModelForm):
 
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'
+
+
+class AddIsbnForm(forms.Form):
+    """Проста форма без моделі: лише поле ISBN для сторінки «Моя полиця»."""
+    isbn = forms.CharField(
+        label="ISBN (10 або 13)",
+        max_length=32,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "9780140328721"}),
+    )

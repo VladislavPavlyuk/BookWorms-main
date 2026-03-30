@@ -28,6 +28,19 @@
                     <a class="nav-link" href="{% url 'profile' %}">👤 Профіль </a>
                 </li>
 
+                {# Пункти бібліотеки: лише для залогінених (інакше немає user) #}
+                {% if user.is_authenticated %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'my_library' %}">📖 Моя полиця</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'browse_shelves' %}">🔄 Полиці інших</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'exchange_requests' %}">📬 Обміни</a>
+                </li>
+                {% endif %}
+
             </ul>
 
             <ul class="navbar-nav">
@@ -38,6 +51,7 @@
                         <span class="nav-link">👋 {{ user.username }}</span>
                     </li>
 
+                    {# У Django 6 logout лише через POST + csrf_token — інакше вихід не спрацює. #}
                     <li class="nav-item">
                      <form action="{% url 'logout' %}" method="post" class="m-0 p-0 d-inline-block">
                         {% csrf_token %}
