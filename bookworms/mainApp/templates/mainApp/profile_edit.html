@@ -1,0 +1,16 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Редагування профілю{% endblock %}
+
+{% block content %}
+
+<h2 class="mb-3">Редагування профілю</h2>
+
+<form method="post" enctype="multipart/form-data" class="card card-body" style="max-width: 32rem;">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-primary mt-2">Зберегти</button>
+    <a href="{% url 'profile' %}" class="btn btn-outline-secondary mt-2">Скасувати</a>
+</form>
+
+{% endblock %}

@@ -14,7 +14,7 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 BOOKS_API = "https://openlibrary.org/api/books"
-# Багато публічних API просять осмислений User-Agent — так ввічливіше до сервера.
+# Багато публічних API просять осмислений User-Agent - так ввічливіше до сервера.
 USER_AGENT = "BookWorms/1.0 (ISBN library; contact: local)"
 
 
@@ -31,7 +31,7 @@ def normalize_isbn(raw: str) -> str | None:
 
 
 def _authors_line(data: dict[str, Any]) -> str:
-    """З JSON Open Library робимо один рядок «Ім'я1, Ім'я2» для збереження в моделі Book."""
+    """З JSON Open Library робимо один рядок "Ім'я1, Ім'я2" для збереження в моделі Book."""
     authors = data.get("authors") or []
     names = []
     for a in authors:
@@ -41,7 +41,7 @@ def _authors_line(data: dict[str, Any]) -> str:
 
 
 def _first_publisher(data: dict[str, Any]) -> str:
-    """Беремо першого видавця зі списку — для картки книги цього зазвичай достатньо."""
+    """Беремо першого видавця зі списку - для картки книги цього зазвичай достатньо."""
     pubs = data.get("publishers") or []
     if pubs and isinstance(pubs[0], dict):
         return pubs[0].get("name") or ""
@@ -57,7 +57,7 @@ def fetch_book_by_isbn(isbn: str) -> tuple[dict[str, Any] | None, str | None]:
     if not norm:
         return None, "Невірний ISBN: потрібно 10 символів (останній може бути X) або 13 цифр."
 
-    # bibkeys — формат, який очікує Books API; jscmd=data повертає назву, авторів, обкладинку тощо.
+    # bibkeys - формат, який очікує Books API; jscmd=data повертає назву, авторів, обкладинку тощо.
     bibkey = f"ISBN:{norm}"
     url = f"{BOOKS_API}?bibkeys={quote(bibkey)}&jscmd=data&format=json"
     req = Request(url, headers={"User-Agent": USER_AGENT})

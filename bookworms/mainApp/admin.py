@@ -13,7 +13,7 @@ admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(Post)
 
 
-# Нижче — реєстрація моделей бібліотеки в адмінці Django (/admin/) для перегляду та правок у БД.
+# Нижче - реєстрація моделей бібліотеки в адмінці Django (/admin/) для перегляду та правок у БД.
 
 
 @admin.register(Book)

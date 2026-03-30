@@ -21,7 +21,7 @@ class Post(models.Model):
 
 class Book(models.Model):
     """
-    Книга як «довідник»: один ISBN = один запис у всій базі.
+    Книга як "довідник": один ISBN = один запис у всій базі.
     Навіщо окремо від Shelf: щоб не дублювати назву/авторів для кожного користувача -
     усі читають ті самі поля з Open Library, а полиця лише посилається на цей запис.
     """
@@ -66,7 +66,7 @@ class Shelf(models.Model):
         verbose_name = "полиця"
         verbose_name_plural = "полиці"
         constraints = [
-            # Заборона дублікатів: один користувач — один рядок на одну книгу.
+            # Заборона дублікатів: один користувач - один рядок на одну книгу.
             models.UniqueConstraint(fields=["user", "book"], name="unique_shelf_user_book"),
         ]
         ordering = ["-added_at"]
@@ -88,14 +88,14 @@ class BookExchangeRequest(models.Model):
         REJECTED = "rejected", "Відхилено"
         CANCELLED = "cancelled", "Скасовано"
 
-    # Який саме запис на полиці «цілять» (чия книга).
+    # Який саме запис на полиці "цілять" (чия книга).
     target_shelf = models.ForeignKey(
         Shelf,
         on_delete=models.CASCADE,
         related_name="incoming_exchange_requests",
         verbose_name="Чия книга запитується",
     )
-    # Копія власника на момент запиту; після обміну target_shelf.user може змінитись, а тут — для перевірок та історії.
+    # Копія власника на момент запиту; після обміну target_shelf.user може змінитись, а тут - для перевірок та історії.
     shelf_owner = models.ForeignKey(
         CustomUser,
         on_delete=models.CASCADE,

@@ -1,7 +1,7 @@
 """
 Сервіс обміну та позик книг (чиста логіка без HTTP).
 
-Навіщо окремий файл: щоб правила «хто кому що може» були в одному місці,
+Навіщо окремий файл: щоб правила «хто кому що може" були в одному місці,
 а views лише викликали ці функції й показували повідомлення користувачу.
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ from .models import Book, BookExchangeRequest, CustomUser, Shelf
 def get_or_create_book_from_payload(payload: dict) -> tuple[Book, bool]:
     """
     Створює запис Book у БД з відповіді Open Library (або повертає вже існуючий за ISBN).
-    Друге значення в кортежі — чи саме зараз створили новий рядок (для дебагу/логів).
+    Друге значення в кортежі - чи саме зараз створили новий рядок (для дебагу/логів).
     """
     book, created = Book.objects.get_or_create(
         isbn=payload["isbn"],
@@ -44,7 +44,7 @@ def create_exchange_request(
     if target_shelf.user_id == requester.id:
         return None, "Не можна запитувати власну книгу."
 
-    # Не пропонуємо «віджати» книгу, яку хтось тримає як позичену (вона не його власність для обміну).
+    # Не пропонуємо "віджати" книгу, яку хтось тримає як позичену (вона не його власність для обміну).
     if target_shelf.borrowed_from_id:
         return None, "Неможливо запитувати позичену в іншого користувача книгу."
 
@@ -57,7 +57,7 @@ def create_exchange_request(
             return None, "Немає сенсу обмінювати книгу на ту саму."
 
     pending = BookExchangeRequest.Status.PENDING
-    # Один активний запит від того самого користувача на той самий рядок полиці — щоб не спамити.
+    # Один активний запит від того самого користувача на той самий рядок полиці - щоб не спамити.
     if BookExchangeRequest.objects.filter(
         target_shelf=target_shelf,
         requester=requester,
@@ -81,8 +81,8 @@ def create_exchange_request(
 @transaction.atomic
 def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[bool, str | None]:
     """
-    Власник погоджується: оновлюємо рядки Shelf (не видаляємо їх — щоб не ламати посилання в запиті).
-    atomic + select_for_update: два одночасні «Прийняти» не зіпсують дані.
+    Власник погоджується: оновлюємо рядки Shelf (не видаляємо їх - щоб не ламати посилання в запиті).
+    atomic + select_for_update: два одночасні "Прийняти" не зіпсують дані.
     """
     try:
         req = BookExchangeRequest.objects.select_for_update().get(
@@ -164,7 +164,7 @@ def reject_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
 
 
 def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[bool, str | None]:
-    """Той, хто надсилав запит, передумав — скасування до відповіді власника."""
+    """Той, хто надсилав запит, передумав - скасування до відповіді власника."""
     try:
         req = BookExchangeRequest.objects.get(
             pk=request_id,
@@ -185,8 +185,8 @@ def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
 @transaction.atomic
 def return_borrowed_book(shelf_id: int, borrower: CustomUser) -> tuple[bool, str | None]:
     """
-    Позичальник натискає «Повернути власнику»: той самий рядок Shelf залишається,
-    але user стає власником, borrowed_from очищується (книга знову «повністю його»).
+    Позичальник натискає "Повернути власнику": той самий рядок Shelf залишається,
+    але user стає власником, borrowed_from очищується (книга знову "повністю його").
     """
     shelf = (
         Shelf.objects.select_for_update()
@@ -206,6 +206,6 @@ def return_borrowed_book(shelf_id: int, borrower: CustomUser) -> tuple[bool, str
     if Shelf.objects.filter(user_id=owner_id, book_id=book_id).exclude(pk=shelf.pk).exists():
         return False, "У власника вже є ця книга на полиці - зверніться до адміністратора."
 
-    # Один UPDATE замість delete+create — історія та id запису зберігаються.
+    # Один UPDATE замість delete+create - історія та id запису зберігаються.
     Shelf.objects.filter(pk=shelf.pk).update(user_id=owner_id, borrowed_from_id=None)
     return True, None

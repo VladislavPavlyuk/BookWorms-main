@@ -11,7 +11,7 @@ from django.urls import reverse_lazy
 from django.contrib.auth.decorators import login_required
 from .forms import UserUpdateForm
 from .openlibrary import fetch_book_by_isbn
-# Бізнес-правила обміну/позик винесені в exchange_service — тут лише HTTP і шаблони.
+# Бізнес-правила обміну/позик винесені в exchange_service - тут лише HTTP і шаблони.
 from .exchange_service import (
     accept_exchange_request,
     cancel_exchange_request,
@@ -26,6 +26,9 @@ def home(request):
     return render(request, 'mainApp/index.html', {'posts': posts})
 
 
+@login_required
+def profile(request):
+    return render(request, 'mainApp/profile.html')
 
 
 class CustomLoginView(LoginView):
@@ -99,7 +102,7 @@ def edit_profile(request):
 @login_required
 def my_library(request):
     """
-    Сторінка «Моя полиця»: додавання книги за ISBN (Open Library) + список записів Shelf поточного користувача.
+    Сторінка "Моя полиця": додавання книги за ISBN (Open Library) + список записів Shelf поточного користувача.
     """
     form = AddIsbnForm()
     if request.method == "POST" and "add_isbn" in request.POST:
@@ -109,7 +112,7 @@ def my_library(request):
             if err:
                 messages.error(request, err)
             else:
-                # Спочатку єдиний запис Book за ISBN, потім зв’язок «я маю цю книгу» — Shelf.
+                # Спочатку єдиний запис Book за ISBN, потім зв’язок "я маю цю книгу" - Shelf.
                 book, _ = get_or_create_book_from_payload(payload)
                 try:
                     Shelf.objects.create(user=request.user, book=book)
@@ -120,7 +123,7 @@ def my_library(request):
                     messages.warning(request, "Ця книга вже є на вашій полиці.")
                     form = AddIsbnForm()
 
-    # borrowed_from підтягуємо одним запитом — щоб у шаблоні знати, позичена книга чи власна.
+    # borrowed_from підтягуємо одним запитом - щоб у шаблоні знати, позичена книга чи власна.
     shelves = (
         request.user.shelf_entries.select_related("book", "borrowed_from").all()
     )
@@ -133,7 +136,7 @@ def my_library(request):
 
 @login_required
 def remove_shelf_entry(request, shelf_id):
-    """Видалити з полиці лише власну книгу; позичену — заборонено (тільки return)."""
+    """Видалити з полиці лише власну книгу; позичену - заборонено (тільки return)."""
     if request.method != "POST":
         return redirect("my_library")
     shelf = get_object_or_404(Shelf, pk=shelf_id, user=request.user)
@@ -164,7 +167,7 @@ def return_borrowed_shelf_book(request, shelf_id):
 def browse_shelves(request):
     """
     Каталог чужих книг, доступних для запиту: не показуємо позичені у когось записи
-    і даємо випадати лише власні (не позичені) книги для поля «обмін».
+    і даємо випадати лише власні (не позичені) книги для поля "обмін".
     """
     others = (
         Shelf.objects.exclude(user=request.user)
@@ -259,7 +262,7 @@ def exchange_requests(request):
 
 @login_required
 def exchange_accept(request, request_id):
-    """Перед accept дивимось, був offer чи ні — щоб показати різне повідомлення (обмін vs позика)."""
+    """Перед accept дивимось, був offer чи ні - щоб показати різне повідомлення (обмін vs позика)."""
     if request.method != "POST":
         return redirect("exchange_requests")
     req = BookExchangeRequest.objects.filter(
@@ -281,7 +284,7 @@ def exchange_accept(request, request_id):
 
 @login_required
 def exchange_reject(request, request_id):
-    """Власник відмовляє у запиті — статус запиту rejected, полиці не змінюються."""
+    """Власник відмовляє у запиті - статус запиту rejected, полиці не змінюються."""
     if request.method != "POST":
         return redirect("exchange_requests")
     ok, err = reject_exchange_request(request_id, request.user)
@@ -294,7 +297,7 @@ def exchange_reject(request, request_id):
 
 @login_required
 def exchange_cancel(request, request_id):
-    """Відправник запиту передумав — статус cancelled."""
+    """Відправник запиту передумав - статус cancelled."""
     if request.method != "POST":
         return redirect("exchange_requests")
     ok, err = cancel_exchange_request(request_id, request.user)

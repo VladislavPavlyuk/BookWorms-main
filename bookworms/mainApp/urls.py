@@ -1,9 +1,8 @@
 """
-Маршрути застосунку. Блок /library/… — бібліотека, полиці інших, обмін і позика.
-Порядок важливий: спочатку «конкретні» шляхи (exchange/new), потім загальні (exchange/).
+Маршрути застосунку. Блок /library/… - бібліотека, полиці інших, обмін і позика.
+Порядок важливий: спочатку "конкретні" шляхи (exchange/new), потім загальні (exchange/).
 """
 from django.urls import path
-from .views import home, CustomLoginView, CustomRegisterView, delete_post
 from django.contrib.auth.views import LogoutView
 from .views import (
     home,
@@ -38,6 +37,7 @@ urlpatterns = [
     path('library/exchange/<int:request_id>/reject/', exchange_reject, name='exchange_reject'),
     path('library/exchange/<int:request_id>/cancel/', exchange_cancel, name='exchange_cancel'),
     path('profile/', profile, name='profile'),
+    path('profile/edit/', edit_profile, name='edit_profile'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('login/', CustomLoginView.as_view(), name='login'),
     path('register/', CustomRegisterView.as_view(), name='register'),
