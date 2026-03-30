@@ -14,8 +14,7 @@ def home(request):
     return render(request, 'mainApp/index.html', {'posts': posts})
 
 
-def profile(request):
-    return render(request, 'mainApp/profile.html')
+
 
 class CustomLoginView(LoginView):
     template_name = 'mainApp/login.html'

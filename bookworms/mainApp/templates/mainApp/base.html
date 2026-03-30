@@ -25,42 +25,39 @@
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'profile' %}">👤 Профіль </a>
+                    <a class="nav-link" href="{% url 'profile_app:profile' %}">👤 Профіль </a>
                 </li>
 
             </ul>
 
-            <ul class="navbar-nav">
-
+            <ul class="navbar-nav ms-auto d-flex align-items-center">
                 {% if user.is_authenticated %}
+                <li class="nav-item">
+            <span class="nav-link text-white me-3" style="cursor: default;">
+                👋 {{ user.username }}
+            </span>
+                </li>
 
-                    <li class="nav-item">
-                        <span class="nav-link">👋 {{ user.username }}</span>
-                    </li>
-
-                    <li class="nav-item">
-                     <form action="{% url 'logout' %}" method="post" class="m-0 p-0 d-inline-block">
+                <li class="nav-item">
+                    <form action="{% url 'logout' %}" method="post" class="d-flex align-items-center m-0">
                         {% csrf_token %}
-                        <button type="submit" class="nav-link btn btn-link text-white text-decoration-none border-0 p-0"
-                                style="background: none; vertical-align: middle; cursor: pointer;">
-                            🚪 Вихід
+                        <button type="submit"
+                                class="nav-link btn btn-link text-white text-decoration-none border-0 p-0 shadow-none"
+                                style="background: none; line-height: 1; display: flex; align-items: center;">
+                            <span style="font-size: 1.2rem; margin-right: 4px;">🚪</span> Вихід
                         </button>
-                     </form>
+                    </form>
                 </li>
 
                 {% else %}
-
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'login' %}">➡️ Вхід </a>
-                    </li>
-                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'register' %}">🔑 Реєстрація </a>
-                    </li>
-
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'login' %}">➡️ Вхід</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'register' %}">🔑 Реєстрація</a>
+                </li>
                 {% endif %}
-
             </ul>
-
         </div>
 
     </div>

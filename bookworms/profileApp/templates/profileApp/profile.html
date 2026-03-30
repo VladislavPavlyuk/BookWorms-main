@@ -1,0 +1,17 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Профиль{% endblock %}
+
+{% block content %}
+
+<h2>Профіль</h2>
+
+<p><strong>Ім'я:</strong> {{ user.username }}</p>
+<p><strong>Біографія:</strong> {{ user.biography }}</p>
+<a href="{% url 'profile_app:edit_profile' %}" class="btn btn-primary">Редагувати профіль</a>
+
+{% if user.avatar %}
+    <img src="{{ user.avatar.url }}" width="150">
+{% endif %}
+
+{% endblock %}
