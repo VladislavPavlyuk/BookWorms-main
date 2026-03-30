@@ -3,6 +3,7 @@
 Порядок важливий: спочатку «конкретні» шляхи (exchange/new), потім загальні (exchange/).
 """
 from django.urls import path
+from .views import home, CustomLoginView, CustomRegisterView, delete_post
 from django.contrib.auth.views import LogoutView
 from .views import (
     home,
@@ -43,5 +44,4 @@ urlpatterns = [
     path('posts/create/', create_post, name='create_post'),
     path('posts/delete/<int:post_id>/', delete_post, name='delete_post'),
     path('posts/edit/<int:post_id>/', edit_post, name='edit_post'),
-    path('profile/edit/', edit_profile, name='edit_profile'),
 ]
