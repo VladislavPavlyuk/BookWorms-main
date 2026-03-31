@@ -20,10 +20,11 @@ from .message_service import (
 from .exchange_service import (
     accept_exchange_request,
     cancel_exchange_request,
+    confirm_borrow_return,
     create_exchange_request,
     get_or_create_book_from_payload,
     reject_exchange_request,
-    return_borrowed_book,
+    request_borrow_return,
 )
 
 def home(request):
@@ -132,10 +133,19 @@ def my_library(request):
     shelves = (
         request.user.shelf_entries.select_related("book", "borrowed_from").all()
     )
+    pending_returns_to_confirm = (
+        Shelf.objects.filter(borrowed_from=request.user, return_pending=True)
+        .select_related("user", "book")
+        .order_by("-added_at")
+    )
     return render(
         request,
         "mainApp/library.html",
-        {"form": form, "shelves": shelves},
+        {
+            "form": form,
+            "shelves": shelves,
+            "pending_returns_to_confirm": pending_returns_to_confirm,
+        },
     )
 
 
@@ -160,9 +170,25 @@ def remove_shelf_entry(request, shelf_id):
 def return_borrowed_shelf_book(request, shelf_id):
     if request.method != "POST":
         return redirect("my_library")
-    ok, err = return_borrowed_book(shelf_id, request.user)
+    ok, err = request_borrow_return(shelf_id, request.user)
     if ok:
-        messages.success(request, "Книгу повернуто власнику.")
+        messages.success(
+            request,
+            "Запит на повернення надіслано. Книга зникне з вашої полиці після підтвердження позикодавцем.",
+        )
+    else:
+        messages.error(request, err or "Помилка.")
+    return redirect("my_library")
+
+
+@login_required
+def confirm_return_borrowed_shelf_book(request, shelf_id):
+    """Позикодавець підтверджує отримання фізично повернутої книги."""
+    if request.method != "POST":
+        return redirect("my_library")
+    ok, err = confirm_borrow_return(shelf_id, request.user)
+    if ok:
+        messages.success(request, "Повернення підтверджено - книга на вашій полиці.")
     else:
         messages.error(request, err or "Помилка.")
     return redirect("my_library")

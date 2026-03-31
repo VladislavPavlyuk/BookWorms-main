@@ -60,6 +60,8 @@ class Shelf(models.Model):
         verbose_name="Позичено у",
         help_text="Якщо заповнено - user є позичальником, книгу можна лише повернути, не видалити з полиці.",
     )
+    # Позичальник натиснув "повернути"; перенос на полицю позикодавця - лише після confirm_borrow_return.
+    return_pending = models.BooleanField(default=False, verbose_name="Очікує підтвердження повернення")
     added_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

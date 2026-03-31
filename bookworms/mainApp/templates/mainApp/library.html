@@ -6,7 +6,10 @@
 {# Сторінка view my_library: shelves - записи Shelf з вкладеними book та borrowed_from. #}
 
 <h2 class="mb-3">Моя полиця</h2>
-<p class="text-muted small">Власні книги можна прибрати з полиці; позичені - лише "Повернути власнику".</p>
+<p class="text-muted small">
+    Власні книги можна прибрати з полиці. Позичені: ви натискаєте "Повернути власнику" (книга лишається у вас до його підтвердження);
+    позикодавець підтверджує отримання на цій сторінці - тоді книга переходить на його полицю.
+</p>
 
 {% if messages %}
     {% for message in messages %}
@@ -15,6 +18,29 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     {% endfor %}
+{% endif %}
+
+{% if pending_returns_to_confirm %}
+<div class="card border-primary mb-4">
+    <div class="card-header">Підтвердження повернення (ви - позикодавець)</div>
+    <div class="card-body">
+        <p class="small text-muted mb-3">Позичальники повідомили про повернення. Підтвердіть, коли книга у вас - тоді вона з’явиться на вашій полиці.</p>
+        <ul class="list-group list-group-flush">
+            {% for row in pending_returns_to_confirm %}
+            <li class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div>
+                    <strong>{{ row.book.title }}</strong>
+                    <span class="text-muted small">- від {{ row.user.username }}</span>
+                </div>
+                <form method="post" action="{% url 'confirm_return_borrowed_shelf_book' row.id %}" class="m-0">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary btn-sm">Підтвердити повернення</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
 {% endif %}
 
 <div class="card mb-4">
@@ -62,10 +88,14 @@
                         {% if shelf.borrowed_from_id %}
                             <p class="small text-warning mb-2">Позичено у <strong>{{ shelf.borrowed_from.username }}</strong></p>
                             <a href="{% url 'message_thread' shelf.borrowed_from_id %}" class="btn btn-outline-secondary btn-sm mb-2">Чат з власником</a>
+                            {% if shelf.return_pending %}
+                                <p class="small text-info mb-0">Очікується підтвердження повернення позикодавцем.</p>
+                            {% else %}
                             <form method="post" action="{% url 'return_borrowed_shelf_book' shelf.id %}">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-success btn-sm">Повернути власнику</button>
                             </form>
+                            {% endif %}
                         {% else %}
                             <form method="post" action="{% url 'remove_shelf_entry' shelf.id %}">
                                 {% csrf_token %}

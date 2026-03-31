@@ -9,7 +9,7 @@ from __future__ import annotations
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import BookExchangeRequest, CustomUser, PrivateMessage
+from .models import BookExchangeRequest, CustomUser, PrivateMessage, Shelf
 
 
 def _create_message(
@@ -96,6 +96,29 @@ def notify_exchange_request_rejected(req: BookExchangeRequest) -> PrivateMessage
     )
     body = f'Запит щодо книги "{req.target_shelf.book.title}" відхилено.'
     return _create_message(req.shelf_owner, req.requester, body, exchange_request=req)
+
+
+def notify_borrow_return_requested(shelf: Shelf) -> PrivateMessage:
+    """Позичальник натиснув повернути - позикодавець отримує лист."""
+    lender = shelf.borrowed_from
+    if lender is None:
+        raise ValueError("notify_borrow_return_requested: очікується позичена книга (borrowed_from).")
+    body = (
+        f'{shelf.user.username} ініціював повернення книги "{shelf.book.title}". '
+        f'Підтвердіть на "Моя полиця", коли фізично отримаєте книгу.'
+    )
+    return _create_message(shelf.user, lender, body)
+
+
+def notify_borrow_return_confirmed(
+    lender: CustomUser, borrower: CustomUser, book_title: str
+) -> PrivateMessage:
+    """Після підтвердження позикодавцем - повідомлення позичальнику."""
+    body = (
+        f'{lender.username} підтвердив отримання книги "{book_title}". '
+        f'Вона знята з вашої полиці.'
+    )
+    return _create_message(lender, borrower, body)
 
 
 def notify_exchange_request_cancelled(req: BookExchangeRequest) -> PrivateMessage:
