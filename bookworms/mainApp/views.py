@@ -1,17 +1,22 @@
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import get_user_model, login
 from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
-from .models import BookExchangeRequest, Post, Shelf
+from .models import BookExchangeRequest, Post, PrivateMessage, Shelf
 from django.contrib.auth.views import LoginView
-from .forms import UserLoginForm, UserRegisterForm, AddIsbnForm
+from .forms import UserLoginForm, UserRegisterForm, AddIsbnForm, SendExchangePartnerMessageForm
 from django.views.generic import CreateView
 from django.urls import reverse_lazy
 from django.contrib.auth.decorators import login_required
 from .forms import UserUpdateForm
 from .openlibrary import fetch_book_by_isbn
 # Бізнес-правила обміну/позик винесені в exchange_service - тут лише HTTP і шаблони.
+from .message_service import (
+    get_exchange_message_partners,
+    mark_thread_read,
+    send_user_message,
+)
 from .exchange_service import (
     accept_exchange_request,
     cancel_exchange_request,
@@ -306,3 +311,58 @@ def exchange_cancel(request, request_id):
     else:
         messages.error(request, err or "Помилка.")
     return redirect("exchange_requests")
+
+
+@login_required
+def message_thread(request, partner_id: int):
+    """
+    Окремий чат лише з одним користувачем (спільний запит на позику/обмін).
+    Загальної скриньки немає - посилання тільки з обмінів / позики.
+    """
+    partners = get_exchange_message_partners(request.user)
+    if not partners.exists():
+        messages.info(
+            request,
+            "Чат доступний лише після запиту на позику або обмін книги з іншим користувачем.",
+        )
+        return redirect("exchange_requests")
+    partner_ids = frozenset(partners.values_list("pk", flat=True))
+    if partner_id not in partner_ids:
+        messages.error(request, "Немає спільного запиту з цим користувачем.")
+        return redirect("exchange_requests")
+
+    partner = get_user_model().objects.get(pk=partner_id)
+
+    if request.method == "POST" and "send_message" in request.POST:
+        form = SendExchangePartnerMessageForm(request.POST)
+        if form.is_valid():
+            msg = send_user_message(request.user, partner, form.cleaned_data["body"])
+            if msg:
+                messages.success(request, "Повідомлення надіслано.")
+            else:
+                messages.warning(request, "Порожній текст - нічого не надіслано.")
+            return redirect("message_thread", partner_id=partner_id)
+    else:
+        form = SendExchangePartnerMessageForm()
+
+    recent = (
+        PrivateMessage.objects.filter(
+            Q(recipient=request.user, sender_id=partner_id)
+            | Q(sender=request.user, recipient_id=partner_id)
+        )
+        .select_related("sender", "recipient", "exchange_request")
+        .order_by("-created_at")[:250]
+    )
+    timeline = list(reversed(list(recent)))
+    mark_thread_read(request.user, partner_id)
+
+    return render(
+        request,
+        "mainApp/messages.html",
+        {
+            "form": form,
+            "timeline": timeline,
+            "partners": partners,
+            "partner": partner,
+        },
+    )

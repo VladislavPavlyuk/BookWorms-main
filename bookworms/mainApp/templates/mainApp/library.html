@@ -55,12 +55,13 @@
                         {% if book.publisher or book.publish_date %}
                             <p class="card-text small mb-2">{{ book.publisher }}{% if book.publisher and book.publish_date %}, {% endif %}{{ book.publish_date }}</p>
                         {% endif %}
-                        <!--{% if book.info_url %}
-                            <p class="mt-auto mb-2"><a href="{{ book.info_url }}" target="_blank" rel="noopener">Open Library</a></p>-->
+                        {% if book.info_url %}
+                            <p class="mt-auto mb-2"><a href="{{ book.info_url }}" target="_blank" rel="noopener">Open Library</a></p>
                         {% endif %}
                         {# Позичена книга: не показуємо "Видалити", лише форму на return_borrowed_shelf_book. #}
                         {% if shelf.borrowed_from_id %}
                             <p class="small text-warning mb-2">Позичено у <strong>{{ shelf.borrowed_from.username }}</strong></p>
+                            <a href="{% url 'message_thread' shelf.borrowed_from_id %}" class="btn btn-outline-secondary btn-sm mb-2">Чат з власником</a>
                             <form method="post" action="{% url 'return_borrowed_shelf_book' shelf.id %}">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-success btn-sm">Повернути власнику</button>

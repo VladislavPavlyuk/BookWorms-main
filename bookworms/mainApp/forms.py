@@ -1,6 +1,5 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from django import forms
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -60,4 +59,12 @@ class AddIsbnForm(forms.Form):
         label="ISBN (10 або 13)",
         max_length=32,
         widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "9780140328721"}),
+    )
+
+
+class SendExchangePartnerMessageForm(forms.Form):
+    """Лише текст: одержувач задається з контексту обміну/позики (partner id у view)."""
+    body = forms.CharField(
+        label="Текст повідомлення",
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 4}),
     )

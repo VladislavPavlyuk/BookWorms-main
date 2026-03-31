@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Book, BookExchangeRequest, CustomUser, Post, Shelf
+from .models import Book, BookExchangeRequest, CustomUser, Post, PrivateMessage, Shelf
 
 
 class CustomUserAdmin(UserAdmin):
@@ -27,6 +27,14 @@ class ShelfAdmin(admin.ModelAdmin):
     list_display = ("user", "book", "borrowed_from", "added_at")
     list_filter = ("added_at",)
     search_fields = ("user__username", "book__title", "book__isbn")
+
+
+@admin.register(PrivateMessage)
+class PrivateMessageAdmin(admin.ModelAdmin):
+    list_display = ("id", "sender", "recipient", "created_at", "read_at", "exchange_request")
+    list_filter = ("created_at",)
+    search_fields = ("body", "sender__username", "recipient__username")
+    raw_id_fields = ("sender", "recipient", "exchange_request")
 
 
 @admin.register(BookExchangeRequest)

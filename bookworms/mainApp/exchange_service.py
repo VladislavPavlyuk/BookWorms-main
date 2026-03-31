@@ -1,7 +1,7 @@
 """
 Сервіс обміну та позик книг (чиста логіка без HTTP).
 
-Навіщо окремий файл: щоб правила «хто кому що може" були в одному місці,
+Навіщо окремий файл: щоб правила "хто кому що може" були в одному місці,
 а views лише викликали ці функції й показували повідомлення користувачу.
 """
 from __future__ import annotations
@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.db import transaction
 from django.utils import timezone
 
+from . import message_service
 from .models import Book, BookExchangeRequest, CustomUser, Shelf
 
 
@@ -75,6 +76,8 @@ def create_exchange_request(
         offer_shelf=offer_shelf,
         status=pending,
     )
+    # Сповіщення власнику книги в скриньку "Повідомлення" (сервіс обміну повідомленнями).
+    message_service.notify_exchange_request_created(req)
     return req, None
 
 
@@ -142,6 +145,7 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
     req.status = BookExchangeRequest.Status.ACCEPTED
     req.resolved_at = timezone.now()
     req.save(update_fields=["status", "resolved_at"])
+    message_service.notify_exchange_request_accepted(req)
     return True, None
 
 
@@ -160,6 +164,7 @@ def reject_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
     req.status = BookExchangeRequest.Status.REJECTED
     req.resolved_at = timezone.now()
     req.save(update_fields=["status", "resolved_at"])
+    message_service.notify_exchange_request_rejected(req)
     return True, None
 
 
@@ -179,6 +184,7 @@ def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
     req.status = BookExchangeRequest.Status.CANCELLED
     req.resolved_at = timezone.now()
     req.save(update_fields=["status", "resolved_at"])
+    message_service.notify_exchange_request_cancelled(req)
     return True, None
 
 
