@@ -21,7 +21,7 @@ from .exchange_service import (
     accept_exchange_request,
     cancel_exchange_request,
     confirm_borrow_return,
-    create_exchange_request,
+    create_many_exchange_requests,
     get_or_create_book_from_payload,
     reject_exchange_request,
     request_borrow_return,
@@ -219,31 +219,93 @@ def browse_shelves(request):
 
 @login_required
 def create_exchange(request):
-    """Приймає POST з форми на сторінці browse: id чужої полиці + опційно id своєї для обміну."""
+    """
+    POST з browse_shelves: target_shelf_ids[] (чекбокси) + offer_shelf_id_<pk> для кожного рядка.
+    Підтримує один або кілька запитів за одну відправку.
+    """
     if request.method != "POST":
         return redirect("browse_shelves")
-    try:
-        target_id = int(request.POST.get("target_shelf_id", ""))
-    except (TypeError, ValueError):
-        messages.error(request, "Некоректний запит.")
+
+    err_cap = 12
+    raw_ids = request.POST.getlist("target_shelf_ids")
+    if not raw_ids:
+        messages.error(request, "Оберіть хоча б одну книгу (рядок у таблиці).")
         return redirect("browse_shelves")
 
-    target_shelf = get_object_or_404(Shelf, pk=target_id)
-    offer_shelf = None
-    raw_offer = request.POST.get("offer_shelf_id") or ""
-    if raw_offer.strip():
+    seen: set[int] = set()
+    lines: list[tuple[Shelf, Shelf | None]] = []
+    preflight: list[str] = []
+    for tid_str in raw_ids:
         try:
-            oid = int(raw_offer)
-            offer_shelf = get_object_or_404(Shelf, pk=oid, user=request.user)
+            tid = int(tid_str)
         except (TypeError, ValueError):
-            messages.error(request, "Некоректна книга для обміну.")
-            return redirect("browse_shelves")
+            preflight.append("Пропущено рядок з некоректним id полиці.")
+            continue
+        if tid in seen:
+            continue
+        seen.add(tid)
+        target_shelf = (
+            Shelf.objects.filter(pk=tid)
+            .select_related("user", "book")
+            .first()
+        )
+        if not target_shelf:
+            preflight.append(f"Запис полиці #{tid} не знайдено.")
+            continue
 
-    req, err = create_exchange_request(request.user, target_shelf, offer_shelf)
-    if err:
-        messages.error(request, err)
-    else:
-        messages.success(request, "Запит надіслано.")
+        offer_shelf = None
+        raw_offer = request.POST.get(f"offer_shelf_id_{tid}", "") or ""
+        if raw_offer.strip():
+            try:
+                oid = int(raw_offer)
+            except (TypeError, ValueError):
+                t = target_shelf.book.title
+                preflight.append(f"«{t[:45]}»: некоректна книга для обміну.")
+                continue
+            offer_shelf = Shelf.objects.filter(pk=oid, user=request.user).first()
+            if not offer_shelf:
+                t = target_shelf.book.title
+                preflight.append(
+                    f"«{t[:45]}»: запропоновану книгу не знайдено на вашій полиці."
+                )
+                continue
+
+        lines.append((target_shelf, offer_shelf))
+
+    if not lines:
+        for e in preflight[:err_cap]:
+            messages.error(request, e)
+        if len(preflight) > err_cap:
+            messages.warning(
+                request,
+                f"…та ще {len(preflight) - err_cap} зауважень.",
+            )
+        if not preflight:
+            messages.error(request, "Немає валідних рядків для відправки.")
+        return redirect("browse_shelves")
+
+    ok_count, errs = create_many_exchange_requests(request.user, lines)
+    if ok_count:
+        messages.success(
+            request,
+            f"Надіслано запитів: {ok_count}."
+            if ok_count > 1
+            else "Запит надіслано.",
+        )
+    for e in preflight[:err_cap]:
+        messages.error(request, e)
+    if len(preflight) > err_cap:
+        messages.warning(
+            request,
+            f"…та ще {len(preflight) - err_cap} попередніх зауважень.",
+        )
+    for e in errs[:err_cap]:
+        messages.error(request, e)
+    if len(errs) > err_cap:
+        messages.warning(
+            request,
+            f"…та ще {len(errs) - err_cap} повідомлень про помилки (перевірте кожен рядок).",
+        )
     return redirect("exchange_requests")
 
 

@@ -81,6 +81,43 @@ def create_exchange_request(
     return req, None
 
 
+def create_many_exchange_requests(
+    requester: CustomUser,
+    lines: list[tuple[Shelf, Shelf | None]],
+) -> tuple[int, list[str]]:
+    """
+    Кілька запитів за одну дію (позика або обмін на рядок).
+    Та сама пропозиція (offer_shelf) не може зустрічатись двічі в одному пакеті.
+    """
+    ok = 0
+    errs: list[str] = []
+
+    def short_title(s: Shelf) -> str:
+        t = s.book.title
+        return (t[:52] + "…") if len(t) > 55 else t
+
+    seen_offer_ids: set[int] = set()
+    filtered: list[tuple[Shelf, Shelf | None]] = []
+    for target_shelf, offer_shelf in lines:
+        label = short_title(target_shelf)
+        if offer_shelf is not None:
+            oid = offer_shelf.pk
+            if oid in seen_offer_ids:
+                errs.append(f'«{label}»: цю свою книгу вже обрано для іншого рядка в цьому пакеті.')
+                continue
+            seen_offer_ids.add(oid)
+        filtered.append((target_shelf, offer_shelf))
+
+    for target_shelf, offer_shelf in filtered:
+        label = short_title(target_shelf)
+        req, err = create_exchange_request(requester, target_shelf, offer_shelf)
+        if err:
+            errs.append(f"«{label}»: {err}")
+        else:
+            ok += 1
+    return ok, errs
+
+
 @transaction.atomic
 def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[bool, str | None]:
     """
