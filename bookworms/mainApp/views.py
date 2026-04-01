@@ -3,7 +3,7 @@ from django.contrib.auth import login
 from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
-from .models import BookExchangeRequest, Post, Shelf
+from .models import BookExchangeRequest, Post, Shelf, Comment, Like
 from django.contrib.auth.views import LoginView
 from .forms import UserLoginForm, UserRegisterForm, AddIsbnForm
 from django.views.generic import CreateView
@@ -306,3 +306,32 @@ def exchange_cancel(request, request_id):
     else:
         messages.error(request, err or "Помилка.")
     return redirect("exchange_requests")
+
+@login_required
+def add_comment(request, post_id):
+    post = get_object_or_404(Post, id=post_id)
+
+    if request.method == 'POST':
+        text = request.POST.get('text')
+
+        if text:
+            Comment.objects.create(
+                post=post,
+                author=request.user,
+                text=text
+            )
+
+    return redirect('home')
+
+@login_required
+def toggle_like(request, post_id):
+    post = get_object_or_404(Post, id=post_id)
+
+    like = Like.objects.filter(post=post, user=request.user).first()
+
+    if like:
+        like.delete()
+    else:
+        Like.objects.create(post=post, user=request.user)
+
+    return redirect('home')

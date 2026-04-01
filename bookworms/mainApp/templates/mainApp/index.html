@@ -24,9 +24,47 @@
 
             <br><br>
 
+            <!-- 👍 ЛАЙК -->
+            {% if user.is_authenticated %}
+                <form method="post" action="{% url 'toggle_like' post.id %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-primary btn-sm mb-2">
+                        👍 Лайк ({{ post.likes.count }})
+                    </button>
+                </form>
+            {% else %}
+                <p>👍 Лайки: {{ post.likes.count }}</p>
+            {% endif %}
+
+            <br>
+
             {% if post.author == user %}
                 <a href="/posts/edit/{{ post.id }}/" class="btn btn-warning btn-sm">✏️ Редагувати</a>
                 <a href="/posts/delete/{{ post.id }}/" class="btn btn-danger btn-sm">🗑 Видалити</a>
+            {% endif %}
+
+            <hr>
+
+            <!-- 💬 КОММЕНТЫ -->
+            <h6>Коментарі:</h6>
+
+            {% for comment in post.comments.all %}
+                <div class="border rounded p-2 mb-2">
+                    <strong>{{ comment.author.username }}</strong><br>
+                    {{ comment.text }}
+                </div>
+            {% empty %}
+                <p>Коментарів поки немає</p>
+            {% endfor %}
+
+            {% if user.is_authenticated %}
+                <form method="post" action="{% url 'add_comment' post.id %}">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <textarea name="text" class="form-control" placeholder="Написати коментар..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Додати коментар</button>
+                </form>
             {% endif %}
 
         </div>
