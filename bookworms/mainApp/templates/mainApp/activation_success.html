@@ -1,0 +1,11 @@
+{% extends 'mainApp/base.html' %}
+
+{% block content %}
+<div class="container mt-5 text-center">
+    <div class="alert alert-success" role="alert">
+        <h4 class="alert-heading">Акаунт успішно активовано!</h4>
+        <p>Тепер ви можете увійти до свого профілю, використовуючи свій логін та пароль.</p>
+    </div>
+    <a href="{% url 'login' %}" class="btn btn-success">Увійти на сайт</a>
+</div>
+{% endblock %}

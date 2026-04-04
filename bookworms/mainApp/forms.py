@@ -16,10 +16,25 @@ class UserLoginForm(AuthenticationForm):
     )
 
 
+from django import forms
+from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import UserCreationForm
+from django.core.exceptions import ValidationError
+
+User = get_user_model()
+
+
 class UserRegisterForm(UserCreationForm):
+    # Добавляем поле email явно, чтобы сделать его обязательным
+    email = forms.EmailField(
+        required=True,
+        label="Електронна пошта",
+        widget=forms.EmailInput(attrs={'placeholder': 'example@mail.com'})
+    )
+
     class Meta:
-        model = get_user_model()
-        fields = ("username", "biography", "avatar") + UserCreationForm.Meta.fields
+        model = User
+        fields = ("username", "email", "biography", "avatar")
         labels = {
             'username': "Логін",
             'biography': "Біографія",
@@ -36,6 +51,12 @@ class UserRegisterForm(UserCreationForm):
 
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'
+
+    def clean_email(self):
+        email = self.cleaned_data.get('email')
+        if User.objects.filter(email=email).exists():
+            raise ValidationError("Ця електронна адреса вже використовується.")
+        return email
 
 class UserUpdateForm(forms.ModelForm):
     class Meta:

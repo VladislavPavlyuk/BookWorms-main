@@ -1,29 +1,42 @@
 {% extends 'mainApp/base.html' %}
 
-{% block title %} Реєстрація {% endblock %}
 {% block content %}
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    {{ form.non_field_errors }}
-
-    {% for field in form %}
-        <div class="mb-3">
-            <label class="form-label">{{ field.label }}</label>
-            {{ field }}
-
-            {# Добавляем вывод конкретных ошибок для поля #}
-            {% if field.errors %}
-                <div class="text-danger small">
-                    {{ field.errors }}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0 text-center">Реєстрація у BookWorms</h3>
                 </div>
-            {% endif %}
+                <div class="card-body p-4">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
 
-            {% if field.help_text %}
-                <div class="form-text small">{{ field.help_text|safe }}</div>
-            {% endif %}
+                        {% for field in form %}
+                            <div class="mb-3">
+                                <label class="form-label font-weight-bold">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.errors %}
+                                    <div class="text-danger small">
+                                        {{ field.errors|striptags }}
+                                    </div>
+                                {% endif %}
+                                {% if field.help_text %}
+                                    <div class="form-text text-muted small">{{ field.help_text|safe }}</div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-success btn-lg">Зареєструватися</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer text-center">
+                    <p class="mb-0">Вже маєте аккаунт? <a href="{% url 'login' %}">Увійти</a></p>
+                </div>
+            </div>
         </div>
-    {% endfor %}
-
-    <button type="submit" class="btn btn-success w-100">Зареєструватися</button>
-</form>
+    </div>
+</div>
 {% endblock %}

@@ -1,16 +1,23 @@
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import login, get_user_model
+from django.contrib.auth.tokens import default_token_generator
+from django.contrib.sites.shortcuts import get_current_site
 from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from .models import BookExchangeRequest, Post, Shelf, Comment, Like
 from django.contrib.auth.views import LoginView
 from .forms import UserLoginForm, UserRegisterForm, AddIsbnForm
 from django.views.generic import CreateView
 from django.urls import reverse_lazy
 from django.contrib.auth.decorators import login_required
+from django.urls import reverse, reverse_lazy
 from .forms import UserUpdateForm
 from .openlibrary import fetch_book_by_isbn
+from django.conf import settings
+from django.utils.encoding import force_str
 # Бізнес-правила обміну/позик винесені в exchange_service - тут лише HTTP і шаблони.
 from .exchange_service import (
     accept_exchange_request,
@@ -20,30 +27,108 @@ from .exchange_service import (
     reject_exchange_request,
     return_borrowed_book,
 )
+from django.core.mail import send_mail
+
+from .tokens import account_activation_token
+
 
 def home(request):
     posts = Post.objects.all().order_by('-created_ad')
     return render(request, 'mainApp/index.html', {'posts': posts})
 
 
-@login_required
-def profile(request):
-    return render(request, 'mainApp/profile.html')
-
-
 class CustomLoginView(LoginView):
     template_name = 'mainApp/login.html'
     authentication_form = UserLoginForm
 
+
 class CustomRegisterView(CreateView):
     template_name = 'mainApp/register.html'
     form_class = UserRegisterForm
-    success_url = reverse_lazy('home')
+    success_url = reverse_lazy('confirm_email')
 
     def form_valid(self, form):
-        response = super().form_valid(form)
-        login(self.request, self.object)
-        return response
+        # 1. Создаем юзера, но не активируем
+        user = form.save(commit=False)
+        user.is_active = False
+        user.save()
+
+        # 2. Формируем данные для ссылки подтверждения
+        current_site = get_current_site(self.request)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = account_activation_token.make_token(user)
+
+        # Ссылка, по которой юзер кликнет в письме
+        relative_link = reverse('activate', kwargs={'uidb64': uid, 'token': token})
+        activation_url = f"http://{current_site.domain}{relative_link}"
+
+        # 3. Контент письма
+        subject = "Подтверждение регистрации BookWorms"
+        message = f"Здравствуйте, {user.username}!\nДля активации аккаунта перейдите по ссылке: {activation_url}"
+
+        html_message = f"""
+            <div style="font-family: Arial, sans-serif; border: 1px solid #ddd; padding: 20px;">
+                <h2 style="color: #2c3e50;">Добро пожаловать в BookWorms!</h2>
+                <p>Вы успешно зарегистрировались. Остался последний шаг — подтвердить почту.</p>
+                <a href="{activation_url}" 
+                   style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
+                   Активировать мой аккаунт
+                </a>
+                <p style="margin-top: 20px; font-size: 12px; color: #777;">
+                    Если вы не регистрировались на нашем сайте, просто проигнорируйте это письмо.
+                </p>
+            </div>
+        """
+
+        # 4. Отправка письма
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_message,
+                fail_silently=False,  # Важно: увидим ошибку, если SMTP не настроен
+            )
+        except Exception as e:
+            # Если почта не ушла (например, неверный пароль в Mailtrap)
+            user.delete()  # Удаляем "зависшего" юзера
+            form.add_error(None, f"Ошибка отправки письма: {e}. Проверьте настройки SMTP.")
+            return self.form_invalid(form)
+
+        return super().form_valid(form)
+
+
+def activate(request, uidb64, token):
+    User = get_user_model()
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+
+    # Проверяем токен
+    if user is not None and account_activation_token.check_token(user, token):
+        user.is_active = True
+        # Чтобы токен не "протух" при первом же входе,
+        # сначала сохраняем активацию, а потом логиним
+        user.save()
+        login(request, user)
+        return render(request, 'mainApp/activation_success.html')
+    else:
+        # Если не прошел проверку, загляни в админку.
+        # Если юзер уже Active=True, значит ты просто нажал ссылку второй раз.
+        return render(request, 'mainApp/activation_invalid.html')
+
+
+def activation_success_view(request):
+    return render(request, 'mainApp/activation_success.html')
+
+def activation_invalid_view(request):
+    return render(request, 'mainApp/activation_invalid.html')
+
+def confirm_email_view(request):
+    return render(request, 'mainApp/confirm_email.html')
 
 @login_required
 def create_post(request):
@@ -86,17 +171,6 @@ def edit_post(request, post_id):
 
     return render(request, 'mainApp/form.html', {'post': post})
 
-@login_required
-def edit_profile(request):
-    if request.method == 'POST':
-        form = UserUpdateForm(request.POST, request.FILES, instance=request.user)
-        if form.is_valid():
-            form.save()
-            return redirect('profile')
-    else:
-        form = UserUpdateForm(instance=request.user)
-
-    return render(request, 'mainApp/profile_edit.html', {'form': form})
 
 
 @login_required

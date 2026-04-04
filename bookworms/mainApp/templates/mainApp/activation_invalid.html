@@ -1,0 +1,15 @@
+{% extends 'mainApp/base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="alert alert-danger text-center" role="alert">
+        <h4 class="alert-heading">Помилка активації!</h4>
+        <p>На жаль, це посилання для активації вже недійсне або термін його дії вичерпано.</p>
+        <hr>
+        <p class="mb-0">Спробуйте зареєструватися знову або зверніться до підтримки.</p>
+    </div>
+    <div class="text-center">
+        <a href="{% url 'register' %}" class="btn btn-outline-primary">Перейти до реєстрації</a>
+    </div>
+</div>
+{% endblock %}

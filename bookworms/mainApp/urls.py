@@ -6,13 +6,11 @@ from django.urls import path
 from django.contrib.auth.views import LogoutView
 from .views import (
     home,
-    profile,
     CustomLoginView,
     CustomRegisterView,
     create_post,
     delete_post,
     edit_post,
-    edit_profile,
     my_library,
     remove_shelf_entry,
     return_borrowed_shelf_book,
@@ -22,6 +20,10 @@ from .views import (
     exchange_accept,
     exchange_reject,
     exchange_cancel,
+    activate,
+    activation_invalid_view,
+    activation_success_view,
+    confirm_email_view,
 )
 from .views import add_comment
 from .views import toggle_like
@@ -30,6 +32,7 @@ urlpatterns = [
     path('', home, name='home'),
     # --- Бібліотека та обмін книгами ---
     path('library/', my_library, name='my_library'),
+    path('activate/<str:uidb64>/<str:token>/', activate, name='activate'),
     path('library/remove/<int:shelf_id>/', remove_shelf_entry, name='remove_shelf_entry'),
     path('library/return/<int:shelf_id>/', return_borrowed_shelf_book, name='return_borrowed_shelf_book'),
     path('library/browse/', browse_shelves, name='browse_shelves'),
@@ -38,8 +41,6 @@ urlpatterns = [
     path('library/exchange/<int:request_id>/accept/', exchange_accept, name='exchange_accept'),
     path('library/exchange/<int:request_id>/reject/', exchange_reject, name='exchange_reject'),
     path('library/exchange/<int:request_id>/cancel/', exchange_cancel, name='exchange_cancel'),
-    path('profile/', profile, name='profile'),
-    path('profile/edit/', edit_profile, name='edit_profile'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('login/', CustomLoginView.as_view(), name='login'),
     path('register/', CustomRegisterView.as_view(), name='register'),
@@ -48,4 +49,7 @@ urlpatterns = [
     path('posts/edit/<int:post_id>/', edit_post, name='edit_post'),
     path('posts/<int:post_id>/comment/', add_comment, name='add_comment'),
     path('posts/<int:post_id>/like/', toggle_like, name='toggle_like'),
+    path('activation-success/', activation_success_view, name='activation_success'),
+    path('activation-invalid/', activation_invalid_view, name='activation_invalid'),
+    path('confirm-email/', confirm_email_view, name='confirm_email'),
 ]
