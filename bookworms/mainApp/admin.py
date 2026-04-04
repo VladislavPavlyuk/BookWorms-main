@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import Book, BookExchangeRequest, CustomUser, Post, Shelf
-
+from .models import AvatarCollection
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
@@ -34,3 +34,8 @@ class BookExchangeRequestAdmin(admin.ModelAdmin):
     list_display = ("id", "requester", "shelf_owner", "target_shelf", "offer_shelf", "status", "created_at")
     list_filter = ("status", "created_at")
     raw_id_fields = ("target_shelf", "offer_shelf", "requester")
+
+@admin.register(AvatarCollection)
+class AvatarCollectionAdmin(admin.ModelAdmin):
+    list_display = ("name", "image")
+    search_fields = ("name",)

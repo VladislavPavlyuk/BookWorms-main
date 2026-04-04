@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django import forms
 from django.contrib.auth import get_user_model
+from .models import AvatarCollection
 
 User = get_user_model()
 
@@ -17,14 +18,16 @@ class UserLoginForm(AuthenticationForm):
 
 
 class UserRegisterForm(UserCreationForm):
+    avatar_choice = forms.ModelChoiceField(
+        queryset=AvatarCollection.objects.all(),
+        required=False,
+        widget=forms.RadioSelect(attrs={'class': 'btn-check'}),
+        label="Або оберіть готовий аватар"
+    )
+
     class Meta:
         model = get_user_model()
         fields = ("username", "biography", "avatar") + UserCreationForm.Meta.fields
-        labels = {
-            'username': "Логін",
-            'biography': "Біографія",
-            'avatar': "Аватар",
-        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -38,14 +41,16 @@ class UserRegisterForm(UserCreationForm):
             field.widget.attrs['class'] = 'form-control'
 
 class UserUpdateForm(forms.ModelForm):
+    avatar_choice = forms.ModelChoiceField(
+        queryset=AvatarCollection.objects.all(),
+        required=False,
+        widget=forms.RadioSelect(attrs={'class': 'btn-check'}),
+        label="Або оберіть готовий аватар"
+    )
+
     class Meta:
         model = User
         fields = ['username', 'biography', 'avatar']
-        labels = {
-            'username': 'Логін',
-            'biography': 'Біографія',
-            'avatar': 'Аватар'
-        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
