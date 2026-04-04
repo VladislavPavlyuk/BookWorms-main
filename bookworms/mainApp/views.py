@@ -63,19 +63,19 @@ class CustomRegisterView(CreateView):
         activation_url = f"http://{current_site.domain}{relative_link}"
 
         # 3. Контент письма
-        subject = "Подтверждение регистрации BookWorms"
-        message = f"Здравствуйте, {user.username}!\nДля активации аккаунта перейдите по ссылке: {activation_url}"
+        subject = "Підтвердження реєстрації BookWorms"
+        message = f"Вітаємо, {user.username}!\nДля активації аккаунта перейдіть за посиланням: {activation_url}"
 
         html_message = f"""
             <div style="font-family: Arial, sans-serif; border: 1px solid #ddd; padding: 20px;">
-                <h2 style="color: #2c3e50;">Добро пожаловать в BookWorms!</h2>
-                <p>Вы успешно зарегистрировались. Остался последний шаг — подтвердить почту.</p>
+                <h2 style="color: #2c3e50;">Ласкаво просимо в BookWorms!</h2>
+                <p>Вы успішно зареєструвались. Залишився останній крок — підтвердіть пошту.</p>
                 <a href="{activation_url}" 
                    style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
-                   Активировать мой аккаунт
+                   Активувати мій акаунт
                 </a>
                 <p style="margin-top: 20px; font-size: 12px; color: #777;">
-                    Если вы не регистрировались на нашем сайте, просто проигнорируйте это письмо.
+                    Якщо ви не реєструвались на нашому сайті, просто проігноруйте цей лист.
                 </p>
             </div>
         """
@@ -88,12 +88,12 @@ class CustomRegisterView(CreateView):
                 settings.DEFAULT_FROM_EMAIL,
                 [user.email],
                 html_message=html_message,
-                fail_silently=False,  # Важно: увидим ошибку, если SMTP не настроен
+                fail_silently=False,
             )
         except Exception as e:
-            # Если почта не ушла (например, неверный пароль в Mailtrap)
-            user.delete()  # Удаляем "зависшего" юзера
-            form.add_error(None, f"Ошибка отправки письма: {e}. Проверьте настройки SMTP.")
+
+            user.delete()
+            form.add_error(None, f"Помилка відправки листа: {e}. Перевірте налаштування SMTP.")
             return self.form_invalid(form)
 
         return super().form_valid(form)
@@ -110,14 +110,10 @@ def activate(request, uidb64, token):
     # Проверяем токен
     if user is not None and account_activation_token.check_token(user, token):
         user.is_active = True
-        # Чтобы токен не "протух" при первом же входе,
-        # сначала сохраняем активацию, а потом логиним
         user.save()
         login(request, user)
         return render(request, 'mainApp/activation_success.html')
     else:
-        # Если не прошел проверку, загляни в админку.
-        # Если юзер уже Active=True, значит ты просто нажал ссылку второй раз.
         return render(request, 'mainApp/activation_invalid.html')
 
 
