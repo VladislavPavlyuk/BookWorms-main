@@ -1,13 +1,23 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
+class AvatarCollection(models.Model):
+    name = models.CharField(max_length=100, verbose_name="Назва аватара")
+    image = models.ImageField(upload_to='default_avatars/', verbose_name="Файл аватара")
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Аватар з колекції"
+        verbose_name_plural = "Колекція аватарів"
 
 class CustomUser(AbstractUser):
-   biography = models.CharField(max_length=500, blank=True, verbose_name="Біографія")
-   avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name="Аватар")
+    biography = models.CharField(max_length=500, blank=True, verbose_name="Біографія")
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name="Аватар")
 
-   def __str__(self):
-    return self.username
+    def __str__(self):
+        return self.username
 
 class Post(models.Model):
     author = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='posts')

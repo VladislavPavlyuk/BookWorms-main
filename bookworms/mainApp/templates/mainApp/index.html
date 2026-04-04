@@ -15,62 +15,75 @@
 <h3>Пости</h3>
 
 {% for post in posts %}
-    <div class="card mb-3">
+    <div class="card mb-3 shadow-sm">
         <div class="card-body">
 
-            <h5 class="card-title">{{ post.title }}</h5>
-            <p class="card-text">{{ post.text }}</p>
-            <small>Автор: {{ post.author.username }}</small>
+            <div class="d-flex align-items-center mb-3">
+                {% if post.author.avatar %}
+                    <img src="{{ post.author.avatar.url }}"
+                         class="rounded-circle me-3"
+                         style="width: 50px; height: 50px; object-fit: cover; border: 1px solid #ddd;">
+                {% else %}
+                    <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white me-3"
+                         style="width: 50px; height: 50px; font-size: 20px; font-weight: bold;">
+                        {{ post.author.username|slice:":1"|upper }}
+                    </div>
+                {% endif %}
 
-            <br><br>
+                <div>
+                    <h5 class="card-title mb-0">{{ post.title }}</h5>
+                    <small class="text-muted">Автор: <strong>{{ post.author.username }}</strong></small>
+                </div>
+            </div>
 
-            <!-- 👍 ЛАЙК -->
-            {% if user.is_authenticated %}
-                <form method="post" action="{% url 'toggle_like' post.id %}" style="display:inline;">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-outline-primary btn-sm mb-2">
-                        👍 Лайк ({{ post.likes.count }})
-                    </button>
-                </form>
-            {% else %}
-                <p>👍 Лайки: {{ post.likes.count }}</p>
-            {% endif %}
+            <p class="card-text" style="white-space: pre-line;">{{ post.text }}</p>
 
-            <br>
+            <div class="mb-3">
+                {% if user.is_authenticated %}
+                    <form method="post" action="{% url 'toggle_like' post.id %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-primary btn-sm">
+                            👍 Лайк ({{ post.likes.count }})
+                        </button>
+                    </form>
+                {% else %}
+                    <span class="badge bg-light text-dark">👍 Лайки: {{ post.likes.count }}</span>
+                {% endif %}
+            </div>
 
             {% if post.author == user %}
-                <a href="/posts/edit/{{ post.id }}/" class="btn btn-warning btn-sm">✏️ Редагувати</a>
-                <a href="/posts/delete/{{ post.id }}/" class="btn btn-danger btn-sm">🗑 Видалити</a>
+                <div class="mb-3">
+                    <a href="/posts/edit/{{ post.id }}/" class="btn btn-warning btn-sm">✏️ Редагувати</a>
+                    <a href="/posts/delete/{{ post.id }}/" class="btn btn-danger btn-sm">🗑 Видалити</a>
+                </div>
             {% endif %}
 
             <hr>
 
-            <!-- 💬 КОММЕНТЫ -->
             <h6>Коментарі:</h6>
 
             {% for comment in post.comments.all %}
-                <div class="border rounded p-2 mb-2">
-                    <strong>{{ comment.author.username }}</strong><br>
-                    {{ comment.text }}
+                <div class="border rounded p-2 mb-2 bg-light">
+                    <strong>{{ comment.author.username }}</strong>: {{ comment.text }}
                 </div>
             {% empty %}
-                <p>Коментарів поки немає</p>
+                <p class="text-muted small">Коментарів поки немає</p>
             {% endfor %}
 
             {% if user.is_authenticated %}
-                <form method="post" action="{% url 'add_comment' post.id %}">
+                <form method="post" action="{% url 'add_comment' post.id %}" class="mt-2">
                     {% csrf_token %}
-                    <div class="mb-2">
-                        <textarea name="text" class="form-control" placeholder="Написати коментар..." required></textarea>
+                    <div class="input-group">
+                        <textarea name="text" class="form-control" rows="1" placeholder="Написати коментар..." required></textarea>
+                        <button type="submit" class="btn btn-primary btn-sm">Відправити</button>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm">Додати коментар</button>
                 </form>
             {% endif %}
 
         </div>
     </div>
 {% empty %}
-    <p>Постів поки немає</p>
+    <p class="text-center">Постів поки немає. Будьте першим!</p>
 {% endfor %}
 
 {% endblock %}
