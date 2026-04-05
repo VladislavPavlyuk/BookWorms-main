@@ -1,8 +1,13 @@
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
+from django.contrib.auth import login, get_user_model
+from django.contrib.sites.shortcuts import get_current_site
 from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from .models import BookExchangeRequest, Post, Shelf, Comment, Like, PrivateMessage
 from .models import BookExchangeRequest, Post, PrivateMessage, Shelf
 from django.contrib.auth.views import LoginView
 from .forms import UserLoginForm, UserRegisterForm, AddIsbnForm, SendExchangePartnerMessageForm
