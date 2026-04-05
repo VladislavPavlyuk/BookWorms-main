@@ -1,21 +1,25 @@
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import get_user_model, login
+from django.contrib.sites.shortcuts import get_current_site
 from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
-from django.utils.encoding import force_bytes
+from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from .models import BookExchangeRequest, Post, Shelf, Comment, Like
+from .models import BookExchangeRequest, Comment, Like, Post, PrivateMessage, Shelf
 from django.contrib.auth.views import LoginView
-from .forms import UserLoginForm, UserRegisterForm, AddIsbnForm
+from .forms import (
+    AddIsbnForm,
+    SendExchangePartnerMessageForm,
+    UserLoginForm,
+    UserRegisterForm,
+    UserUpdateForm,
+)
 from django.views.generic import CreateView
-from django.urls import reverse_lazy
-from django.contrib.auth.decorators import login_required
 from django.urls import reverse, reverse_lazy
-from .forms import UserUpdateForm
+from django.contrib.auth.decorators import login_required
 from .openlibrary import fetch_book_by_isbn
 from django.conf import settings
-from django.utils.encoding import force_str
 # Бізнес-правила обміну/позик винесені в exchange_service - тут лише HTTP і шаблони.
 from .message_service import (
     get_exchange_message_partners,
