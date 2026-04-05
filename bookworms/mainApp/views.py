@@ -41,14 +41,14 @@ class CustomLoginView(LoginView):
     authentication_form = UserLoginForm
 
 class CustomRegisterView(CreateView):
-    template_name = 'mainApp/register.html'
-    form_class = UserRegisterForm
-    success_url = reverse_lazy('home')
-
     def form_valid(self, form):
-        response = super().form_valid(form)
-        login(self.request, self.object)
-        return response
+        user = form.save(commit=False)
+        avatar_choice = form.cleaned_data.get('avatar_choice')
+        if avatar_choice:
+            user.avatar = avatar_choice.image
+        user.save()
+        login(self.request, user)
+        return redirect(self.success_url)
 
 @login_required
 def create_post(request):
@@ -96,7 +96,11 @@ def edit_profile(request):
     if request.method == 'POST':
         form = UserUpdateForm(request.POST, request.FILES, instance=request.user)
         if form.is_valid():
-            form.save()
+            user = form.save(commit=False)
+            avatar_choice = form.cleaned_data.get('avatar_choice')
+            if avatar_choice:
+                user.avatar = avatar_choice.image
+            user.save()
             return redirect('profile')
     else:
         form = UserUpdateForm(instance=request.user)
@@ -366,3 +370,31 @@ def message_thread(request, partner_id: int):
             "partner": partner,
         },
     )
+@login_required
+def add_comment(request, post_id):
+    post = get_object_or_404(Post, id=post_id)
+
+    if request.method == 'POST':
+        text = request.POST.get('text')
+
+        if text:
+            Comment.objects.create(
+                post=post,
+                author=request.user,
+                text=text
+            )
+
+    return redirect('home')
+
+@login_required
+def toggle_like(request, post_id):
+    post = get_object_or_404(Post, id=post_id)
+
+    like = Like.objects.filter(post=post, user=request.user).first()
+
+    if like:
+        like.delete()
+    else:
+        Like.objects.create(post=post, user=request.user)
+
+    return redirect('home')

@@ -1,29 +1,22 @@
-{% extends 'mainApp/base.html' %}
-
-{% block title %} Реєстрація {% endblock %}
-{% block content %}
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    {{ form.non_field_errors }}
-
-    {% for field in form %}
+{% for field in form %}
+    {% if field.name != 'avatar_choice' %}
         <div class="mb-3">
             <label class="form-label">{{ field.label }}</label>
             {{ field }}
+            </div>
+    {% endif %}
+{% endfor %}
 
-            {# Добавляем вывод конкретных ошибок для поля #}
-            {% if field.errors %}
-                <div class="text-danger small">
-                    {{ field.errors }}
-                </div>
-            {% endif %}
-
-            {% if field.help_text %}
-                <div class="form-text small">{{ field.help_text|safe }}</div>
-            {% endif %}
-        </div>
-    {% endfor %}
-
-    <button type="submit" class="btn btn-success w-100">Зареєструватися</button>
-</form>
-{% endblock %}
+<div class="mb-3">
+    <label class="form-label fw-bold">Оберіть аватар:</label>
+    <div class="row g-2">
+        {% for radio in form.avatar_choice %}
+            <div class="col-3 text-center">
+                <label class="avatar-option">
+                    {{ radio.tag }}
+                    <img src="{{ radio.choice_label.image.url }}" class="img-thumbnail rounded-circle" style="width: 70px; height: 70px; object-fit: cover;">
+                </label>
+            </div>
+        {% endfor %}
+    </div>
+</div>

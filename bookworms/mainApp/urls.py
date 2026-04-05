@@ -24,6 +24,8 @@ from .views import (
     exchange_cancel,
     message_thread,
 )
+from .views import add_comment
+from .views import toggle_like
 
 urlpatterns = [
     path('', home, name='home'),
@@ -46,4 +48,6 @@ urlpatterns = [
     path('posts/create/', create_post, name='create_post'),
     path('posts/delete/<int:post_id>/', delete_post, name='delete_post'),
     path('posts/edit/<int:post_id>/', edit_post, name='edit_post'),
+    path('posts/<int:post_id>/comment/', add_comment, name='add_comment'),
+    path('posts/<int:post_id>/like/', toggle_like, name='toggle_like'),
 ]

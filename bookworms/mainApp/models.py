@@ -1,13 +1,23 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
+class AvatarCollection(models.Model):
+    name = models.CharField(max_length=100, verbose_name="Назва аватара")
+    image = models.ImageField(upload_to='default_avatars/', verbose_name="Файл аватара")
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Аватар з колекції"
+        verbose_name_plural = "Колекція аватарів"
 
 class CustomUser(AbstractUser):
-   biography = models.CharField(max_length=500, blank=True, verbose_name="Біографія")
-   avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name="Аватар")
+    biography = models.CharField(max_length=500, blank=True, verbose_name="Біографія")
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name="Аватар")
 
-   def __str__(self):
-    return self.username
+    def __str__(self):
+        return self.username
 
 class Post(models.Model):
     author = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='posts')
@@ -172,3 +182,22 @@ class PrivateMessage(models.Model):
 
     def __str__(self):
         return f"{self.sender} → {self.recipient}: {self.body[:40]}"
+class Comment(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    author = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.author} - {self.text[:20]}"
+
+
+class Like(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='likes')
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+
+    class Meta:
+        unique_together = ('post', 'user')
+
+    def __str__(self):
+        return f'{self.user.username} likes {self.post.title}'
