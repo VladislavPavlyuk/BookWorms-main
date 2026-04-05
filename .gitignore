@@ -21,7 +21,7 @@ staticfiles/
 local_settings.py
 
 # Environment files
-.env
+bookworms/.env
 .env.*
 
 # IDEs
@@ -31,4 +31,4 @@ local_settings.py
 # OS
 .DS_Store
 Thumbs.db
-/doc_2026-03-19_23-10-03.env
+/bookworms/.env

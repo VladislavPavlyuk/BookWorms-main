@@ -1,21 +1,25 @@
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
-from django.contrib.auth import login, get_user_model
 from django.contrib.sites.shortcuts import get_current_site
 from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
-from django.utils.encoding import force_bytes
+from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from .models import BookExchangeRequest, Post, Shelf, Comment, Like, PrivateMessage
-from .models import BookExchangeRequest, Post, PrivateMessage, Shelf
+from .models import BookExchangeRequest, Comment, Like, Post, PrivateMessage, Shelf
 from django.contrib.auth.views import LoginView
-from .forms import UserLoginForm, UserRegisterForm, AddIsbnForm, SendExchangePartnerMessageForm
+from .forms import (
+    AddIsbnForm,
+    SendExchangePartnerMessageForm,
+    UserLoginForm,
+    UserRegisterForm,
+    UserUpdateForm,
+)
 from django.views.generic import CreateView
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.contrib.auth.decorators import login_required
-from .forms import UserUpdateForm
 from .openlibrary import fetch_book_by_isbn
+from django.conf import settings
 # Бізнес-правила обміну/позик винесені в exchange_service - тут лише HTTP і шаблони.
 from .message_service import (
     get_exchange_message_partners,
@@ -30,6 +34,10 @@ from .exchange_service import (
     reject_exchange_request,
     return_borrowed_book,
 )
+from django.core.mail import send_mail
+
+from .tokens import account_activation_token
+
 
 def home(request):
     posts = Post.objects.all().order_by('-created_ad')
@@ -48,12 +56,86 @@ class CustomLoginView(LoginView):
 class CustomRegisterView(CreateView):
     template_name = 'mainApp/register.html'
     form_class = UserRegisterForm
-    success_url = reverse_lazy('home')
+    success_url = reverse_lazy('confirm_email')
 
     def form_valid(self, form):
-        response = super().form_valid(form)
-        login(self.request, self.object)
-        return response
+        # 1. Создаем юзера, но не активируем
+        user = form.save(commit=False)
+        user.is_active = False
+        user.save()
+
+        # 2. Формируем данные для ссылки подтверждения
+        current_site = get_current_site(self.request)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = account_activation_token.make_token(user)
+
+        # Ссылка, по которой юзер кликнет в письме
+        relative_link = reverse('activate', kwargs={'uidb64': uid, 'token': token})
+        activation_url = f"http://{current_site.domain}{relative_link}"
+
+        # 3. Контент письма
+        subject = "Підтвердження реєстрації BookWorms"
+        message = f"Вітаємо, {user.username}!\nДля активації аккаунта перейдіть за посиланням: {activation_url}"
+
+        html_message = f"""
+            <div style="font-family: Arial, sans-serif; border: 1px solid #ddd; padding: 20px;">
+                <h2 style="color: #2c3e50;">Ласкаво просимо в BookWorms!</h2>
+                <p>Вы успішно зареєструвались. Залишився останній крок — підтвердіть пошту.</p>
+                <a href="{activation_url}" 
+                   style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
+                   Активувати мій акаунт
+                </a>
+                <p style="margin-top: 20px; font-size: 12px; color: #777;">
+                    Якщо ви не реєструвались на нашому сайті, просто проігноруйте цей лист.
+                </p>
+            </div>
+        """
+
+        # 4. Отправка письма
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
+        except Exception as e:
+
+            user.delete()
+            form.add_error(None, f"Помилка відправки листа: {e}. Перевірте налаштування SMTP.")
+            return self.form_invalid(form)
+
+        return super().form_valid(form)
+
+
+def activate(request, uidb64, token):
+    User = get_user_model()
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+
+    # Проверяем токен
+    if user is not None and account_activation_token.check_token(user, token):
+        user.is_active = True
+        user.save()
+        login(request, user)
+        return render(request, 'mainApp/activation_success.html')
+    else:
+        return render(request, 'mainApp/activation_invalid.html')
+
+
+def activation_success_view(request):
+    return render(request, 'mainApp/activation_success.html')
+
+def activation_invalid_view(request):
+    return render(request, 'mainApp/activation_invalid.html')
+
+def confirm_email_view(request):
+    return render(request, 'mainApp/confirm_email.html')
 
 @login_required
 def create_post(request):
@@ -95,19 +177,6 @@ def edit_post(request, post_id):
         return redirect('home')
 
     return render(request, 'mainApp/form.html', {'post': post})
-
-@login_required
-def edit_profile(request):
-    if request.method == 'POST':
-        form = UserUpdateForm(request.POST, request.FILES, instance=request.user)
-        if form.is_valid():
-            form.save()
-            return redirect('profile')
-    else:
-        form = UserUpdateForm(instance=request.user)
-
-    return render(request, 'mainApp/profile_edit.html', {'form': form})
-
 
 @login_required
 def my_library(request):
@@ -371,3 +440,31 @@ def message_thread(request, partner_id: int):
             "partner": partner,
         },
     )
+@login_required
+def add_comment(request, post_id):
+    post = get_object_or_404(Post, id=post_id)
+
+    if request.method == 'POST':
+        text = request.POST.get('text')
+
+        if text:
+            Comment.objects.create(
+                post=post,
+                author=request.user,
+                text=text
+            )
+
+    return redirect('home')
+
+@login_required
+def toggle_like(request, post_id):
+    post = get_object_or_404(Post, id=post_id)
+
+    like = Like.objects.filter(post=post, user=request.user).first()
+
+    if like:
+        like.delete()
+    else:
+        Like.objects.create(post=post, user=request.user)
+
+    return redirect('home')
