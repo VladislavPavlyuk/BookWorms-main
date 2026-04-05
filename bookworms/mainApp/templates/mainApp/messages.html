@@ -23,7 +23,7 @@
                 <strong>Переписка</strong>
                 <a href="{% url 'exchange_requests' %}" class="small">← До обмінів</a>
             </div>
-            <div class="card-body p-3 bg-body-secondary" style="max-height: 65vh; overflow-y: auto;">
+            <div id="chat-thread-panel" class="card-body p-3 bg-body-secondary" style="max-height: 65vh; overflow-y: auto;">
                 {% if timeline %}
                     {% for m in timeline %}
                         {% if m.recipient_id == user.id %}
@@ -52,6 +52,7 @@
                             </div>
                         {% endif %}
                     {% endfor %}
+                    <div id="chat-thread-end" aria-hidden="true"></div>
                 {% else %}
                     <p class="text-muted text-center py-5 mb-0">Ще немає повідомлень у цьому чаті.</p>
                 {% endif %}
@@ -94,5 +95,23 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var panel = document.getElementById("chat-thread-panel");
+    if (!panel) return;
+    function scrollToBottom() {
+        panel.scrollTop = panel.scrollHeight;
+    }
+    scrollToBottom();
+    requestAnimationFrame(function () {
+        requestAnimationFrame(scrollToBottom);
+    });
+    if (window.document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(scrollToBottom);
+    }
+    window.addEventListener("load", scrollToBottom);
+})();
+</script>
 
 {% endblock %}

@@ -25,10 +25,11 @@ from .message_service import (
 from .exchange_service import (
     accept_exchange_request,
     cancel_exchange_request,
-    create_exchange_request,
+    confirm_borrow_return,
+    create_many_exchange_requests,
     get_or_create_book_from_payload,
     reject_exchange_request,
-    return_borrowed_book,
+    request_borrow_return,
 )
 from django.core.mail import send_mail
 
@@ -202,10 +203,19 @@ def my_library(request):
     shelves = (
         request.user.shelf_entries.select_related("book", "borrowed_from").all()
     )
+    pending_returns_to_confirm = (
+        Shelf.objects.filter(borrowed_from=request.user, return_pending=True)
+        .select_related("user", "book")
+        .order_by("-added_at")
+    )
     return render(
         request,
         "mainApp/library.html",
-        {"form": form, "shelves": shelves},
+        {
+            "form": form,
+            "shelves": shelves,
+            "pending_returns_to_confirm": pending_returns_to_confirm,
+        },
     )
 
 
@@ -230,9 +240,25 @@ def remove_shelf_entry(request, shelf_id):
 def return_borrowed_shelf_book(request, shelf_id):
     if request.method != "POST":
         return redirect("my_library")
-    ok, err = return_borrowed_book(shelf_id, request.user)
+    ok, err = request_borrow_return(shelf_id, request.user)
     if ok:
-        messages.success(request, "Книгу повернуто власнику.")
+        messages.success(
+            request,
+            "Запит на повернення надіслано. Книга зникне з вашої полиці після підтвердження позикодавцем.",
+        )
+    else:
+        messages.error(request, err or "Помилка.")
+    return redirect("my_library")
+
+
+@login_required
+def confirm_return_borrowed_shelf_book(request, shelf_id):
+    """Позикодавець підтверджує отримання фізично повернутої книги."""
+    if request.method != "POST":
+        return redirect("my_library")
+    ok, err = confirm_borrow_return(shelf_id, request.user)
+    if ok:
+        messages.success(request, "Повернення підтверджено - книга на вашій полиці.")
     else:
         messages.error(request, err or "Помилка.")
     return redirect("my_library")
@@ -263,31 +289,93 @@ def browse_shelves(request):
 
 @login_required
 def create_exchange(request):
-    """Приймає POST з форми на сторінці browse: id чужої полиці + опційно id своєї для обміну."""
+    """
+    POST з browse_shelves: target_shelf_ids[] (чекбокси) + offer_shelf_id_<pk> для кожного рядка.
+    Підтримує один або кілька запитів за одну відправку.
+    """
     if request.method != "POST":
         return redirect("browse_shelves")
-    try:
-        target_id = int(request.POST.get("target_shelf_id", ""))
-    except (TypeError, ValueError):
-        messages.error(request, "Некоректний запит.")
+
+    err_cap = 12
+    raw_ids = request.POST.getlist("target_shelf_ids")
+    if not raw_ids:
+        messages.error(request, "Оберіть хоча б одну книгу (рядок у таблиці).")
         return redirect("browse_shelves")
 
-    target_shelf = get_object_or_404(Shelf, pk=target_id)
-    offer_shelf = None
-    raw_offer = request.POST.get("offer_shelf_id") or ""
-    if raw_offer.strip():
+    seen: set[int] = set()
+    lines: list[tuple[Shelf, Shelf | None]] = []
+    preflight: list[str] = []
+    for tid_str in raw_ids:
         try:
-            oid = int(raw_offer)
-            offer_shelf = get_object_or_404(Shelf, pk=oid, user=request.user)
+            tid = int(tid_str)
         except (TypeError, ValueError):
-            messages.error(request, "Некоректна книга для обміну.")
-            return redirect("browse_shelves")
+            preflight.append("Пропущено рядок з некоректним id полиці.")
+            continue
+        if tid in seen:
+            continue
+        seen.add(tid)
+        target_shelf = (
+            Shelf.objects.filter(pk=tid)
+            .select_related("user", "book")
+            .first()
+        )
+        if not target_shelf:
+            preflight.append(f"Запис полиці #{tid} не знайдено.")
+            continue
 
-    req, err = create_exchange_request(request.user, target_shelf, offer_shelf)
-    if err:
-        messages.error(request, err)
-    else:
-        messages.success(request, "Запит надіслано.")
+        offer_shelf = None
+        raw_offer = request.POST.get(f"offer_shelf_id_{tid}", "") or ""
+        if raw_offer.strip():
+            try:
+                oid = int(raw_offer)
+            except (TypeError, ValueError):
+                t = target_shelf.book.title
+                preflight.append(f"«{t[:45]}»: некоректна книга для обміну.")
+                continue
+            offer_shelf = Shelf.objects.filter(pk=oid, user=request.user).first()
+            if not offer_shelf:
+                t = target_shelf.book.title
+                preflight.append(
+                    f"«{t[:45]}»: запропоновану книгу не знайдено на вашій полиці."
+                )
+                continue
+
+        lines.append((target_shelf, offer_shelf))
+
+    if not lines:
+        for e in preflight[:err_cap]:
+            messages.error(request, e)
+        if len(preflight) > err_cap:
+            messages.warning(
+                request,
+                f"…та ще {len(preflight) - err_cap} зауважень.",
+            )
+        if not preflight:
+            messages.error(request, "Немає валідних рядків для відправки.")
+        return redirect("browse_shelves")
+
+    ok_count, errs = create_many_exchange_requests(request.user, lines)
+    if ok_count:
+        messages.success(
+            request,
+            f"Надіслано запитів: {ok_count}."
+            if ok_count > 1
+            else "Запит надіслано.",
+        )
+    for e in preflight[:err_cap]:
+        messages.error(request, e)
+    if len(preflight) > err_cap:
+        messages.warning(
+            request,
+            f"…та ще {len(preflight) - err_cap} попередніх зауважень.",
+        )
+    for e in errs[:err_cap]:
+        messages.error(request, e)
+    if len(errs) > err_cap:
+        messages.warning(
+            request,
+            f"…та ще {len(errs) - err_cap} повідомлень про помилки (перевірте кожен рядок).",
+        )
     return redirect("exchange_requests")
 
 

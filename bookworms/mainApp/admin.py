@@ -24,7 +24,7 @@ class BookAdmin(admin.ModelAdmin):
 
 @admin.register(Shelf)
 class ShelfAdmin(admin.ModelAdmin):
-    list_display = ("user", "book", "borrowed_from", "added_at")
+    list_display = ("user", "book", "borrowed_from", "return_pending", "added_at")
     list_filter = ("added_at",)
     search_fields = ("user__username", "book__title", "book__isbn")
 

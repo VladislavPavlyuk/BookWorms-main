@@ -81,6 +81,43 @@ def create_exchange_request(
     return req, None
 
 
+def create_many_exchange_requests(
+    requester: CustomUser,
+    lines: list[tuple[Shelf, Shelf | None]],
+) -> tuple[int, list[str]]:
+    """
+    Кілька запитів за одну дію (позика або обмін на рядок).
+    Та сама пропозиція (offer_shelf) не може зустрічатись двічі в одному пакеті.
+    """
+    ok = 0
+    errs: list[str] = []
+
+    def short_title(s: Shelf) -> str:
+        t = s.book.title
+        return (t[:52] + "…") if len(t) > 55 else t
+
+    seen_offer_ids: set[int] = set()
+    filtered: list[tuple[Shelf, Shelf | None]] = []
+    for target_shelf, offer_shelf in lines:
+        label = short_title(target_shelf)
+        if offer_shelf is not None:
+            oid = offer_shelf.pk
+            if oid in seen_offer_ids:
+                errs.append(f'«{label}»: цю свою книгу вже обрано для іншого рядка в цьому пакеті.')
+                continue
+            seen_offer_ids.add(oid)
+        filtered.append((target_shelf, offer_shelf))
+
+    for target_shelf, offer_shelf in filtered:
+        label = short_title(target_shelf)
+        req, err = create_exchange_request(requester, target_shelf, offer_shelf)
+        if err:
+            errs.append(f"«{label}»: {err}")
+        else:
+            ok += 1
+    return ok, errs
+
+
 @transaction.atomic
 def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[bool, str | None]:
     """
@@ -189,29 +226,59 @@ def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
 
 
 @transaction.atomic
-def return_borrowed_book(shelf_id: int, borrower: CustomUser) -> tuple[bool, str | None]:
+def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, str | None]:
     """
-    Позичальник натискає "Повернути власнику": той самий рядок Shelf залишається,
-    але user стає власником, borrowed_from очищується (книга знову "повністю його").
+    Позичальник повідомляє, що повертає книгу. Рядок лишається на його полиці до підтвердження позикодавцем.
     """
     shelf = (
         Shelf.objects.select_for_update()
         .filter(pk=shelf_id, user=borrower)
-        .select_related("borrowed_from")
+        .select_related("borrowed_from", "book")
         .first()
     )
     if not shelf:
         return False, "Запис на полиці не знайдено."
     if not shelf.borrowed_from_id:
         return False, "Ця книга не позичена - її можна просто прибрати з полиці."
+    if shelf.return_pending:
+        return False, "Повернення вже очікує підтвердження позикодавця."
 
-    owner_id = shelf.borrowed_from_id
+    Shelf.objects.filter(pk=shelf.pk).update(return_pending=True)
+    shelf.return_pending = True
+    message_service.notify_borrow_return_requested(shelf)
+    return True, None
+
+
+@transaction.atomic
+def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str | None]:
+    """
+    Позикодавець підтверджує отримання: рядок Shelf переходить на його полицю, зникає з полиці позичальника.
+    """
+    shelf = (
+        Shelf.objects.select_for_update()
+        .filter(
+            pk=shelf_id,
+            borrowed_from=lender,
+            return_pending=True,
+        )
+        .select_related("book")
+        .first()
+    )
+    if not shelf:
+        return False, "Немає запису з очікуванням вашого підтвердження повернення."
+
+    owner_id = lender.id
     book_id = shelf.book_id
 
-    # Захист від порушення унікальності (user, book), якщо власник якимось чином вже має дубль.
     if Shelf.objects.filter(user_id=owner_id, book_id=book_id).exclude(pk=shelf.pk).exists():
-        return False, "У власника вже є ця книга на полиці - зверніться до адміністратора."
+        return False, "У вас уже є ця книга на полиці - зверніться до адміністратора."
 
-    # Один UPDATE замість delete+create - історія та id запису зберігаються.
-    Shelf.objects.filter(pk=shelf.pk).update(user_id=owner_id, borrowed_from_id=None)
+    borrower = shelf.user
+    book_title = shelf.book.title
+    Shelf.objects.filter(pk=shelf.pk).update(
+        user_id=owner_id,
+        borrowed_from_id=None,
+        return_pending=False,
+    )
+    message_service.notify_borrow_return_confirmed(lender, borrower, book_title)
     return True, None
