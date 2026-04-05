@@ -22,6 +22,7 @@ from .views import (
     exchange_accept,
     exchange_reject,
     exchange_cancel,
+    message_thread,
 )
 from .views import add_comment
 from .views import toggle_like
@@ -38,6 +39,7 @@ urlpatterns = [
     path('library/exchange/<int:request_id>/accept/', exchange_accept, name='exchange_accept'),
     path('library/exchange/<int:request_id>/reject/', exchange_reject, name='exchange_reject'),
     path('library/exchange/<int:request_id>/cancel/', exchange_cancel, name='exchange_cancel'),
+    path('messages/<int:partner_id>/', message_thread, name='message_thread'),
     path('profile/', profile, name='profile'),
     path('profile/edit/', edit_profile, name='edit_profile'),
     path('logout/', LogoutView.as_view(), name='logout'),

@@ -28,7 +28,7 @@
                 {% else %}
                     <br><span class="small text-muted">Без книги взамін - <strong>позика</strong> (після згоди позичальник зможе лише повернути книгу)</span>
                 {% endif %}
-                <div class="mt-2 d-flex gap-2">
+                <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
                     <form method="post" action="{% url 'exchange_accept' r.id %}">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-success btn-sm">Прийняти</button>
@@ -37,6 +37,7 @@
                         {% csrf_token %}
                         <button type="submit" class="btn btn-outline-secondary btn-sm">Відхилити</button>
                     </form>
+                    <a href="{% url 'message_thread' r.requester.id %}" class="btn btn-outline-primary btn-sm">Чат</a>
                 </div>
             </li>
         {% endfor %}
@@ -57,10 +58,13 @@
                 {% else %}
                     <br><span class="small text-muted">Позика (без вашої книги взамін)</span>
                 {% endif %}
-                <form method="post" action="{% url 'exchange_cancel' r.id %}" class="mt-2">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-outline-danger btn-sm">Скасувати</button>
-                </form>
+                <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
+                    <form method="post" action="{% url 'exchange_cancel' r.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-danger btn-sm">Скасувати</button>
+                    </form>
+                    <a href="{% url 'message_thread' r.shelf_owner.id %}" class="btn btn-outline-primary btn-sm">Чат</a>
+                </div>
             </li>
         {% endfor %}
     </ul>
@@ -77,6 +81,11 @@
                 {{ r.requester.username }} ↔ {{ r.shelf_owner.username }}:
                 "{{ r.target_shelf.book.title }}"
                 <span class="text-muted">({{ r.created_at|date:"Y-m-d H:i" }})</span>
+                {% if r.requester_id == user.id %}
+                    · <a href="{% url 'message_thread' r.shelf_owner.id %}">чат з {{ r.shelf_owner.username }}</a>
+                {% else %}
+                    · <a href="{% url 'message_thread' r.requester.id %}">чат з {{ r.requester.username }}</a>
+                {% endif %}
             </li>
         {% endfor %}
     </ul>

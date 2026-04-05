@@ -145,6 +145,43 @@ class BookExchangeRequest(models.Model):
     def __str__(self):
         return f"{self.requester} → {self.shelf_owner}: {self.target_shelf.book.title}"
 
+
+class PrivateMessage(models.Model):
+    """
+    Приватне повідомлення між користувачами.
+    Може бути прив’язане до запиту на обмін/позику (exchange_request) для контексту в скриньці.
+    """
+    sender = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="sent_private_messages",
+        verbose_name="Від кого",
+    )
+    recipient = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="received_private_messages",
+        verbose_name="Кому",
+    )
+    body = models.TextField(verbose_name="Текст")
+    exchange_request = models.ForeignKey(
+        BookExchangeRequest,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="private_messages",
+        verbose_name="Зв’язаний запит",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True, verbose_name="Прочитано")
+
+    class Meta:
+        verbose_name = "приватне повідомлення"
+        verbose_name_plural = "приватні повідомлення"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.sender} → {self.recipient}: {self.body[:40]}"
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
     author = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
