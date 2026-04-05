@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth import get_user_model
 from .models import AvatarCollection
+from django.core.exceptions import ValidationError
 
 User = get_user_model()
 
@@ -16,6 +17,7 @@ class UserLoginForm(AuthenticationForm):
     )
 
 
+
 class UserRegisterForm(UserCreationForm):
     avatar_choice = forms.ModelChoiceField(
         queryset=AvatarCollection.objects.all(),
@@ -24,9 +26,21 @@ class UserRegisterForm(UserCreationForm):
         label="Або оберіть готовий аватар"
     )
 
+    # Добавляем поле email явно, чтобы сделать его обязательным
+    email = forms.EmailField(
+        required=True,
+        label="Електронна пошта",
+        widget=forms.EmailInput(attrs={'placeholder': 'example@mail.com'})
+    )
+
     class Meta:
-        model = get_user_model()
-        fields = ("username", "biography", "avatar") + UserCreationForm.Meta.fields
+        model = User
+        fields = ("username", "email", "biography", "avatar")
+        labels = {
+            'username': "Логін",
+            'biography': "Біографія",
+            'avatar': "Аватар",
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -39,6 +53,12 @@ class UserRegisterForm(UserCreationForm):
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'
 
+    def clean_email(self):
+        email = self.cleaned_data.get('email')
+        if User.objects.filter(email=email).exists():
+            raise ValidationError("Ця електронна адреса вже використовується.")
+        return email
+
 class UserUpdateForm(forms.ModelForm):
     avatar_choice = forms.ModelChoiceField(
         queryset=AvatarCollection.objects.all(),
@@ -50,6 +70,11 @@ class UserUpdateForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ['username', 'biography', 'avatar']
+        labels = {
+            'username': 'Логін',
+            'biography': 'Біографія',
+            'avatar': 'Аватар'
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

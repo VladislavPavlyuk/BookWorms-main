@@ -1,22 +1,42 @@
-{% for field in form %}
-    {% if field.name != 'avatar_choice' %}
-        <div class="mb-3">
-            <label class="form-label">{{ field.label }}</label>
-            {{ field }}
-            </div>
-    {% endif %}
-{% endfor %}
+{% extends 'mainApp/base.html' %}
 
-<div class="mb-3">
-    <label class="form-label fw-bold">Оберіть аватар:</label>
-    <div class="row g-2">
-        {% for radio in form.avatar_choice %}
-            <div class="col-3 text-center">
-                <label class="avatar-option">
-                    {{ radio.tag }}
-                    <img src="{{ radio.choice_label.image.url }}" class="img-thumbnail rounded-circle" style="width: 70px; height: 70px; object-fit: cover;">
-                </label>
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0 text-center">Реєстрація у BookWorms</h3>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+
+                        {% for field in form %}
+                            <div class="mb-3">
+                                <label class="form-label font-weight-bold">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.errors %}
+                                    <div class="text-danger small">
+                                        {{ field.errors|striptags }}
+                                    </div>
+                                {% endif %}
+                                {% if field.help_text %}
+                                    <div class="form-text text-muted small">{{ field.help_text|safe }}</div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-success btn-lg">Зареєструватися</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer text-center">
+                    <p class="mb-0">Вже маєте аккаунт? <a href="{% url 'login' %}">Увійти</a></p>
+                </div>
             </div>
-        {% endfor %}
+        </div>
     </div>
 </div>
+{% endblock %}
