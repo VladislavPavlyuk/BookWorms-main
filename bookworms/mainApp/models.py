@@ -1,5 +1,11 @@
-from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
+
+# Діапазон років для рекомендації (18 = "18+" у підписах).
+READER_AGE_MIN = 0
+READER_AGE_MAX = 18
 
 class AvatarCollection(models.Model):
     name = models.CharField(max_length=100, verbose_name="Назва аватара")
@@ -35,6 +41,7 @@ class Book(models.Model):
     Навіщо окремо від Shelf: щоб не дублювати назву/авторів для кожного користувача -
     усі читають ті самі поля з Open Library, а полиця лише посилається на цей запис.
     """
+
     isbn = models.CharField(max_length=13, unique=True, db_index=True, verbose_name="ISBN")
     title = models.CharField(max_length=500, verbose_name="Назва")
     authors = models.CharField(max_length=500, blank=True, verbose_name="Автори")
@@ -42,6 +49,18 @@ class Book(models.Model):
     publish_date = models.CharField(max_length=64, blank=True, verbose_name="Дата видання")
     cover_url = models.URLField(max_length=500, blank=True, verbose_name="Обкладинка (URL)")
     info_url = models.URLField(max_length=500, blank=True, verbose_name="Open Library")
+    min_readers_age = models.PositiveSmallIntegerField(
+        default=READER_AGE_MIN,
+        validators=[MinValueValidator(READER_AGE_MIN), MaxValueValidator(READER_AGE_MAX)],
+        verbose_name="Мінімальний рекомендований вік читача (років)",
+        help_text="0–18; 18 у полі «максимум» означає 18+.",
+    )
+    max_readers_age = models.PositiveSmallIntegerField(
+        default=READER_AGE_MAX,
+        validators=[MinValueValidator(READER_AGE_MIN), MaxValueValidator(READER_AGE_MAX)],
+        verbose_name="Максимальний рекомендований вік читача (років)",
+        help_text="0–18; значення 18 — «18+».",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -51,6 +70,27 @@ class Book(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.isbn})"
+
+    def clean(self):
+        super().clean()
+        if self.min_readers_age > self.max_readers_age:
+            raise ValidationError(
+                {
+                    "min_readers_age": "Мінімальний вік не може бути більшим за максимальний.",
+                    "max_readers_age": "Максимальний вік не може бути меншим за мінімальний.",
+                }
+            )
+
+    def reader_age_summary(self) -> str:
+        """Короткий текст для списків (максимум 18 = 18+)."""
+        lo, hi = self.min_readers_age, self.max_readers_age
+        if lo == hi:
+            if hi >= READER_AGE_MAX:
+                return "18+"
+            return f"{lo} років"
+        if hi >= READER_AGE_MAX:
+            return f"{lo}–18+"
+        return f"{lo}–{hi} років"
 
 
 class Shelf(models.Model):

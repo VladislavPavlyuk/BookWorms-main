@@ -103,7 +103,7 @@ def create_many_exchange_requests(
         if offer_shelf is not None:
             oid = offer_shelf.pk
             if oid in seen_offer_ids:
-                errs.append(f'«{label}»: цю свою книгу вже обрано для іншого рядка в цьому пакеті.')
+                errs.append(f'"{label}": цю свою книгу вже обрано для іншого рядка в цьому пакеті.')
                 continue
             seen_offer_ids.add(oid)
         filtered.append((target_shelf, offer_shelf))
