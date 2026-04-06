@@ -6,3 +6,98 @@
     transform: scale(1.1);
     transition: 0.2s;
 }
+
+/* Підписи 0 … 18+ над шкалою */
+.reader-age-ticks {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 2px;
+    margin-bottom: 2px;
+}
+
+/*
+ * Фон батька під input; background-size висотою 10px - зелений/сірий лише в смузі треку,
+ * не вище/нижче повзунків. Координати зупинок задає JS у px (між внутрішніми краями thumb).
+ */
+.reader-age-dual {
+    position: relative;
+    height: 36px;
+    margin: 4px 0 6px;
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-image: linear-gradient(to right, #dee2e6 0px, #dee2e6 100%);
+    background-size: 100% 10px;
+}
+
+.reader-age-input {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 36px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: none;
+    top: 0;
+}
+
+.reader-age-input::-webkit-slider-container {
+    background-color: transparent;
+}
+
+.reader-age-min {
+    z-index: 2;
+}
+
+.reader-age-max {
+    z-index: 3;
+}
+
+.reader-age-input::-webkit-slider-thumb {
+    pointer-events: auto;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #198754;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(25, 135, 84, 0.45);
+    cursor: pointer;
+}
+
+.reader-age-input::-webkit-slider-runnable-track {
+    height: 10px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+}
+
+.reader-age-input::-moz-range-thumb {
+    pointer-events: auto;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #198754;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(25, 135, 84, 0.45);
+    cursor: pointer;
+}
+
+.reader-age-input::-moz-range-track {
+    height: 10px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+}
+
+/* Інакше Firefox малює непрозору заливку поверх фону контейнера */
+.reader-age-input::-moz-range-progress {
+    background: transparent;
+}
+
+.book-reader-age-form--locked .reader-age-input:disabled {
+    opacity: 0.85;
+    cursor: not-allowed;
+}

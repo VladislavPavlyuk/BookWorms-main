@@ -1,12 +1,24 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.sites.shortcuts import get_current_site
 from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
+from django.views.decorators.http import require_POST
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from .models import BookExchangeRequest, Comment, Like, Post, PrivateMessage, Shelf
+from .models import (
+    Book,
+    BookExchangeRequest,
+    Comment,
+    Like,
+    Post,
+    PrivateMessage,
+    READER_AGE_MAX,
+    READER_AGE_MIN,
+    Shelf,
+)
 from django.contrib.auth.views import LoginView
 from .forms import (
     AddIsbnForm,
@@ -81,7 +93,7 @@ class CustomRegisterView(CreateView):
         html_message = f"""
             <div style="font-family: Arial, sans-serif; border: 1px solid #ddd; padding: 20px;">
                 <h2 style="color: #2c3e50;">Ласкаво просимо в BookWorms!</h2>
-                <p>Вы успішно зареєструвались. Залишився останній крок — підтвердіть пошту.</p>
+                <p>Вы успішно зареєструвались. Залишився останній крок - підтвердіть пошту.</p>
                 <a href="{activation_url}" 
                    style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
                    Активувати мій акаунт
@@ -212,6 +224,11 @@ def my_library(request):
         .select_related("user", "book")
         .order_by("-added_at")
     )
+    locked_raw = request.session.get("reader_age_locked_shelf_ids", [])
+    if not isinstance(locked_raw, list):
+        locked_raw = []
+    reader_age_locked_shelf_ids = set(locked_raw)
+
     return render(
         request,
         "mainApp/library.html",
@@ -219,8 +236,68 @@ def my_library(request):
             "form": form,
             "shelves": shelves,
             "pending_returns_to_confirm": pending_returns_to_confirm,
+            "reader_age_min": READER_AGE_MIN,
+            "reader_age_max": READER_AGE_MAX,
+            "reader_age_locked_shelf_ids": reader_age_locked_shelf_ids,
         },
     )
+
+
+@login_required
+def update_shelf_book_reader_age(request, shelf_id):
+    """Оновлення min/max рекомендованого віку в спільному Book для рядка полиці."""
+    if request.method != "POST":
+        return redirect("my_library")
+    shelf = get_object_or_404(
+        Shelf.objects.select_related("book"),
+        pk=shelf_id,
+        user=request.user,
+    )
+    book = shelf.book
+    try:
+        mn = int(request.POST.get("min_readers_age", READER_AGE_MIN))
+        mx = int(request.POST.get("max_readers_age", READER_AGE_MAX))
+    except (TypeError, ValueError):
+        messages.error(request, "Некоректні значення віку.")
+        return redirect("my_library")
+    mn = max(READER_AGE_MIN, min(READER_AGE_MAX, mn))
+    mx = max(READER_AGE_MIN, min(READER_AGE_MAX, mx))
+    # Якщо мін. > макс. у формі - міняємо значення місцями (у БД лишається коректна пара).
+    if mn > mx:
+        mn, mx = mx, mn
+    book.min_readers_age = mn
+    book.max_readers_age = mx
+    try:
+        book.full_clean()
+    except DjangoValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect("my_library")
+    book.save(update_fields=["min_readers_age", "max_readers_age"])
+
+    key = "reader_age_locked_shelf_ids"
+    locked = request.session.get(key, [])
+    if not isinstance(locked, list):
+        locked = []
+    if shelf_id not in locked:
+        locked.append(shelf_id)
+    request.session[key] = locked
+    request.session.modified = True
+
+    messages.success(request, "Діапазон рекомендованого віку збережено.")
+    return redirect("my_library")
+
+
+@login_required
+@require_POST
+def unlock_shelf_reader_age_edit(request, shelf_id):
+    """Зняти режим "лише перегляд" повзунків після збереження (для цієї полиці)."""
+    get_object_or_404(Shelf, pk=shelf_id, user=request.user)
+    key = "reader_age_locked_shelf_ids"
+    locked = request.session.get(key, [])
+    if isinstance(locked, list) and shelf_id in locked:
+        request.session[key] = [sid for sid in locked if sid != shelf_id]
+        request.session.modified = True
+    return redirect("my_library")
 
 
 @login_required
@@ -334,13 +411,13 @@ def create_exchange(request):
                 oid = int(raw_offer)
             except (TypeError, ValueError):
                 t = target_shelf.book.title
-                preflight.append(f"«{t[:45]}»: некоректна книга для обміну.")
+                preflight.append(f'«{t[:45]}»: некоректна книга для обміну.')
                 continue
             offer_shelf = Shelf.objects.filter(pk=oid, user=request.user).first()
             if not offer_shelf:
                 t = target_shelf.book.title
                 preflight.append(
-                    f"«{t[:45]}»: запропоновану книгу не знайдено на вашій полиці."
+                    f'«{t[:45]}»: запропоновану книгу не знайдено на вашій полиці.'
                 )
                 continue
 

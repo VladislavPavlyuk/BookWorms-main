@@ -78,6 +78,22 @@
                         {% if book.authors %}
                             <p class="card-text small mb-1">{{ book.authors }}</p>
                         {% endif %}
+                        <form method="post" action="{% url 'update_shelf_book_reader_age' shelf.id %}" class="book-reader-age-form border rounded p-2 mb-2 bg-body-secondary{% if shelf.id in reader_age_locked_shelf_ids %} book-reader-age-form--locked{% endif %}">
+                            {% csrf_token %}
+                            <p class="small fw-semibold mb-1">Рекомендований вік читача</p>
+                            <div class="reader-age-ticks small text-muted user-select-none">
+                                <span>0</span><span>3</span><span>5</span><span>7</span><span>10</span><span>12</span><span>15</span><span>18+</span>
+                            </div>
+                            <div class="reader-age-dual">
+                                <input type="range" name="min_readers_age" min="{{ reader_age_min }}" max="{{ reader_age_max }}" step="1" value="{{ book.min_readers_age }}" class="reader-age-input reader-age-min" aria-label="Мінімальний вік"{% if shelf.id in reader_age_locked_shelf_ids %} disabled{% endif %}>
+                                <input type="range" name="max_readers_age" min="{{ reader_age_min }}" max="{{ reader_age_max }}" step="1" value="{{ book.max_readers_age }}" class="reader-age-input reader-age-max" aria-label="Максимальний вік"{% if shelf.id in reader_age_locked_shelf_ids %} disabled{% endif %}>
+                            </div>
+                            {% if shelf.id in reader_age_locked_shelf_ids %}
+                            <button type="submit" class="btn btn-sm btn-danger mt-2" formmethod="post" formaction="{% url 'unlock_shelf_reader_age_edit' shelf.id %}">Змінити діапазон</button>
+                            {% else %}
+                            <button type="submit" class="btn btn-sm btn-outline-primary mt-2 js-reader-age-save-btn">Зберегти діапазон</button>
+                            {% endif %}
+                        </form>
                         {% if book.publisher or book.publish_date %}
                             <p class="card-text small mb-2">{{ book.publisher }}{% if book.publisher and book.publish_date %}, {% endif %}{{ book.publish_date }}</p>
                         {% endif %}

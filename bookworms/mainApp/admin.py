@@ -18,7 +18,7 @@ admin.site.register(Post)
 
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
-    list_display = ("title", "isbn", "authors", "created_at")
+    list_display = ("title", "isbn", "authors", "min_readers_age", "max_readers_age", "created_at")
     search_fields = ("title", "isbn", "authors")
 
 

@@ -84,7 +84,7 @@ class UserUpdateForm(forms.ModelForm):
 
 
 class AddIsbnForm(forms.Form):
-    """Проста форма без моделі: лише поле ISBN для сторінки "Моя полиця"."""
+    """Поле ISBN для сторінки "Моя полиця"; вікові групи задаються окремо на картці книги."""
     isbn = forms.CharField(
         label="ISBN (10 або 13)",
         max_length=32,
