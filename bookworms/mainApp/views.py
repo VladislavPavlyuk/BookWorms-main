@@ -21,6 +21,7 @@ from .models import (
 )
 from django.contrib.auth.views import LoginView
 from .forms import (
+    AddBookManualForm,
     AddIsbnForm,
     SendExchangePartnerMessageForm,
     UserLoginForm,
@@ -303,9 +304,11 @@ def edit_post(request, post_id):
 @login_required
 def my_library(request):
     """
-    Сторінка "Моя полиця": додавання книги за ISBN (Open Library) + список записів Shelf поточного користувача.
+    Сторінка "Моя полиця": додавання книги за ISBN (Open Library), вручну або список Shelf.
     """
     form = AddIsbnForm()
+    manual_form = AddBookManualForm()
+
     if request.method == "POST" and "add_isbn" in request.POST:
         form = AddIsbnForm(request.POST)
         if form.is_valid():
@@ -313,16 +316,36 @@ def my_library(request):
             if err:
                 messages.error(request, err)
             else:
-                # Спочатку єдиний запис Book за ISBN, потім зв’язок "я маю цю книгу" - Shelf.
                 book, _ = get_or_create_book_from_payload(payload)
                 try:
                     Shelf.objects.create(user=request.user, book=book)
                     messages.success(request, f"Додано: {book.title}")
                     return redirect("my_library")
                 except IntegrityError:
-                    # Спрацювало обмеження unique (user, book).
                     messages.warning(request, "Ця книга вже є на вашій полиці.")
                     form = AddIsbnForm()
+
+    elif request.method == "POST" and "add_manual" in request.POST:
+        manual_form = AddBookManualForm(request.POST)
+        if manual_form.is_valid():
+            d = manual_form.cleaned_data
+            payload = {
+                "isbn": d["isbn"],
+                "title": d["title"].strip(),
+                "authors": (d.get("authors") or "").strip(),
+                "publisher": (d.get("publisher") or "").strip(),
+                "publish_date": (d.get("publish_date") or "").strip(),
+                "cover_url": (d.get("cover_url") or "").strip(),
+                "info_url": (d.get("info_url") or "").strip(),
+            }
+            book, _ = get_or_create_book_from_payload(payload)
+            try:
+                Shelf.objects.create(user=request.user, book=book)
+                messages.success(request, f"Додано вручну: {book.title}")
+                return redirect("my_library")
+            except IntegrityError:
+                messages.warning(request, "Ця книга вже є на вашій полиці.")
+                manual_form = AddBookManualForm(request.POST)
 
     # borrowed_from підтягуємо одним запитом - щоб у шаблоні знати, позичена книга чи власна.
     shelves = (
@@ -343,6 +366,7 @@ def my_library(request):
         "mainApp/library.html",
         {
             "form": form,
+            "manual_form": manual_form,
             "shelves": shelves,
             "pending_returns_to_confirm": pending_returns_to_confirm,
             "reader_age_min": READER_AGE_MIN,
