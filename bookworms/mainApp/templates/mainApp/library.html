@@ -63,6 +63,52 @@
     </div>
 </div>
 
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Додати книгу вручну</h5>
+        <p class="small text-muted mb-3">Якщо книги немає в Open Library або зручніше ввести дані самостійно — заповніть поля (ISBN обов’язковий, унікальний у системі).</p>
+        <form method="post" class="row g-3">
+            {% csrf_token %}
+            <input type="hidden" name="add_manual" value="1">
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.isbn.id_for_label }}">{{ manual_form.isbn.label }}</label>
+                {{ manual_form.isbn }}
+                {% if manual_form.isbn.errors %}<div class="text-danger small">{{ manual_form.isbn.errors }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.title.id_for_label }}">{{ manual_form.title.label }}</label>
+                {{ manual_form.title }}
+                {% if manual_form.title.errors %}<div class="text-danger small">{{ manual_form.title.errors }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.authors.id_for_label }}">{{ manual_form.authors.label }}</label>
+                {{ manual_form.authors }}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.publisher.id_for_label }}">{{ manual_form.publisher.label }}</label>
+                {{ manual_form.publisher }}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.publish_date.id_for_label }}">{{ manual_form.publish_date.label }}</label>
+                {{ manual_form.publish_date }}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.cover_url.id_for_label }}">{{ manual_form.cover_url.label }}</label>
+                {{ manual_form.cover_url }}
+                {% if manual_form.cover_url.errors %}<div class="text-danger small">{{ manual_form.cover_url.errors }}</div>{% endif %}
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="{{ manual_form.info_url.id_for_label }}">{{ manual_form.info_url.label }}</label>
+                {{ manual_form.info_url }}
+                {% if manual_form.info_url.errors %}<div class="text-danger small">{{ manual_form.info_url.errors }}</div>{% endif %}
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-outline-primary">Додати на полицю</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% if shelves %}
     <div class="alert alert-info border-0 shadow-sm mb-3" role="status">
         <strong>Поділіться враженнями:</strong> напишіть пост про прочитану книгу - натисніть

@@ -92,6 +92,70 @@ class AddIsbnForm(forms.Form):
     )
 
 
+class AddBookManualForm(forms.Form):
+    """Додавання книги на полицю без Open Library — усі поля вводяться вручну."""
+
+    isbn = forms.CharField(
+        label="ISBN (10 або 13 цифр)",
+        max_length=32,
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "placeholder": "9780140328721"}
+        ),
+    )
+    title = forms.CharField(
+        label="Назва",
+        max_length=500,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    authors = forms.CharField(
+        label="Автори",
+        max_length=500,
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    publisher = forms.CharField(
+        label="Видавець",
+        max_length=300,
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    publish_date = forms.CharField(
+        label="Дата видання",
+        max_length=64,
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "2020 або 15.03.2020"}),
+    )
+    cover_url = forms.URLField(
+        label="URL обкладинки",
+        max_length=500,
+        required=False,
+        widget=forms.URLInput(attrs={"class": "form-control", "placeholder": "https://…"}),
+    )
+    info_url = forms.URLField(
+        label="Посилання на сторінку книги (необов’язково)",
+        max_length=500,
+        required=False,
+        widget=forms.URLInput(attrs={"class": "form-control", "placeholder": "https://openlibrary.org/…"}),
+    )
+
+    def clean_isbn(self):
+        raw = (self.cleaned_data.get("isbn") or "").strip().upper()
+        compact = raw.replace("-", "").replace(" ", "")
+        if len(compact) == 10 and compact[-1] == "X":
+            head = "".join(c for c in compact[:9] if c.isdigit())
+            if len(head) != 9:
+                raise ValidationError(
+                    "ISBN-10: 9 цифр і контрольна X, або лише цифри."
+                )
+            return head + "X"
+        digits = "".join(c for c in compact if c.isdigit())
+        if len(digits) not in (10, 13):
+            raise ValidationError(
+                "ISBN має містити 10 або 13 цифр (можна з дефісами; для ISBN-10 допускається X в кінці)."
+            )
+        return digits
+
+
 class SendExchangePartnerMessageForm(forms.Form):
     """Лише текст: одержувач задається з контексту обміну/позики (partner id у view)."""
     body = forms.CharField(
