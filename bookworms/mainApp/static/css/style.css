@@ -101,3 +101,15 @@
     opacity: 0.85;
     cursor: not-allowed;
 }
+
+.post-book-card__cover {
+    width: 90px;
+    height: 132px;
+    object-fit: contain;
+    background: #f8f9fa;
+}
+
+.post-book-card__placeholder {
+    width: 90px;
+    height: 132px;
+}

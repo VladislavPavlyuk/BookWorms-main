@@ -1,0 +1,50 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Вже є пости про цю книгу{% endblock %}
+
+{% block content %}
+
+<h2 class="mb-3">Вже є публікації про цю книгу</h2>
+<p class="text-muted mb-3">
+    За <strong>назвою</strong> або <strong>ISBN</strong> знайдено інші пости. Можна залишити коментар під існуючим постом
+    або все одно створити окремий пост.
+</p>
+
+{% include "mainApp/includes/post_book_card.html" with book=book %}
+
+<h3 class="h6 mt-4 mb-2">Існуючі пости</h3>
+<ul class="list-group list-group-flush border rounded mb-4">
+    {% for p in related_posts %}
+        <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <strong>{{ p.title }}</strong>
+                <span class="text-muted small">- {{ p.author.username }}</span>
+            </div>
+            <a href="{% url 'home' %}#post-{{ p.id }}" class="btn btn-sm btn-outline-primary">Додати коментар</a>
+        </li>
+    {% endfor %}
+</ul>
+
+<p class="mb-3">
+    <a href="{% url 'create_post' %}?book_id={{ book.id }}&amp;force_new=1" class="btn btn-success">
+        Створити окремий пост
+    </a>
+    <a href="{% url 'my_library' %}" class="btn btn-outline-secondary">Назад до полиці</a>
+</p>
+
+{% if draft_title or draft_text %}
+    <hr>
+    <p class="small text-muted mb-2">Ваш текст залишився нижче - можете опублікувати його окремим постом:</p>
+    <form method="post" action="{% url 'create_post' %}">
+        {% csrf_token %}
+        <input type="hidden" name="book_id" value="{{ book.id }}">
+        <input type="hidden" name="confirm_new_post" value="1">
+        <label class="form-label small text-muted">Заголовок</label>
+        <input type="text" name="title" class="form-control mb-2" value="{{ draft_title }}" readonly maxlength="200">
+        <label class="form-label small text-muted">Текст</label>
+        <textarea name="text" class="form-control mb-3" rows="8" readonly>{{ draft_text }}</textarea>
+        <button type="submit" class="btn btn-primary">Опублікувати як окремий пост</button>
+    </form>
+{% endif %}
+
+{% endblock %}

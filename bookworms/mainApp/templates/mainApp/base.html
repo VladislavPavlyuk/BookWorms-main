@@ -14,30 +14,30 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container">
 
-        <a class="navbar-brand" href="/">📚 Bookworms</a>
+        <a class="navbar-brand" href="/">Bookworms</a>
 
         <div class="collapse navbar-collapse">
 
             <ul class="navbar-nav me-auto">
 
                 <li class="nav-item">
-                    <a class="nav-link" href="/">🏠 Головна </a>
+                    <a class="nav-link" href="/">Головна </a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'profile_app:profile' %}">👤 Профіль </a>
+                    <a class="nav-link" href="{% url 'profile_app:profile' %}">Профіль </a>
                 </li>
 
                 {# Пункти бібліотеки: лише для залогінених (інакше немає user) #}
                 {% if user.is_authenticated %}
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'my_library' %}">📖 Моя полиця</a>
+                    <a class="nav-link" href="{% url 'my_library' %}">Моя полиця</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'browse_shelves' %}">🔄 Полиці інших</a>
+                    <a class="nav-link" href="{% url 'browse_shelves' %}">Полиці інших</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'exchange_requests' %}">📬 Обміни</a>
+                    <a class="nav-link" href="{% url 'exchange_requests' %}">Обміни</a>
                 </li>
                 {% endif %}
 
@@ -47,7 +47,7 @@
                 {% if user.is_authenticated %}
                 <li class="nav-item">
             <span class="nav-link text-white me-3" style="cursor: default;">
-                👋 {{ user.username }}
+                {{ user.username }}
             </span>
                 </li>
 
@@ -57,17 +57,17 @@
                         <button type="submit"
                                 class="nav-link btn btn-link text-white text-decoration-none border-0 p-0 shadow-none"
                                 style="background: none; line-height: 1; display: flex; align-items: center;">
-                            <span style="font-size: 1.2rem; margin-right: 4px;">🚪</span> Вихід
+                            Вихід
                         </button>
                     </form>
                 </li>
 
                 {% else %}
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'login' %}">➡️ Вхід</a>
+                    <a class="nav-link" href="{% url 'login' %}">Вхід</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'register' %}">🔑 Реєстрація</a>
+                    <a class="nav-link" href="{% url 'register' %}">Реєстрація</a>
                 </li>
                 {% endif %}
 

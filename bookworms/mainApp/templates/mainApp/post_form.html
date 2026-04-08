@@ -1,0 +1,52 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}{% if post %}Редагувати пост{% elif book %}Пост про книгу{% else %}Новий пост{% endif %}{% endblock %}
+
+{% block content %}
+
+<h2 class="mb-3">
+    {% if post %}
+        Редагувати пост
+    {% elif book %}
+        Новий пост про прочитану книгу
+    {% else %}
+        Створити пост
+    {% endif %}
+</h2>
+
+{% if book %}
+    {% include "mainApp/includes/post_book_card.html" with book=book %}
+{% elif post and post.book %}
+    {% include "mainApp/includes/post_book_card.html" with book=post.book %}
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    {% if book and not post %}
+        <input type="hidden" name="book_id" value="{{ book.id }}">
+        {% if confirm_new_post %}
+            <input type="hidden" name="confirm_new_post" value="1">
+        {% endif %}
+    {% endif %}
+
+    <div class="mb-3">
+        <label class="form-label" for="post-title">Заголовок</label>
+        <input type="text" name="title" id="post-title" class="form-control"
+               placeholder="{% if book %}Наприклад: Враження від '{{ book.title|truncatechars:35 }}'{% else %}Заголовок поста{% endif %}"
+               value="{{ post.title|default:'' }}"
+               maxlength="200" required>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="post-text">Текст поста</label>
+        <textarea name="text" id="post-text" class="form-control" rows="8"
+                  placeholder="Розкажіть, що сподобалось, що ні, кому порадите…" required>{{ post.text|default:'' }}</textarea>
+    </div>
+
+    <button type="submit" class="btn btn-success">
+        {% if post %}Зберегти{% else %}Опублікувати{% endif %}
+    </button>
+    <a href="{% url 'home' %}" class="btn btn-outline-secondary">Скасувати</a>
+</form>
+
+{% endblock %}

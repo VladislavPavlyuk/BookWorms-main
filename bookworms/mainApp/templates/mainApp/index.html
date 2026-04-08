@@ -4,18 +4,18 @@
 
 {% block content %}
 
-<h1 class="text-center">📚 Bookworms</h1>
+<h1 class="text-center">Bookworms</h1>
 
 <hr>
 
 {% if user.is_authenticated %}
-    <a href="/posts/create/" class="btn btn-success mb-3">➕ Створити пост</a>
+    <a href="{% url 'create_post' %}" class="btn btn-success mb-3">Створити пост</a>
 {% endif %}
 
 <h3>Пости</h3>
 
 {% for post in posts %}
-    <div class="card mb-3 shadow-sm">
+    <div class="card mb-3 shadow-sm" id="post-{{ post.id }}">
         <div class="card-body">
 
             <div class="d-flex align-items-center mb-3">
@@ -36,6 +36,12 @@
                 </div>
             </div>
 
+            {% if post.book %}
+                <div class="mb-3">
+                    {% include "mainApp/includes/post_book_card.html" with book=post.book %}
+                </div>
+            {% endif %}
+
             <p class="card-text" style="white-space: pre-line;">{{ post.text }}</p>
 
             <div class="mb-3">
@@ -43,18 +49,18 @@
                     <form method="post" action="{% url 'toggle_like' post.id %}" style="display:inline;">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-outline-primary btn-sm">
-                            👍 Лайк ({{ post.likes.count }})
+                            Лайк ({{ post.likes.count }})
                         </button>
                     </form>
                 {% else %}
-                    <span class="badge bg-light text-dark">👍 Лайки: {{ post.likes.count }}</span>
+                    <span class="badge bg-light text-dark">Лайки: {{ post.likes.count }}</span>
                 {% endif %}
             </div>
 
             {% if post.author == user %}
                 <div class="mb-3">
-                    <a href="/posts/edit/{{ post.id }}/" class="btn btn-warning btn-sm">✏️ Редагувати</a>
-                    <a href="/posts/delete/{{ post.id }}/" class="btn btn-danger btn-sm">🗑 Видалити</a>
+                    <a href="/posts/edit/{{ post.id }}/" class="btn btn-warning btn-sm">Редагувати</a>
+                    <a href="/posts/delete/{{ post.id }}/" class="btn btn-danger btn-sm">Видалити</a>
                 </div>
             {% endif %}
 

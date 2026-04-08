@@ -112,7 +112,7 @@ def create_many_exchange_requests(
         label = short_title(target_shelf)
         req, err = create_exchange_request(requester, target_shelf, offer_shelf)
         if err:
-            errs.append(f"«{label}»: {err}")
+            errs.append(f"'{label}': {err}")
         else:
             ok += 1
     return ok, errs

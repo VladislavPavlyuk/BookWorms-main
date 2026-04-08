@@ -10,7 +10,12 @@ class CustomUserAdmin(UserAdmin):
     )
 
 admin.site.register(CustomUser, CustomUserAdmin)
-admin.site.register(Post)
+@admin.register(Post)
+class PostAdmin(admin.ModelAdmin):
+    list_display = ("title", "author", "book", "created_ad")
+    list_filter = ("created_ad",)
+    search_fields = ("title", "text", "author__username")
+    raw_id_fields = ("book",)
 
 
 # Нижче - реєстрація моделей бібліотеки в адмінці Django (/admin/) для перегляду та правок у БД.
