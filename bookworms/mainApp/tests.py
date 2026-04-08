@@ -26,7 +26,7 @@ class BlogModelsTest(TestCase):
         self.assertEqual(post.text, 'Текст тестового повідомлення')
         self.assertEqual(self.user.biography, 'Тестова біографія користувача')
 
-        print("\n✅ Тест создания поста (title/text) и biography пользователя пройден!")
+        print("\nТест создания поста (title/text) и biography пользователя пройден!")
 
     def test_user_posts_relation(self):
         # Проверяем связь через твой related_name='posts'
@@ -37,4 +37,4 @@ class BlogModelsTest(TestCase):
         count = self.user.posts.count()
         self.assertEqual(count, 2)
 
-        print(f"✅ Тест связи (1 автор -> {count} поста) через related_name='posts' пройден!")
+        print(f"Тест связи (1 автор -> {count} поста) через related_name='posts' пройден!")

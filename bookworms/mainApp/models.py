@@ -27,6 +27,15 @@ class CustomUser(AbstractUser):
 
 class Post(models.Model):
     author = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='posts')
+    book = models.ForeignKey(
+        "Book",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="posts",
+        verbose_name="Книга у пості",
+        help_text="Якщо пост про прочитану книгу з полиці.",
+    )
     title = models.CharField(max_length=200, verbose_name="Заголовок")
     text = models.TextField(verbose_name="Текст")
     created_ad =models.DateTimeField(auto_now_add=True)
@@ -53,13 +62,13 @@ class Book(models.Model):
         default=READER_AGE_MIN,
         validators=[MinValueValidator(READER_AGE_MIN), MaxValueValidator(READER_AGE_MAX)],
         verbose_name="Мінімальний рекомендований вік читача (років)",
-        help_text="0–18; 18 у полі «максимум» означає 18+.",
+        help_text="0–18; 18 у полі 'максимум' означає 18+.",
     )
     max_readers_age = models.PositiveSmallIntegerField(
         default=READER_AGE_MAX,
         validators=[MinValueValidator(READER_AGE_MIN), MaxValueValidator(READER_AGE_MAX)],
         verbose_name="Максимальний рекомендований вік читача (років)",
-        help_text="0–18; значення 18 — «18+».",
+        help_text="0–18; значення 18 — '18+'.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

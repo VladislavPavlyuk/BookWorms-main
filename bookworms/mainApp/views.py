@@ -53,8 +53,8 @@ from .tokens import account_activation_token
 
 
 def home(request):
-    posts = Post.objects.all().order_by('-created_ad')
-    return render(request, 'mainApp/index.html', {'posts': posts})
+    posts = Post.objects.select_related("author", "book").order_by("-created_ad")
+    return render(request, "mainApp/index.html", {"posts": posts})
 
 
 @login_required
@@ -150,21 +150,123 @@ def activation_invalid_view(request):
 def confirm_email_view(request):
     return render(request, 'mainApp/confirm_email.html')
 
+def _post_book_from_shelf(user, raw_id):
+    """Книга для поста лише якщо в користувача є вона на полиці."""
+    if raw_id is None or raw_id == "":
+        return None
+    try:
+        bid = int(raw_id)
+    except (TypeError, ValueError):
+        return None
+    if not Shelf.objects.filter(user=user, book_id=bid).exists():
+        return None
+    return Book.objects.filter(pk=bid).first()
+
+
+def _posts_by_other_users_same_book_title_or_isbn(book):
+    """
+    Пости (з прив’язаною книгою) про той самий запис Book, той самий ISBN
+    або ту саму назву (без урахування регістру).
+    """
+    if not book:
+        return Post.objects.none()
+    q = Q(book=book)
+    isbn = (book.isbn or "").strip()
+    if isbn:
+        q |= Q(book__isbn=isbn)
+    title = (book.title or "").strip()
+    if title:
+        q |= Q(book__title__iexact=title)
+    return (
+        Post.objects.filter(q)
+        .filter(book__isnull=False)
+        .select_related("author", "book")
+        .order_by("-created_ad")
+    )
+
+
+def _confirm_separate_post_despite_similar(request):
+    return (
+        request.GET.get("force_new") == "1"
+        or request.POST.get("confirm_new_post") == "1"
+    )
+
+
 @login_required
 def create_post(request):
-    if request.method == 'POST':
-        title = request.POST.get('title')
-        text = request.POST.get('text')
+    book = None
+    confirm_new = _confirm_separate_post_despite_similar(request)
 
-        if title and text:
+    if request.method == "POST":
+        title = (request.POST.get("title") or "").strip()
+        text = (request.POST.get("text") or "").strip()
+        post_book = _post_book_from_shelf(request.user, request.POST.get("book_id"))
+        book = post_book
+
+        if post_book and not confirm_new:
+            related = _posts_by_other_users_same_book_title_or_isbn(post_book).exclude(
+                author=request.user
+            )
+            if related.exists():
+                ctx = {
+                    "book": post_book,
+                    "related_posts": related,
+                }
+                if title and text:
+                    ctx["draft_title"] = title
+                    ctx["draft_text"] = text
+                return render(request, "mainApp/post_book_similar_warning.html", ctx)
+
+        if not title or not text:
+            messages.error(request, "Заповніть заголовок і текст поста.")
+        else:
             Post.objects.create(
                 author=request.user,
-                title=title,
-                text=text
+                title=title[:200],
+                text=text,
+                book=post_book,
             )
-            return redirect('home')
+            messages.success(request, "Пост опубліковано.")
+            return redirect("home")
+    else:
+        raw = request.GET.get("book_id")
+        if raw:
+            try:
+                bid = int(raw)
+            except (TypeError, ValueError):
+                bid = None
+            if bid is not None:
+                b = Book.objects.filter(pk=bid).first()
+                if b and Shelf.objects.filter(user=request.user, book_id=bid).exists():
+                    book = b
+                elif b:
+                    messages.error(
+                        request,
+                        "Цієї книги немає на вашій полиці - додайте її, щоб писати пост про неї.",
+                    )
 
-    return render(request, 'mainApp/form.html')
+        if book and not confirm_new:
+            related = _posts_by_other_users_same_book_title_or_isbn(book).exclude(
+                author=request.user
+            )
+            if related.exists():
+                return render(
+                    request,
+                    "mainApp/post_book_similar_warning.html",
+                    {
+                        "book": book,
+                        "related_posts": related,
+                    },
+                )
+
+    return render(
+        request,
+        "mainApp/post_form.html",
+        {
+            "book": book,
+            "confirm_new_post": confirm_new and bool(book),
+        },
+    )
 
 
 @login_required
@@ -178,18 +280,25 @@ def delete_post(request, post_id):
 
 @login_required
 def edit_post(request, post_id):
-    post = Post.objects.get(id=post_id)
+    post = get_object_or_404(
+        Post.objects.select_related("book"),
+        id=post_id,
+    )
 
     if post.author != request.user:
-        return redirect('home')
+        return redirect("home")
 
-    if request.method == 'POST':
-        post.title = request.POST.get('title')
-        post.text = request.POST.get('text')
-        post.save()
-        return redirect('home')
+    if request.method == "POST":
+        title = (request.POST.get("title") or "").strip()
+        text = (request.POST.get("text") or "").strip()
+        if title and text:
+            post.title = title[:200]
+            post.text = text
+            post.save(update_fields=["title", "text"])
+            return redirect("home")
+        messages.error(request, "Заповніть заголовок і текст.")
 
-    return render(request, 'mainApp/form.html', {'post': post})
+    return render(request, "mainApp/post_form.html", {"post": post})
 
 @login_required
 def my_library(request):
@@ -411,13 +520,13 @@ def create_exchange(request):
                 oid = int(raw_offer)
             except (TypeError, ValueError):
                 t = target_shelf.book.title
-                preflight.append(f'«{t[:45]}»: некоректна книга для обміну.')
+                preflight.append(f'"{t[:45]}": некоректна книга для обміну.')
                 continue
             offer_shelf = Shelf.objects.filter(pk=oid, user=request.user).first()
             if not offer_shelf:
                 t = target_shelf.book.title
                 preflight.append(
-                    f'«{t[:45]}»: запропоновану книгу не знайдено на вашій полиці.'
+                    f'"{t[:45]}": запропоновану книгу не знайдено на вашій полиці.'
                 )
                 continue
 
