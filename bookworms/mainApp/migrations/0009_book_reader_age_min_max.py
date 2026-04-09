@@ -69,7 +69,7 @@ class Migration(migrations.Migration):
                     django.core.validators.MaxValueValidator(18),
                 ],
                 verbose_name="Максимальний рекомендований вік читача (років)",
-                help_text="0–18; значення 18 — '18+'.",
+                help_text="0–18; значення 18 - '18+'.",
             ),
         ),
         migrations.RunPython(brackets_to_min_max, noop_reverse),

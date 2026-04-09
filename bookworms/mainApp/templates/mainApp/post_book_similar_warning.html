@@ -1,4 +1,5 @@
 {% extends "mainApp/base.html" %}
+{% load shelf_tags %}
 
 {% block title %}Вже є пости про цю книгу{% endblock %}
 
@@ -18,7 +19,7 @@
         <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
                 <strong>{{ p.title }}</strong>
-                <span class="text-muted small">- {{ p.author.username }}</span>
+                <span class="text-muted small">- {% shelf_user_link p.author %}</span>
             </div>
             <a href="{% url 'home' %}#post-{{ p.id }}" class="btn btn-sm btn-outline-primary">Додати коментар</a>
         </li>

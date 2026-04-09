@@ -1,4 +1,5 @@
 {% extends "mainApp/base.html" %}
+{% load shelf_tags %}
 
 {% block title %}Профиль{% endblock %}
 
@@ -6,7 +7,7 @@
 
 <h2>Профіль</h2>
 
-<p><strong>Ім'я:</strong> {{ user.username }}</p>
+<p><strong>Ім'я:</strong> {% shelf_user_link user %}</p>
 <p><strong>Біографія:</strong> {{ user.biography }}</p>
 <a href="{% url 'profile_app:edit_profile' %}" class="btn btn-primary">Редагувати профіль</a>
 

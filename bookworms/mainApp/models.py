@@ -68,7 +68,7 @@ class Book(models.Model):
         default=READER_AGE_MAX,
         validators=[MinValueValidator(READER_AGE_MIN), MaxValueValidator(READER_AGE_MAX)],
         verbose_name="Максимальний рекомендований вік читача (років)",
-        help_text="0–18; значення 18 — '18+'.",
+        help_text="0–18; значення 18 - '18+'.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
