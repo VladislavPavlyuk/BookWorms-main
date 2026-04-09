@@ -502,6 +502,25 @@ def browse_shelves(request):
 
 
 @login_required
+def user_public_shelf(request, user_id):
+    """Перегляд списку книг на полиці обраного користувача (без редагування)."""
+    User = get_user_model()
+    shelf_owner = get_object_or_404(User, pk=user_id)
+    shelves = shelf_owner.shelf_entries.select_related("book", "borrowed_from").order_by(
+        "-added_at"
+    )
+    return render(
+        request,
+        "mainApp/user_public_shelf.html",
+        {
+            "shelf_owner": shelf_owner,
+            "shelves": shelves,
+            "is_own": request.user.pk == shelf_owner.pk,
+        },
+    )
+
+
+@login_required
 def create_exchange(request):
     """
     POST з browse_shelves: target_shelf_ids[] (чекбокси) + offer_shelf_id_<pk> для кожного рядка.

@@ -1,4 +1,5 @@
 {% extends "mainApp/base.html" %}
+{% load shelf_tags %}
 
 {% block title %}Запити на обмін{% endblock %}
 
@@ -21,7 +22,7 @@
     <ul class="list-group mb-4">
         {% for r in pending_in %}
             <li class="list-group-item">
-                <strong>{{ r.requester.username }}</strong> хоче
+                <strong>{% shelf_user_link r.requester %}</strong> хоче
                 "{{ r.target_shelf.book.title }}"
                 {% if r.offer_shelf %}
                     <br><span class="small text-muted">Пропонує в обмін: "{{ r.offer_shelf.book.title }}"</span>
@@ -51,7 +52,7 @@
     <ul class="list-group mb-4">
         {% for r in pending_out %}
             <li class="list-group-item">
-                До <strong>{{ r.shelf_owner.username }}</strong>:
+                До <strong>{% shelf_user_link r.shelf_owner %}</strong>:
                 "{{ r.target_shelf.book.title }}"
                 {% if r.offer_shelf %}
                     <br><span class="small text-muted">Ваш обмін: "{{ r.offer_shelf.book.title }}" (повна передача)</span>
@@ -78,13 +79,15 @@
         {% for r in history %}
             <li class="list-group-item small">
                 {{ r.get_status_display }} -
-                {{ r.requester.username }} ↔ {{ r.shelf_owner.username }}:
+                {% shelf_user_link r.requester %} ↔ {% shelf_user_link r.shelf_owner %}:
                 "{{ r.target_shelf.book.title }}"
                 <span class="text-muted">({{ r.created_at|date:"Y-m-d H:i" }})</span>
                 {% if r.requester_id == user.id %}
-                    · <a href="{% url 'message_thread' r.shelf_owner.id %}">чат з {{ r.shelf_owner.username }}</a>
+                    · <a href="{% url 'message_thread' r.shelf_owner.id %}">чат</a>
+                    · {% shelf_user_link r.shelf_owner %}
                 {% else %}
-                    · <a href="{% url 'message_thread' r.requester.id %}">чат з {{ r.requester.username }}</a>
+                    · <a href="{% url 'message_thread' r.requester.id %}">чат</a>
+                    · {% shelf_user_link r.requester %}
                 {% endif %}
             </li>
         {% endfor %}

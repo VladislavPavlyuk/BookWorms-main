@@ -1,10 +1,11 @@
 {% extends "mainApp/base.html" %}
+{% load shelf_tags %}
 
 {% block title %}Чат з {{ partner.username }}{% endblock %}
 
 {% block content %}
 
-<h2 class="mb-2">Чат з <strong>{{ partner.username }}</strong></h2>
+<h2 class="mb-2">Чат з <strong>{% shelf_user_link partner %}</strong></h2>
 <p class="text-muted small">Окремий діалог лише з цим користувачем (спільний запит на позику або обмін). Зверху - старіші повідомлення, знизу - новіші; вхідні зліва, ваші - справа.</p>
 
 {% if messages %}
@@ -30,7 +31,7 @@
                             <div class="d-flex justify-content-start mb-3">
                                 <div class="rounded-3 px-3 py-2 bg-white border shadow-sm" style="max-width: 82%;">
                                     <div class="small text-muted mb-1">
-                                        <strong>{{ m.sender.username }}</strong>
+                                        <strong>{% shelf_user_link m.sender %}</strong>
                                         · {{ m.created_at|date:"d.m.Y H:i" }}
                                         {% if m.read_at %}<span class="text-success">· прочитано</span>{% endif %}
                                     </div>
@@ -69,7 +70,9 @@
                     {% for p in partners %}
                         {% if p.id != partner.id %}
                             <li class="mb-2">
-                                <a href="{% url 'message_thread' p.id %}">{{ p.username }}</a>
+                                {% shelf_user_link p %}
+                                <span class="text-muted mx-1">|</span>
+                                <a href="{% url 'message_thread' p.id %}">чат</a>
                             </li>
                         {% endif %}
                     {% endfor %}
@@ -80,7 +83,7 @@
 
         <div class="card shadow-sm">
             <div class="card-body">
-                <h5 class="card-title">Написати {{ partner.username }}</h5>
+                <h5 class="card-title">Написати {% shelf_user_link partner %}</h5>
                 <form method="post">
                     {% csrf_token %}
                     <input type="hidden" name="send_message" value="1">

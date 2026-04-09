@@ -1,4 +1,5 @@
 {% extends "mainApp/base.html" %}
+{% load shelf_tags %}
 
 {% block title %}Моя полиця{% endblock %}
 
@@ -30,7 +31,7 @@
             <li class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <div>
                     <strong>{{ row.book.title }}</strong>
-                    <span class="text-muted small">- від {{ row.user.username }}</span>
+                    <span class="text-muted small">- від {% shelf_user_link row.user %}</span>
                 </div>
                 <form method="post" action="{% url 'confirm_return_borrowed_shelf_book' row.id %}" class="m-0">
                     {% csrf_token %}
@@ -66,7 +67,7 @@
 <div class="card mb-4">
     <div class="card-body">
         <h5 class="card-title">Додати книгу вручну</h5>
-        <p class="small text-muted mb-3">Якщо книги немає в Open Library або зручніше ввести дані самостійно — заповніть поля (ISBN обов’язковий, унікальний у системі).</p>
+        <p class="small text-muted mb-3">Якщо книги немає в Open Library або зручніше ввести дані самостійно - заповніть поля (ISBN обов’язковий, унікальний у системі).</p>
         <form method="post" class="row g-3">
             {% csrf_token %}
             <input type="hidden" name="add_manual" value="1">
@@ -155,7 +156,7 @@
                         </p>
                         {# Позичена книга: не показуємо "Видалити", лише форму на return_borrowed_shelf_book. #}
                         {% if shelf.borrowed_from_id %}
-                            <p class="small text-warning mb-2">Позичено у <strong>{{ shelf.borrowed_from.username }}</strong></p>
+                            <p class="small text-warning mb-2">Позичено у <strong>{% shelf_user_link shelf.borrowed_from %}</strong></p>
                             <a href="{% url 'message_thread' shelf.borrowed_from_id %}" class="btn btn-outline-secondary btn-sm mb-2">Чат з власником</a>
                             {% if shelf.return_pending %}
                                 <p class="small text-info mb-0">Очікується підтвердження повернення позикодавцем.</p>

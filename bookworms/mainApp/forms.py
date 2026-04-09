@@ -93,7 +93,7 @@ class AddIsbnForm(forms.Form):
 
 
 class AddBookManualForm(forms.Form):
-    """Додавання книги на полицю без Open Library — усі поля вводяться вручну."""
+    """Додавання книги на полицю без Open Library - усі поля вводяться вручну."""
 
     isbn = forms.CharField(
         label="ISBN (10 або 13 цифр)",
