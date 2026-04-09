@@ -1,12 +1,13 @@
 #!/bin/bash
-# Azure App Service Linux (Oryx + output.tar.zst / прямий wwwroot):
-# 1) розпакувати архів, якщо ще немає bookworms/manage.py
+# Azure App Service Linux (Oryx + output.tar.zst):
+# 1) розпакувати архів у $ROOT, якщо ще немає bookworms/manage.py
 # 2) msodbcsql18 для pyodbc + Azure SQL
 # 3) Gunicorn
-# Startup Command: bash /home/site/wwwroot/startup.sh
+#
+# У порталі Startup Command: bash startup.sh  (відносний шлях!)
+# Oryx розпаковує output.tar.zst у /tmp/...; у wwwroot немає startup.sh — лише архів.
 set -e
-# НЕ використовуй $HOME: у SSH root має HOME=/root → /root/site/wwwroot не існує.
-ROOT="/home/site/wwwroot"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT" || { echo "ERROR: cd $ROOT failed"; exit 1; }
 
 # Після --compress-destination-dir інколи в wwwroot лише output.tar.zst
