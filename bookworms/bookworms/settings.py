@@ -11,7 +11,16 @@ if dotenv_path.exists():
     load_dotenv(dotenv_path)
 
 # Azure SQL або локальний SQLite
+# На Linux потрібен установлений ODBC (див. startup.sh для App Service).
+# Ім'я драйвера: odbcinst -q -d у SSH; за замовчуванням 18, можна MSSQL_ODBC_DRIVER у env.
 if os.getenv("AZURE_SQL_HOST"):
+    _odbc_driver = os.environ.get(
+        "MSSQL_ODBC_DRIVER", "ODBC Driver 18 for SQL Server"
+    )
+    _odbc_extra = os.environ.get(
+        "MSSQL_ODBC_EXTRA",
+        "Encrypt=yes;TrustServerCertificate=no;",
+    )
     DATABASES = {
         "default": {
             "ENGINE": "mssql",
@@ -21,8 +30,8 @@ if os.getenv("AZURE_SQL_HOST"):
             "HOST": os.environ["AZURE_SQL_HOST"],
             "PORT": "1433",
             "OPTIONS": {
-                "driver": "ODBC Driver 18 for SQL Server",
-                "extra_params": "Encrypt=yes;TrustServerCertificate=no;",
+                "driver": _odbc_driver,
+                "extra_params": _odbc_extra,
             },
         },
     }
@@ -114,7 +123,8 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+_static_project = BASE_DIR / "static"
+STATICFILES_DIRS = [_static_project] if _static_project.is_dir() else []
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STORAGES = {
     'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
