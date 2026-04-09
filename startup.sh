@@ -80,5 +80,6 @@ else
 fi
 
 PORT="${WEBSITES_PORT:-8000}"
+"$ROOT/antenv/bin/python" "$ROOT/bookworms/manage.py" collectstatic --noinput
 # -m gunicorn: bin/gunicorn часто має shebang на абсолютний шлях з іншого префікса → "required file not found"
 exec "$ROOT/antenv/bin/python" -m gunicorn --bind="0.0.0.0:${PORT}" --chdir "$ROOT/bookworms" bookworms.wsgi:application
