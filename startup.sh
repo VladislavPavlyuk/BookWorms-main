@@ -7,8 +7,26 @@
 # У порталі Startup Command: bash startup.sh  (відносний шлях!)
 # Oryx розпаковує output.tar.zst у /tmp/...; у wwwroot немає startup.sh — лише архів.
 set -e
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Каталог застосунку: де лежить startup.sh, або cwd (bash startup.sh). Не хардкодь wwwroot — Oryx кладе файли в /tmp/...
+_SCRIPT="${BASH_SOURCE[0]}"
+if [[ "$_SCRIPT" == */* ]]; then
+  ROOT="$(cd "$(dirname "$_SCRIPT")" && pwd)"
+else
+  ROOT="$(pwd)"
+fi
 cd "$ROOT" || { echo "ERROR: cd $ROOT failed"; exit 1; }
+
+# Якщо десь ще старий wwwroot, а antenv лише в /tmp після extract — знайти venv
+if [ ! -x "$ROOT/antenv/bin/python" ]; then
+  _py="$(find /tmp -maxdepth 6 -type f -path '*/antenv/bin/python' 2>/dev/null | head -n 1)"
+  if [ -n "$_py" ]; then
+    ROOT="$(cd "$(dirname "$_py")/../.." && pwd)"
+  fi
+fi
+if [ ! -x "$ROOT/antenv/bin/python" ]; then
+  echo "ERROR: antenv not found (ROOT=$ROOT). Expect Oryx extract under /tmp or cwd."
+  exit 1
+fi
 
 # Після --compress-destination-dir інколи в wwwroot лише output.tar.zst
 if [ ! -f "$ROOT/bookworms/manage.py" ] && [ -f "$ROOT/output.tar.zst" ]; then
@@ -41,4 +59,5 @@ else
 fi
 
 PORT="${WEBSITES_PORT:-8000}"
-exec "$ROOT/antenv/bin/gunicorn" --bind="0.0.0.0:${PORT}" --chdir "$ROOT/bookworms" bookworms.wsgi:application
+# -m gunicorn: bin/gunicorn часто має shebang на абсолютний шлях з іншого префікса → "required file not found"
+exec "$ROOT/antenv/bin/python" -m gunicorn --bind="0.0.0.0:${PORT}" --chdir "$ROOT/bookworms" bookworms.wsgi:application
