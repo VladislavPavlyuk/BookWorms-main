@@ -5,18 +5,53 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Загружаем переменные окружения из .env
-dotenv_path = os.path.join(BASE_DIR, '.env')
-if os.path.exists(dotenv_path):
+# Завантажити .env до перевірки AZURE_SQL_* (локальна розробка).
+dotenv_path = BASE_DIR / ".env"
+if dotenv_path.exists():
     load_dotenv(dotenv_path)
 
+# Azure SQL або локальний SQLite
+if os.getenv("AZURE_SQL_HOST"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "mssql",
+            "NAME": os.environ["AZURE_SQL_NAME"],
+            "USER": os.environ["AZURE_SQL_USER"],
+            "PASSWORD": os.environ["AZURE_SQL_PASSWORD"],
+            "HOST": os.environ["AZURE_SQL_HOST"],
+            "PORT": "1433",
+            "OPTIONS": {
+                "driver": "ODBC Driver 18 for SQL Server",
+                "extra_params": "Encrypt=yes;TrustServerCertificate=no;",
+            },
+        },
+    }
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        },
+    }
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-6t+ptzf#8htvjij$vg7rjl!5$)t%k#m^(gna$uvc&!l^-0&5bx'
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-6t+ptzf#8htvjij$vg7rjl!5$)t%k#m^(gna$uvc&!l^-0&5bx",
+)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# На Azure: DEBUG=False у Application settings
+DEBUG = os.environ.get("DEBUG", "True").lower() in ("1", "true", "yes")
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+_allowed = os.environ.get("ALLOWED_HOSTS", "").strip()
+if _allowed:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
+else:
+    ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
+# Azure HTTPS: https://твій-app.azurewebsites.net (через кому, якщо кілька)
+_csrf = os.environ.get("CSRF_TRUSTED_ORIGINS", "").strip()
+CSRF_TRUSTED_ORIGINS = [x.strip() for x in _csrf.split(",") if x.strip()]
 
 # Application definition
 INSTALLED_APPS = [
@@ -35,6 +70,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -62,14 +98,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'bookworms.wsgi.application'
 
-# Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
-
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -87,6 +115,11 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
+}
 
 # Media files
 MEDIA_URL = '/media/'
