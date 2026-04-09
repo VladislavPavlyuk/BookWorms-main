@@ -5,8 +5,9 @@
 # 3) Gunicorn
 # Startup Command: bash /home/site/wwwroot/startup.sh
 set -e
-ROOT="${HOME}/site/wwwroot"
-cd "$ROOT"
+# НЕ використовуй $HOME: у SSH root має HOME=/root → /root/site/wwwroot не існує.
+ROOT="/home/site/wwwroot"
+cd "$ROOT" || { echo "ERROR: cd $ROOT failed"; exit 1; }
 
 # Після --compress-destination-dir інколи в wwwroot лише output.tar.zst
 if [ ! -f "$ROOT/bookworms/manage.py" ] && [ -f "$ROOT/output.tar.zst" ]; then
