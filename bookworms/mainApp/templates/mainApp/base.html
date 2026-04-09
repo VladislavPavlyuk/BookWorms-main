@@ -24,12 +24,11 @@
                     <a class="nav-link" href="/">Головна </a>
                 </li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'profile_app:profile' %}">Профіль </a>
-                </li>
-
-                {# Пункти бібліотеки: лише для залогінених (інакше немає user) #}
+                {# Профіль і бібліотека - лише для залогінених #}
                 {% if user.is_authenticated %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'profile_app:profile' %}">Профіль</a>
+                </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'my_library' %}">Моя полиця</a>
                 </li>

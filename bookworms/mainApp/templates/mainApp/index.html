@@ -102,13 +102,13 @@
 
 <div class="mt-3">
     {% if posts.has_previous %}
-        <a href="?page={{ posts.previous_page_number }}">⬅️ Назад</a>
+        <a href="?page={{ posts.previous_page_number }}">Назад</a>
     {% endif %}
 
     <span>Страница {{ posts.number }} из {{ posts.paginator.num_pages }}</span>
 
     {% if posts.has_next %}
-        <a href="?page={{ posts.next_page_number }}">Вперед ➡️</a>
+        <a href="?page={{ posts.next_page_number }}">Вперед</a>
     {% endif %}
 </div>
 

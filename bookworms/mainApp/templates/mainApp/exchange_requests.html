@@ -23,9 +23,9 @@
         {% for r in pending_in %}
             <li class="list-group-item">
                 <strong>{% shelf_user_link r.requester %}</strong> хоче
-                «<a href="{% url 'book_history' r.target_shelf.book_id %}" class="link-primary text-decoration-none">{{ r.target_shelf.book.title }}</a>»
+                "<a href="{% url 'book_history' r.target_shelf.book_id %}" class="link-primary text-decoration-none">{{ r.target_shelf.book.title }}</a>"
                 {% if r.offer_shelf %}
-                    <br><span class="small text-muted">Пропонує в обмін: «<a href="{% url 'book_history' r.offer_shelf.book_id %}" class="link-primary text-decoration-none">{{ r.offer_shelf.book.title }}</a>»</span>
+                    <br><span class="small text-muted">Пропонує в обмін: "<a href="{% url 'book_history' r.offer_shelf.book_id %}" class="link-primary text-decoration-none">{{ r.offer_shelf.book.title }}</a>"</span>
                 {% else %}
                     <br><span class="small text-muted">Без книги взамін - <strong>позика</strong> (після згоди позичальник зможе лише повернути книгу)</span>
                 {% endif %}
@@ -53,9 +53,9 @@
         {% for r in pending_out %}
             <li class="list-group-item">
                 До <strong>{% shelf_user_link r.shelf_owner %}</strong>:
-                «<a href="{% url 'book_history' r.target_shelf.book_id %}" class="link-primary text-decoration-none">{{ r.target_shelf.book.title }}</a>»
+                "<a href="{% url 'book_history' r.target_shelf.book_id %}" class="link-primary text-decoration-none">{{ r.target_shelf.book.title }}</a>"
                 {% if r.offer_shelf %}
-                    <br><span class="small text-muted">Ваш обмін: «<a href="{% url 'book_history' r.offer_shelf.book_id %}" class="link-primary text-decoration-none">{{ r.offer_shelf.book.title }}</a>» (повна передача)</span>
+                    <br><span class="small text-muted">Ваш обмін: "<a href="{% url 'book_history' r.offer_shelf.book_id %}" class="link-primary text-decoration-none">{{ r.offer_shelf.book.title }}</a>" (повна передача)</span>
                 {% else %}
                     <br><span class="small text-muted">Позика (без вашої книги взамін)</span>
                 {% endif %}
@@ -80,7 +80,7 @@
             <li class="list-group-item small">
                 {{ r.get_status_display }} -
                 {% shelf_user_link r.requester %} ↔ {% shelf_user_link r.shelf_owner %}:
-                «<a href="{% url 'book_history' r.target_shelf.book_id %}" class="link-primary text-decoration-none">{{ r.target_shelf.book.title }}</a>»
+                "<a href="{% url 'book_history' r.target_shelf.book_id %}" class="link-primary text-decoration-none">{{ r.target_shelf.book.title }}</a>"
                 <span class="text-muted">({{ r.created_at|date:"Y-m-d H:i" }})</span>
                 {% if r.requester_id == user.id %}
                     · <a href="{% url 'message_thread' r.shelf_owner.id %}">чат</a>
