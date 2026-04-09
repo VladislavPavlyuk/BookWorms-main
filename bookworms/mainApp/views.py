@@ -8,6 +8,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.core.paginator import Paginator
 from .models import (
     Book,
     BookExchangeRequest,
@@ -54,8 +55,21 @@ from .tokens import account_activation_token
 
 
 def home(request):
-    posts = Post.objects.select_related("author", "book").order_by("-created_ad")
-    return render(request, "mainApp/index.html", {"posts": posts})
+    filter_type = request.GET.get('filter')
+
+    posts_list = Post.objects.select_related("author", "book").order_by("-created_ad")
+
+    if filter_type == 'my' and request.user.is_authenticated:
+        posts_list = posts_list.filter(author=request.user)
+
+    paginator = Paginator(posts_list, 5)
+    page_number = request.GET.get('page')
+    posts = paginator.get_page(page_number)
+
+    return render(request, "mainApp/index.html", {
+        "posts": posts,
+        "filter_type": filter_type,
+    })
 
 
 @login_required
