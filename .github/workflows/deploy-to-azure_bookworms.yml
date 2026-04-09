@@ -31,15 +31,18 @@ jobs:
           python -m venv antenv
           source antenv/bin/activate
           pip install -r requirements.txt
-                
-      # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size. 
+
+      # Шаблон Azure з path "!antenv/" ламає upload: це не exclude, а другий path → "not found".
+      # Oryx і так збирає antenv на App Service — прибираємо локальний venv перед артефактом.
+      - name: Remove venv and .git from deployment tree
+        run: rm -rf antenv .git
+
+      # SCM_DO_BUILD_DURING_DEPLOYMENT=true → Oryx на платформі робить pip install.
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: |
-            .
-            !antenv/
+          path: .
 
       # 🚫 Opting Out of Oryx Build
       # If you prefer to disable the Oryx build process during deployment, follow these steps:
@@ -56,10 +59,14 @@ jobs:
 
     steps:
       - name: Download artifact from build job
+        id: fetch-app
         uses: actions/download-artifact@v4
         with:
           name: python-app
-      
+
+      - name: Show artifact layout (debug)
+        run: ls -la "${{ steps.fetch-app.outputs.download-path }}"
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -72,5 +79,5 @@ jobs:
         id: deploy-to-webapp
         with:
           app-name: 'bookworms'
-          slot-name: 'Production'
-          
+          # Завжди той каталог, куди download-artifact реально розпакував (корінь або python-app/).
+          package: ${{ steps.fetch-app.outputs.download-path }}
