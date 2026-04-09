@@ -1,13 +1,18 @@
-{# Книга для поста: обкладинка + основні дані. Очікує змінну book. #}
+{# Книга для поста: обкладинка + основні дані. Очікує змінну book. Клік по обкладинці/назві — історія книги. #}
+{% url 'book_history' book.pk as book_history_url %}
 <div class="post-book-card card mb-3 border border-success border-opacity-50">
     <div class="card-body d-flex flex-wrap align-items-start gap-3">
-        {% if book.cover_url %}
-            <img src="{{ book.cover_url }}" alt="" class="rounded flex-shrink-0 post-book-card__cover">
-        {% else %}
-            <div class="post-book-card__placeholder flex-shrink-0 rounded bg-body-secondary d-flex align-items-center justify-content-center text-muted small">Немає обкладинки</div>
-        {% endif %}
+        <a href="{{ book_history_url }}" class="post-book-card__cover-link flex-shrink-0 text-decoration-none">
+            {% if book.cover_url %}
+                <img src="{{ book.cover_url }}" alt="" class="rounded post-book-card__cover">
+            {% else %}
+                <div class="post-book-card__placeholder rounded bg-body-secondary d-flex align-items-center justify-content-center text-muted small">Немає обкладинки</div>
+            {% endif %}
+        </a>
         <div class="flex-grow-1 min-w-0">
-            <h6 class="card-title mb-1">{{ book.title }}</h6>
+            <h6 class="card-title mb-1">
+                <a href="{{ book_history_url }}" class="post-book-card__title-link link-dark text-decoration-none">{{ book.title }}</a>
+            </h6>
             {% if book.authors %}
                 <p class="small text-muted mb-1">{{ book.authors }}</p>
             {% endif %}

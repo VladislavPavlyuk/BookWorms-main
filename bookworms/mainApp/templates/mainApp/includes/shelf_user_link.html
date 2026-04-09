@@ -1,0 +1,5 @@
+{% if viewer.is_authenticated and account_user.pk == viewer.pk %}
+    <a href="{% url 'my_library' %}"{% if css_class %} class="{{ css_class }}"{% endif %}>{{ account_user.username }}</a>
+{% else %}
+    <a href="{% url 'user_public_shelf' account_user.pk %}"{% if css_class %} class="{{ css_class }}"{% endif %}>{{ account_user.username }}</a>
+{% endif %}

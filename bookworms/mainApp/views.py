@@ -3,7 +3,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.sites.shortcuts import get_current_site
 from django.db import IntegrityError
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.utils.encoding import force_bytes, force_str
@@ -530,6 +530,48 @@ def user_public_shelf(request, user_id):
             "shelf_owner": shelf_owner,
             "shelves": shelves,
             "is_own": request.user.pk == shelf_owner.pk,
+        },
+    )
+
+
+@login_required
+def book_history(request, book_id):
+    """Історія використання книги: журнал подій (якщо є модель), поточні полиці, пости з цією книгою."""
+    book = get_object_or_404(Book, pk=book_id)
+    shelf_entries = (
+        Shelf.objects.filter(book=book)
+        .select_related("user", "borrowed_from")
+        .order_by("added_at")
+    )
+    shelf_events = []
+    history_model = getattr(book, "shelf_events", None)
+    if history_model is not None:
+        shelf_events = list(
+            history_model.select_related(
+                "actor",
+                "holder",
+                "legal_owner",
+                "previous_holder",
+                "previous_owner",
+                "counterparty",
+                "exchange_request",
+            ).order_by("-created_at")
+        )
+    comments_qs = Comment.objects.select_related("author").order_by("created_at")
+    posts = (
+        Post.objects.filter(book=book)
+        .select_related("author")
+        .prefetch_related(Prefetch("comments", queryset=comments_qs))
+        .order_by("-created_ad")
+    )
+    return render(
+        request,
+        "mainApp/book_history.html",
+        {
+            "book": book,
+            "shelf_entries": shelf_entries,
+            "shelf_events": shelf_events,
+            "posts": posts,
         },
     )
 

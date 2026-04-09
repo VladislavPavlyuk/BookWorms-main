@@ -113,3 +113,27 @@
     width: 90px;
     height: 132px;
 }
+
+.post-book-card__cover-link:focus-visible {
+    outline: 2px solid var(--bs-primary, #0d6efd);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+}
+
+.post-book-card__cover-link:hover .post-book-card__cover,
+.post-book-card__cover-link:hover .post-book-card__placeholder {
+    opacity: 0.92;
+}
+
+.post-book-card__title-link:hover {
+    text-decoration: underline !important;
+}
+
+.library-book-cover-link:hover .card-img-top,
+.library-book-cover-link:hover img {
+    opacity: 0.92;
+}
+
+.library-book-title-link:hover {
+    text-decoration: underline !important;
+}

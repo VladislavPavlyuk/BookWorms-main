@@ -30,7 +30,7 @@
             {% for row in pending_returns_to_confirm %}
             <li class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <div>
-                    <strong>{{ row.book.title }}</strong>
+                    <strong><a href="{% url 'book_history' row.book.id %}" class="link-dark">{{ row.book.title }}</a></strong>
                     <span class="text-muted small">- від {% shelf_user_link row.user %}</span>
                 </div>
                 <form method="post" action="{% url 'confirm_return_borrowed_shelf_book' row.id %}" class="m-0">
@@ -121,10 +121,12 @@
             <div class="col">
                 <div class="card h-100">
                     {% if book.cover_url %}
-                        <img src="{{ book.cover_url }}" class="card-img-top" alt="" style="max-height: 220px; object-fit: contain; background: #f8f9fa;">
+                        <a href="{% url 'book_history' book.id %}" class="d-block text-center text-decoration-none library-book-cover-link">
+                            <img src="{{ book.cover_url }}" class="card-img-top" alt="" style="max-height: 220px; object-fit: contain; background: #f8f9fa;">
+                        </a>
                     {% endif %}
                     <div class="card-body d-flex flex-column">
-                        <h5 class="card-title">{{ book.title }}</h5>
+                        <h5 class="card-title"><a href="{% url 'book_history' book.id %}" class="link-dark text-decoration-none library-book-title-link">{{ book.title }}</a></h5>
                         <p class="card-text small text-muted mb-1">ISBN: {{ book.isbn }}</p>
                         {% if book.authors %}
                             <p class="card-text small mb-1">{{ book.authors }}</p>
