@@ -58,9 +58,13 @@ if _allowed:
 else:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
-# Azure HTTPS: https://твій-app.azurewebsites.net (через кому, якщо кілька)
+# Azure: у App Settings часто кладуть лише hostname — Django 4+ вимагає scheme (https://...).
 _csrf = os.environ.get("CSRF_TRUSTED_ORIGINS", "").strip()
-CSRF_TRUSTED_ORIGINS = [x.strip() for x in _csrf.split(",") if x.strip()]
+CSRF_TRUSTED_ORIGINS = []
+for _o in (_x.strip() for _x in _csrf.split(",") if _x.strip()):
+    CSRF_TRUSTED_ORIGINS.append(
+        _o if "://" in _o else f"https://{_o}"
+    )
 
 # Application definition
 INSTALLED_APPS = [
