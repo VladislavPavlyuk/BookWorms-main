@@ -4,39 +4,60 @@
 # 2) msodbcsql18 для pyodbc + Azure SQL
 # 3) Gunicorn
 #
-# У порталі Startup Command: bash startup.sh  (відносний шлях!)
-# Oryx розпаковує output.tar.zst у /tmp/...; у wwwroot немає startup.sh — лише архів.
+# У порталі Startup Command: bash startup.sh  (у розпакованому /tmp/... файл є в tarball)
+#   або: bash bookworms/azure_startup.sh → викликає цей же скрипт з репо (bookworms/azure_startup.sh)
 set -e
-# Каталог застосунку: де лежить startup.sh, або cwd (bash startup.sh). Не хардкодь wwwroot — Oryx кладе файли в /tmp/...
-_SCRIPT="${BASH_SOURCE[0]}"
-if [[ "$_SCRIPT" == */* ]]; then
-  ROOT="$(cd "$(dirname "$_SCRIPT")" && pwd)"
+_HERE="${BASH_SOURCE[0]}"
+if [[ "$_HERE" == */* ]]; then
+  _START="$(cd "$(dirname "$_HERE")" && pwd)"
 else
-  ROOT="$(pwd)"
+  _START="$(pwd)"
 fi
-cd "$ROOT" || { echo "ERROR: cd $ROOT failed"; exit 1; }
-
-# Якщо десь ще старий wwwroot, а antenv лише в /tmp після extract — знайти venv
-if [ ! -x "$ROOT/antenv/bin/python" ]; then
-  _py="$(find /tmp -maxdepth 6 -type f -path '*/antenv/bin/python' 2>/dev/null | head -n 1)"
-  if [ -n "$_py" ]; then
-    ROOT="$(cd "$(dirname "$_py")/../.." && pwd)"
+ROOT=""
+_d="$_START"
+while [ "$_d" != "/" ]; do
+  if [ -f "$_d/bookworms/manage.py" ]; then
+    ROOT="$_d"
+    break
   fi
-fi
-if [ ! -x "$ROOT/antenv/bin/python" ]; then
-  echo "ERROR: antenv not found (ROOT=$ROOT). Expect Oryx extract under /tmp or cwd."
-  exit 1
-fi
-
-# Після --compress-destination-dir інколи в wwwroot лише output.tar.zst
-if [ ! -f "$ROOT/bookworms/manage.py" ] && [ -f "$ROOT/output.tar.zst" ]; then
+  _d="$(dirname "$_d")"
+done
+if [ -z "$ROOT" ] && [ -f "/home/site/wwwroot/output.tar.zst" ]; then
+  ROOT="/home/site/wwwroot"
+  cd "$ROOT" || exit 1
+  _t="/home/site/wwwroot/output.tar.zst"
   if tar --help 2>&1 | grep -q zstd; then
-    tar --zstd -xf "$ROOT/output.tar.zst" -C "$ROOT"
+    tar --zstd -xf "$_t" -C "$ROOT"
   else
-    zstd -d "$ROOT/output.tar.zst" -o /tmp/oryx-out.tar
+    zstd -d "$_t" -o /tmp/oryx-out.tar
     tar -xf /tmp/oryx-out.tar -C "$ROOT"
     rm -f /tmp/oryx-out.tar
   fi
+  _d="$ROOT"
+  while [ "$_d" != "/" ]; do
+    if [ -f "$_d/bookworms/manage.py" ]; then ROOT="$_d"; break; fi
+    _d="$(dirname "$_d")"
+  done
+fi
+if [ -z "$ROOT" ] || [ ! -f "$ROOT/bookworms/manage.py" ]; then
+  echo "ERROR: cannot find app root (bookworms/manage.py) starting from $_START"
+  exit 1
+fi
+cd "$ROOT" || { echo "ERROR: cd $ROOT failed"; exit 1; }
+
+if [ ! -x "$ROOT/antenv/bin/python" ]; then
+  _py="$(find /tmp -maxdepth 6 -type f -path '*/antenv/bin/python' 2>/dev/null | head -n 1)"
+  if [ -n "$_py" ]; then
+    _nr="$(cd "$(dirname "$_py")/../.." && pwd)"
+    if [ -f "$_nr/bookworms/manage.py" ]; then
+      ROOT="$_nr"
+      cd "$ROOT" || exit 1
+    fi
+  fi
+fi
+if [ ! -x "$ROOT/antenv/bin/python" ]; then
+  echo "ERROR: antenv not found (ROOT=$ROOT)."
+  exit 1
 fi
 
 if command -v odbcinst >/dev/null 2>&1 && odbcinst -q -d 2>/dev/null | grep -qi "ODBC Driver 18"; then
