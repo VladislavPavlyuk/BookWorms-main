@@ -1,10 +1,28 @@
+import logging
+import os
+
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth import get_user_model
-from .models import AvatarCollection
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core.exceptions import ValidationError
+from django.core.files.base import File
+
+from .models import AvatarCollection
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+def _copy_collection_avatar_to_user(user, collection: AvatarCollection | None) -> None:
+    """Копіює файл з колекції в user.avatar (upload_to=avatars/), щоб URL був /media/avatars/… як у ручного завантаження."""
+    if not collection or not collection.image:
+        return
+    name = os.path.basename(collection.image.name)
+    try:
+        with collection.image.open("rb") as src:
+            user.avatar.save(name, File(src), save=False)
+    except OSError as exc:
+        logger.warning("Не вдалося прочитати аватар з колекції id=%s: %s", collection.pk, exc)
 
 class UserLoginForm(AuthenticationForm):
     username = forms.CharField(
@@ -50,8 +68,20 @@ class UserRegisterForm(UserCreationForm):
         if 'password2' in self.fields:
             self.fields['password2'].label = "Повторіть пароль"
 
-        for field in self.fields.values():
-            field.widget.attrs['class'] = 'form-control'
+        for name, field in self.fields.items():
+            if name == "avatar_choice":
+                field.widget.attrs["class"] = "btn-check"
+                continue
+            field.widget.attrs["class"] = "form-control"
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        choice = self.cleaned_data.get("avatar_choice")
+        if choice and not self.files.get("avatar"):
+            _copy_collection_avatar_to_user(user, choice)
+        if commit:
+            user.save()
+        return user
 
     def clean_email(self):
         email = self.cleaned_data.get('email')
@@ -79,8 +109,20 @@ class UserUpdateForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        for field in self.fields.values():
-            field.widget.attrs['class'] = 'form-control'
+        for name, field in self.fields.items():
+            if name == "avatar_choice":
+                field.widget.attrs["class"] = "btn-check"
+                continue
+            field.widget.attrs["class"] = "form-control"
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        choice = self.cleaned_data.get("avatar_choice")
+        if choice and not self.files.get("avatar"):
+            _copy_collection_avatar_to_user(user, choice)
+        if commit:
+            user.save()
+        return user
 
 
 class AddIsbnForm(forms.Form):
