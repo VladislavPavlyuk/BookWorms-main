@@ -45,6 +45,11 @@ if [ -z "$ROOT" ] || [ ! -f "$ROOT/bookworms/manage.py" ]; then
 fi
 cd "$ROOT" || { echo "ERROR: cd $ROOT failed"; exit 1; }
 
+# Стійкий каталог для ImageField (узгоджено з bookworms/settings.py при WEBSITE_SITE_NAME).
+if [ -n "${WEBSITE_SITE_NAME:-}" ]; then
+  mkdir -p "/home/site/media/bookworms"
+fi
+
 if [ ! -x "$ROOT/antenv/bin/python" ]; then
   _py="$(find /tmp -maxdepth 6 -type f -path '*/antenv/bin/python' 2>/dev/null | head -n 1)"
   if [ -n "$_py" ]; then

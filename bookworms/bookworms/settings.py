@@ -136,9 +136,17 @@ STORAGES = {
     'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
 }
 
-# Media files
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Media files (аватари тощо)
+MEDIA_URL = "/media/"
+# На Azure Linux ZipDeploy перезаписує wwwroot — каталог проєкту media/ зникає після кожного деплою.
+# /home/site/… зберігається між деплоями (див. Azure App Service persistence).
+_media_override = os.environ.get("DJANGO_MEDIA_ROOT", "").strip()
+if _media_override:
+    MEDIA_ROOT = Path(_media_override)
+elif os.getenv("WEBSITE_SITE_NAME"):
+    MEDIA_ROOT = Path("/home/site/media/bookworms")
+else:
+    MEDIA_ROOT = BASE_DIR / "media"
 
 # Auth settings
 AUTH_USER_MODEL = 'mainApp.CustomUser'
