@@ -58,7 +58,7 @@ if _allowed:
 else:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
-# Azure: у App Settings часто кладуть лише hostname — Django 4+ вимагає scheme (https://...).
+# Azure: у App Settings часто кладуть лише hostname - Django 4+ вимагає scheme (https://...).
 _csrf = os.environ.get("CSRF_TRUSTED_ORIGINS", "").strip()
 CSRF_TRUSTED_ORIGINS = []
 for _o in (_x.strip() for _x in _csrf.split(",") if _x.strip()):
@@ -138,7 +138,7 @@ STORAGES = {
 
 # Media files (аватари тощо)
 MEDIA_URL = "/media/"
-# На Azure Linux ZipDeploy перезаписує wwwroot — каталог проєкту media/ зникає після кожного деплою.
+# На Azure Linux ZipDeploy перезаписує wwwroot - каталог проєкту media/ зникає після кожного деплою.
 # /home/site/… зберігається між деплоями (див. Azure App Service persistence).
 _media_override = os.environ.get("DJANGO_MEDIA_ROOT", "").strip()
 if _media_override:

@@ -1,3 +1,9 @@
+/* Логотип у navbar: круглий кроп, щоб детальна ілюстрація читалась у малому розмірі */
+.navbar-brand-logo {
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
 /* Кнопка в меню виглядає як інші .nav-link (navbar-dark) */
 .navbar-dark .navbar-nav button.nav-link.nav-link-btn {
     background: transparent;

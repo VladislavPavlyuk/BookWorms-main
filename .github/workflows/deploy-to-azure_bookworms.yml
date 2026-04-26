@@ -33,7 +33,7 @@ jobs:
           pip install -r requirements.txt
 
       # Шаблон Azure з path "!antenv/" ламає upload: це не exclude, а другий path → "not found".
-      # Oryx і так збирає antenv на App Service — прибираємо локальний venv перед артефактом.
+      # Oryx і так збирає antenv на App Service - прибираємо локальний venv перед артефактом.
       - name: Remove venv and .git from deployment tree
         run: rm -rf antenv .git
 

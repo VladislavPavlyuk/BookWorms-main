@@ -9,7 +9,7 @@
         <div class="col-12 col-md-4 col-lg-3">
             <label class="form-label text-white-50 mb-0" for="nav-search-book">Назва</label>
             <select class="form-select form-select-sm" id="nav-search-book" name="book">
-                <option value="">— усі книги —</option>
+                <option value="">- усі книги -</option>
                 {% for b in nav_book_search_books %}
                     <option value="{{ b.pk }}"
                             {% if request.GET.book == b.pk|stringformat:"d" %}selected{% endif %}>{{ b.title }}</option>
@@ -19,7 +19,7 @@
         <div class="col-12 col-md-4 col-lg-3">
             <label class="form-label text-white-50 mb-0" for="nav-search-author">Автор</label>
             <select class="form-select form-select-sm" id="nav-search-author" name="author">
-                <option value="">— усі автори —</option>
+                <option value="">- усі автори -</option>
                 {% for a in nav_book_search_authors %}
                     <option value="{{ a }}"
                             {% if request.GET.author == a %}selected{% endif %}>{{ a }}</option>
@@ -34,7 +34,7 @@
         <div class="col-12 col-md-4 col-lg-3">
             <label class="form-label text-white-50 mb-0" for="nav-search-publisher">Видавець</label>
             <select class="form-select form-select-sm" id="nav-search-publisher" name="publisher">
-                <option value="">— усі видавці —</option>
+                <option value="">- усі видавці -</option>
                 {% for p in nav_book_search_publishers %}
                     <option value="{{ p }}"
                             {% if request.GET.publisher == p %}selected{% endif %}>{{ p }}</option>

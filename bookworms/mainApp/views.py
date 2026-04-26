@@ -498,7 +498,7 @@ def browse_shelves(request):
     """
     Каталог чужих книг, доступних для запиту: не показуємо позичені у когось записи
     і даємо випадати лише власні (не позичені) книги для поля "обмін".
-    Пошук за полями книги (GET) — див. mainApp.book_search.
+    Пошук за полями книги (GET) - див. mainApp.book_search.
     """
     others = (
         Shelf.objects.exclude(user=request.user)

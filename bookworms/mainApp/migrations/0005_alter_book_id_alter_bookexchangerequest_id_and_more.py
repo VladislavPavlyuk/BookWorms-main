@@ -2,7 +2,7 @@
 #
 # Виправлено для Azure SQL: AlterField PK (BigAuto→Auto) ламав unique_shelf_user_book на Shelf.book_id (5074).
 # Book/Shelf/... уже BigAuto у 0003/0001; Comment/Like додає 0005_avatarcollection_comment_like.
-# Залишено порожні operations — міграція лише для гілки, яку зливає 0006_merge.
+# Залишено порожні operations - міграція лише для гілки, яку зливає 0006_merge.
 
 from django.db import migrations
 
