@@ -494,7 +494,6 @@ def confirm_return_borrowed_shelf_book(request, shelf_id):
 
 
 @login_required
-@login_required
 def browse_shelves(request):
     """
     Каталог чужих книг, доступних для запиту: не показуємо позичені у когось записи
