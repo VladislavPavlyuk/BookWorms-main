@@ -1,3 +1,19 @@
+/* Кнопка в меню виглядає як інші .nav-link (navbar-dark) */
+.navbar-dark .navbar-nav button.nav-link.nav-link-btn {
+    background: transparent;
+    border: none;
+    color: var(--bs-navbar-color, rgba(255, 255, 255, 0.55));
+    font: inherit;
+    line-height: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: none;
+}
+.navbar-dark .navbar-nav button.nav-link.nav-link-btn:hover,
+.navbar-dark .navbar-nav button.nav-link.nav-link-btn:focus-visible {
+    color: var(--bs-navbar-hover-color, rgba(255, 255, 255, 0.75));
+}
+
 .btn-check:checked + img {
     border: 3px solid #0d6efd;
     background-color: #e7f1ff;

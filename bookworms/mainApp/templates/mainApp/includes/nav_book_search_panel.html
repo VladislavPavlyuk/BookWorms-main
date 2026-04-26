@@ -1,0 +1,64 @@
+{% comment %}GET-форма пошуку книг на сторінці «Полиці інших»; лише для залогінених (виклик з base.html).{% endcomment %}
+<div class="container py-3">
+    <form method="get" action="{% url 'browse_shelves' %}" class="row g-2 align-items-end small">
+        <div class="col-12 col-md-4 col-lg-3">
+            <label class="form-label text-white-50 mb-0" for="nav-search-q">Назва (швидко)</label>
+            <input type="text" class="form-control form-control-sm" id="nav-search-q" name="q"
+                   value="{{ request.GET.q|default:'' }}" maxlength="500" placeholder="Частина назви…">
+        </div>
+        <div class="col-12 col-md-4 col-lg-3">
+            <label class="form-label text-white-50 mb-0" for="nav-search-book">Назва</label>
+            <select class="form-select form-select-sm" id="nav-search-book" name="book">
+                <option value="">— усі книги —</option>
+                {% for b in nav_book_search_books %}
+                    <option value="{{ b.pk }}"
+                            {% if request.GET.book == b.pk|stringformat:"d" %}selected{% endif %}>{{ b.title }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-4 col-lg-3">
+            <label class="form-label text-white-50 mb-0" for="nav-search-author">Автор</label>
+            <select class="form-select form-select-sm" id="nav-search-author" name="author">
+                <option value="">— усі автори —</option>
+                {% for a in nav_book_search_authors %}
+                    <option value="{{ a }}"
+                            {% if request.GET.author == a %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-4 col-lg-2">
+            <label class="form-label text-white-50 mb-0" for="nav-search-isbn">ISBN</label>
+            <input type="text" class="form-control form-control-sm" id="nav-search-isbn" name="isbn"
+                   value="{{ request.GET.isbn|default:'' }}" maxlength="32">
+        </div>
+        <div class="col-12 col-md-4 col-lg-3">
+            <label class="form-label text-white-50 mb-0" for="nav-search-publisher">Видавець</label>
+            <select class="form-select form-select-sm" id="nav-search-publisher" name="publisher">
+                <option value="">— усі видавці —</option>
+                {% for p in nav_book_search_publishers %}
+                    <option value="{{ p }}"
+                            {% if request.GET.publisher == p %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-4 col-lg-2">
+            <label class="form-label text-white-50 mb-0" for="nav-search-publish-date">Дата видання</label>
+            <input type="text" class="form-control form-control-sm" id="nav-search-publish-date" name="publish_date"
+                   value="{{ request.GET.publish_date|default:'' }}" maxlength="64" placeholder="Рік або текст…">
+        </div>
+        <div class="col-6 col-md-2 col-lg-1">
+            <label class="form-label text-white-50 mb-0" for="nav-search-age-min">Вік від</label>
+            <input type="number" class="form-control form-control-sm" id="nav-search-age-min" name="reader_age_min"
+                   min="0" max="18" value="{{ request.GET.reader_age_min|default:'' }}">
+        </div>
+        <div class="col-6 col-md-2 col-lg-1">
+            <label class="form-label text-white-50 mb-0" for="nav-search-age-max">Вік до</label>
+            <input type="number" class="form-control form-control-sm" id="nav-search-age-max" name="reader_age_max"
+                   min="0" max="18" value="{{ request.GET.reader_age_max|default:'' }}">
+        </div>
+        <div class="col-12 col-md-auto d-flex flex-wrap gap-2 pt-1">
+            <button type="submit" class="btn btn-sm btn-primary">Шукати</button>
+            <a class="btn btn-sm btn-outline-light" href="{% url 'browse_shelves' %}">Скинути</a>
+        </div>
+    </form>
+</div>

@@ -13,7 +13,7 @@ def edit_profile(request):
         form = UserUpdateForm(request.POST, request.FILES, instance=request.user)
         if form.is_valid():
             form.save()
-            return redirect('profile')
+            return redirect('profile_app:profile')
     else:
         form = UserUpdateForm(instance=request.user)
 

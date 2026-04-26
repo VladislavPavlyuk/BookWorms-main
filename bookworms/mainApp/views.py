@@ -40,6 +40,7 @@ from .message_service import (
     mark_thread_read,
     send_user_message,
 )
+from .book_search import apply_book_search_to_shelf_queryset, has_active_book_search
 from .exchange_service import (
     accept_exchange_request,
     cancel_exchange_request,
@@ -493,10 +494,12 @@ def confirm_return_borrowed_shelf_book(request, shelf_id):
 
 
 @login_required
+@login_required
 def browse_shelves(request):
     """
     Каталог чужих книг, доступних для запиту: не показуємо позичені у когось записи
     і даємо випадати лише власні (не позичені) книги для поля "обмін".
+    Пошук за полями книги (GET) — див. mainApp.book_search.
     """
     others = (
         Shelf.objects.exclude(user=request.user)
@@ -504,6 +507,7 @@ def browse_shelves(request):
         .select_related("user", "book")
         .order_by("-added_at")
     )
+    others = apply_book_search_to_shelf_queryset(others, request.GET)
     my_owned_shelves = (
         request.user.shelf_entries.filter(borrowed_from__isnull=True)
         .select_related("book")
@@ -511,7 +515,11 @@ def browse_shelves(request):
     return render(
         request,
         "mainApp/browse_shelves.html",
-        {"others": others, "my_owned_shelves": my_owned_shelves},
+        {
+            "others": others,
+            "my_owned_shelves": my_owned_shelves,
+            "has_book_search": has_active_book_search(request.GET),
+        },
     )
 
 

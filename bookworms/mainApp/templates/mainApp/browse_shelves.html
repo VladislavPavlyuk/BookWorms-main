@@ -12,6 +12,27 @@
     або залишити "позика" - тоді після згоди це позика лише для цього рядка.
 </p>
 
+{% if has_book_search %}
+    <div class="alert alert-secondary py-2 d-flex flex-wrap align-items-center gap-2 mb-3">
+        <span class="fw-semibold me-1">Активний пошук:</span>
+        {% if request.GET.q %}<span class="badge text-bg-light">назва: {{ request.GET.q }}</span>{% endif %}
+        {% if request.GET.book %}
+            {% for b in nav_book_search_books %}
+                {% if request.GET.book == b.pk|stringformat:"d" %}
+                    <span class="badge text-bg-light">книга: {{ b.title }}</span>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+        {% if request.GET.author %}<span class="badge text-bg-light">автор: {{ request.GET.author }}</span>{% endif %}
+        {% if request.GET.isbn %}<span class="badge text-bg-light">ISBN: {{ request.GET.isbn }}</span>{% endif %}
+        {% if request.GET.publisher %}<span class="badge text-bg-light">видавець: {{ request.GET.publisher }}</span>{% endif %}
+        {% if request.GET.publish_date %}<span class="badge text-bg-light">дата: {{ request.GET.publish_date }}</span>{% endif %}
+        {% if request.GET.reader_age_min %}<span class="badge text-bg-light">вік від {{ request.GET.reader_age_min }}</span>{% endif %}
+        {% if request.GET.reader_age_max %}<span class="badge text-bg-light">вік до {{ request.GET.reader_age_max }}</span>{% endif %}
+        <a href="{% url 'browse_shelves' %}" class="btn btn-sm btn-outline-secondary ms-auto">Показати всі</a>
+    </div>
+{% endif %}
+
 {% if messages %}
     {% for message in messages %}
         <div class="alert alert-{% if 'error' in message.tags %}danger{% elif 'success' in message.tags %}success{% elif 'warning' in message.tags %}warning{% else %}info{% endif %} alert-dismissible fade show" role="alert">
@@ -74,7 +95,14 @@
         </div>
     </form>
 {% else %}
-    <p class="text-muted">Немає записів на полицях інших користувачів.</p>
+    <p class="text-muted">
+        {% if has_book_search %}
+            За цими умовами нічого не знайдено. Спробуйте інші параметри (кнопка «Пошук книги» у навігації) або
+            <a href="{% url 'browse_shelves' %}">скиньте фільтри</a>.
+        {% else %}
+            Немає записів на полицях інших користувачів.
+        {% endif %}
+    </p>
 {% endif %}
 
 <p class="mt-3"><a href="{% url 'exchange_requests' %}">Мої запити на обмін</a></p>
