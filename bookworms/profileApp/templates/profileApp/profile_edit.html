@@ -1,12 +1,38 @@
 {% extends "mainApp/base.html" %}
 
 {% block content %}
-<h2>Редагувати профіль</h2>
+<h2 class="mb-3">Редагувати профіль</h2>
 
-<form method="post" enctype="multipart/form-data">
+<form method="post" enctype="multipart/form-data" class="profile-edit-form">
     {% csrf_token %}
-    {{ form.as_p }}
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="mb-3">
+        <label class="form-label" for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+        {{ form.username }}
+        {% if form.username.errors %}<div class="text-danger small">{{ form.username.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="{{ form.biography.id_for_label }}">{{ form.biography.label }}</label>
+        {{ form.biography }}
+        {% if form.biography.errors %}<div class="text-danger small">{{ form.biography.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="{{ form.avatar.id_for_label }}">{{ form.avatar.label }}</label>
+        {{ form.avatar }}
+        {% if form.instance.avatar %}
+            <p class="small text-muted mt-2 mb-0">Поточний аватар:</p>
+            <img src="{{ form.instance.avatar.url }}" alt="" width="80" height="80" class="rounded border mt-1">
+        {% endif %}
+        {% if form.avatar.errors %}<div class="text-danger small">{{ form.avatar.errors }}</div>{% endif %}
+    </div>
+
+    {% include "mainApp/includes/avatar_collection_picker.html" %}
+
     <button type="submit" class="btn btn-primary">Зберегти</button>
 </form>
-
 {% endblock %}

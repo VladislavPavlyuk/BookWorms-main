@@ -1,0 +1,33 @@
+{% comment %}
+  Форма з полем avatar_choice (ModelChoiceField → AvatarCollection).
+  Радіо + прев’ю зображення (default_avatars у MEDIA).
+{% endcomment %}
+<div class="mb-3 profile-avatar-picker">
+    <div class="form-label fw-semibold">{{ form.avatar_choice.label }}</div>
+    <div class="d-flex flex-wrap gap-3 align-items-start">
+        {% for item in form.fields.avatar_choice.queryset %}
+            {% if item.image %}
+                <label class="avatar-item d-inline-block text-center border rounded p-2 bg-light">
+                    <input type="radio"
+                           class="btn-check"
+                           name="{{ form.avatar_choice.html_name }}"
+                           value="{{ item.pk }}"
+                           id="id_avatar_choice_item_{{ item.pk }}"
+                           {% if form.avatar_choice.value == item.pk %}checked{% endif %}>
+                    <img src="{{ item.image.url }}"
+                         alt="{{ item.name }}"
+                         width="72"
+                         height="72"
+                         class="rounded mt-1 d-block mx-auto"
+                         style="object-fit: cover;">
+                    <span class="small text-muted d-block mt-1">{{ item.name }}</span>
+                </label>
+            {% endif %}
+        {% empty %}
+            <p class="text-muted small mb-0">Колекція порожня. Додайте аватари в адмінці: «Колекція аватарів».</p>
+        {% endfor %}
+    </div>
+    {% if form.avatar_choice.errors %}
+        <div class="text-danger small mt-1">{{ form.avatar_choice.errors|striptags }}</div>
+    {% endif %}
+</div>
