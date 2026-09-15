@@ -172,17 +172,15 @@ LOGOUT_REDIRECT_URL = '/'
 LOGIN_REDIRECT_URL = '/'
 LOGIN_URL = 'login'
 
-# --- НАСТРОЙКИ ПОЧТЫ (GMAIL SMTP) ---
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'sandbox.smtp.mailtrap.io'
-EMAIL_HOST_USER = '77163a6ec3fc20'      # Скопируй из Mailtrap
-EMAIL_HOST_PASSWORD = '64fdc2428f8e99' # Скопируй из Mailtrap
-EMAIL_PORT = 2525                    # Или 587
-EMAIL_USE_TLS = True
-EMAIL_USE_SSL = False
-
-# Этот адрес будет отображаться в поле "От кого"
-DEFAULT_FROM_EMAIL = 'admin@bookworms.com'
+# --- Пошта: Web3Forms (замість Mailtrap/SMTP) ---
+# Лист іде на email, прив’язаний до access_key у кабінеті web3forms.com.
+WEB3FORMS_ACCESS_KEY = os.environ.get(
+    "WEB3FORMS_ACCESS_KEY",
+    "d76edac5-49fd-4574-b89b-45e24170aeab",
+)
+# Публічний origin для лінка активації (NAS): http://192.168.0.213:18088
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@bookworms.local")
 
 # Тип ID моделей по умолчанию (убирает Warnings)
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

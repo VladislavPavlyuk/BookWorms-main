@@ -1,13 +1,12 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
-from django.contrib.sites.shortcuts import get_current_site
 from django.db import IntegrityError
 from django.db.models import Prefetch, Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
-from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from django.core.paginator import Paginator
 from .models import (
     Book,
@@ -30,7 +29,7 @@ from .forms import (
     UserUpdateForm,
 )
 from django.views.generic import CreateView
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse_lazy
 from django.contrib.auth.decorators import login_required
 from .openlibrary import fetch_book_by_isbn
 from django.conf import settings
@@ -49,7 +48,12 @@ from .exchange_service import (
     reject_exchange_request,
     request_borrow_return,
 )
-from django.core.mail import send_mail
+from .web3forms_mail import (
+    Web3FormsError,
+    activation_payload,
+    activation_url_for,
+    send_activation_email,
+)
 
 from .tokens import account_activation_token
 
@@ -87,53 +91,22 @@ class CustomRegisterView(CreateView):
     success_url = reverse_lazy('confirm_email')
 
     def form_valid(self, form):
-        # 1. Создаем юзера, но не активируем
         user = form.save(commit=False)
         user.is_active = False
         user.save()
 
-        # 2. Формируем данные для ссылки подтверждения
-        current_site = get_current_site(self.request)
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = account_activation_token.make_token(user)
+        url = activation_url_for(user, self.request)
+        payload = activation_payload(user, url)
+        # Для клієнтського fallback (free Web3Forms рекомендує browser-side).
+        self.request.session["web3forms_activation"] = payload
 
-        # Ссылка, по которой юзер кликнет в письме
-        relative_link = reverse('activate', kwargs={'uidb64': uid, 'token': token})
-        activation_url = f"http://{current_site.domain}{relative_link}"
-
-        # 3. Контент письма
-        subject = "Підтвердження реєстрації BookWorms"
-        message = f"Вітаємо, {user.username}!\nДля активації аккаунта перейдіть за посиланням: {activation_url}"
-
-        html_message = f"""
-            <div style="font-family: Arial, sans-serif; border: 1px solid #ddd; padding: 20px;">
-                <h2 style="color: #2c3e50;">Ласкаво просимо в BookWorms!</h2>
-                <p>Вы успішно зареєструвались. Залишився останній крок - підтвердіть пошту.</p>
-                <a href="{activation_url}" 
-                   style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
-                   Активувати мій акаунт
-                </a>
-                <p style="margin-top: 20px; font-size: 12px; color: #777;">
-                    Якщо ви не реєструвались на нашому сайті, просто проігноруйте цей лист.
-                </p>
-            </div>
-        """
-
-        # 4. Отправка письма
         try:
-            send_mail(
-                subject,
-                message,
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                html_message=html_message,
-                fail_silently=False,
-            )
-        except Exception as e:
-
-            user.delete()
-            form.add_error(None, f"Помилка відправки листа: {e}. Перевірте налаштування SMTP.")
-            return self.form_invalid(form)
+            send_activation_email(user, self.request)
+            self.request.session["web3forms_sent_server"] = True
+        except Web3FormsError as e:
+            # Не відкочуємо юзера: сторінка confirm_email дошле через JS.
+            self.request.session["web3forms_sent_server"] = False
+            self.request.session["web3forms_server_error"] = str(e)
 
         return super().form_valid(form)
 
@@ -163,7 +136,19 @@ def activation_invalid_view(request):
     return render(request, 'mainApp/activation_invalid.html')
 
 def confirm_email_view(request):
-    return render(request, 'mainApp/confirm_email.html')
+    payload = request.session.pop("web3forms_activation", None)
+    sent_server = request.session.pop("web3forms_sent_server", False)
+    server_error = request.session.pop("web3forms_server_error", "")
+    return render(
+        request,
+        "mainApp/confirm_email.html",
+        {
+            "web3forms_payload": payload,
+            "web3forms_access_key": settings.WEB3FORMS_ACCESS_KEY,
+            "sent_server": sent_server,
+            "server_error": server_error,
+        },
+    )
 
 def _post_book_from_shelf(user, raw_id):
     """Книга для поста лише якщо в користувача є вона на полиці."""

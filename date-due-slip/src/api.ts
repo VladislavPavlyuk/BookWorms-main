@@ -122,10 +122,20 @@ export const AuthApi = {
       auth: false,
     }),
   register: (username: string, email: string, password: string, biography = "") =>
-    api<{ access?: string; refresh?: string; user?: User; needs_activation?: boolean; detail?: string }>(
-      "/api/auth/register/",
-      { method: "POST", body: { username, email, password, biography }, auth: false }
-    ),
+    api<{
+      access?: string;
+      refresh?: string;
+      user?: User;
+      needs_activation?: boolean;
+      detail?: string;
+      email_sent?: boolean;
+      server_error?: string | null;
+      web3forms_payload?: Record<string, unknown> | null;
+    }>("/api/auth/register/", {
+      method: "POST",
+      body: { username, email, password, biography },
+      auth: false,
+    }),
   me: () => api<User>("/api/auth/me/"),
   updateMe: (body: { username?: string; biography?: string }) =>
     api<User>("/api/auth/me/", { method: "PATCH", body }),

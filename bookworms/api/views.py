@@ -35,6 +35,12 @@ from mainApp.models import (
     Shelf,
 )
 from mainApp.openlibrary import fetch_book_by_isbn, normalize_isbn
+from mainApp.web3forms_mail import (
+    Web3FormsError,
+    activation_payload,
+    activation_url_for,
+    send_activation_email,
+)
 from .serializers import (
     AddBookManualSerializer,
     AddIsbnSerializer,
@@ -119,10 +125,28 @@ def register(request):
     user.set_password(ser.validated_data["password"])
     user.save()
     if not user.is_active:
+        url = activation_url_for(user, request)
+        w3_payload = activation_payload(user, url)
+        email_sent = False
+        server_error = None
+        try:
+            send_activation_email(user, request)
+            email_sent = True
+        except Web3FormsError as e:
+            # Free Web3Forms часто блокує server-side — клієнт дошле payload.
+            server_error = str(e)
         return Response(
             {
-                "detail": "Акаунт створено. Підтвердіть email (або увімкніть SKIP_EMAIL_ACTIVATION на NAS).",
+                "detail": (
+                    "Акаунт створено. Лист активації — через Web3Forms "
+                    "(inbox email access key)."
+                    if email_sent
+                    else "Акаунт створено. Досилаємо лист з клієнта (Web3Forms)."
+                ),
                 "needs_activation": True,
+                "email_sent": email_sent,
+                "server_error": server_error,
+                "web3forms_payload": None if email_sent else w3_payload,
             },
             status=status.HTTP_201_CREATED,
         )

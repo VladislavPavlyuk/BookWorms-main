@@ -32,10 +32,36 @@ export default function Register() {
         await setTokens(data.access, data.refresh);
         await reload();
         router.replace("/(tabs)");
-      } else {
-        Alert.alert("Реєстрація", data.detail || "Підтвердіть email.");
-        router.replace("/(auth)/login");
+        return;
       }
+      if (data.web3forms_payload) {
+        try {
+          const res = await fetch("https://api.web3forms.com/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify(data.web3forms_payload),
+          });
+          const body = await res.json();
+          if (!res.ok || body.success === false) {
+            Alert.alert(
+              "Реєстрація",
+              `Акаунт створено, але лист не пішов: ${body.message || res.status}. ${data.server_error || ""}`
+            );
+            router.replace("/(auth)/login");
+            return;
+          }
+        } catch (err) {
+          Alert.alert("Реєстрація", `Акаунт створено. Web3Forms: ${String(err)}`);
+          router.replace("/(auth)/login");
+          return;
+        }
+      }
+      Alert.alert(
+        "Реєстрація",
+        data.detail ||
+          "Перевірте inbox email, прив’язаний до Web3Forms, і відкрийте посилання активації."
+      );
+      router.replace("/(auth)/login");
     } catch (e) {
       Alert.alert("Реєстрація", e instanceof ApiError ? e.message : String(e));
     } finally {

@@ -26,3 +26,6 @@ React Native клієнт: каталог date-due-slip/
 
 Бізнес-логіка = BookWorms (полиця, ISBN, обмін/позика, пости, лайки, чат після запиту).
 Додано due_date на позику (Date Due Slip), за замовчуванням 14 днів.
+
+Пошта: Web3Forms (WEB3FORMS_ACCESS_KEY + PUBLIC_BASE_URL).
+SKIP_EMAIL_ACTIVATION=1 — реєстрація без листа (зручно для LAN).
