@@ -6,11 +6,19 @@
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
 from . import message_service
 from .models import Book, BookExchangeRequest, CustomUser, Shelf
+
+
+def _loan_due_date():
+    days = int(getattr(settings, "DEFAULT_LOAN_DAYS", 14))
+    return timezone.now().date() + timedelta(days=days)
 
 
 def get_or_create_book_from_payload(payload: dict) -> tuple[Book, bool]:
@@ -164,6 +172,8 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
         Shelf.objects.filter(pk=target.pk).update(
             user_id=requester.id,
             borrowed_from_id=None,
+            due_date=None,
+            return_pending=False,
         )
         offer_book = offer.book
         if Shelf.objects.filter(user=acting_user, book=offer_book).exclude(pk=offer.pk).exists():
@@ -171,12 +181,16 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
         Shelf.objects.filter(pk=offer.pk).update(
             user_id=acting_user.id,
             borrowed_from_id=None,
+            due_date=None,
+            return_pending=False,
         )
     else:
         # Позика: позичальник тримає книгу, власник зберігається в borrowed_from
         Shelf.objects.filter(pk=target.pk).update(
             user_id=requester.id,
             borrowed_from_id=acting_user.id,
+            due_date=_loan_due_date(),
+            return_pending=False,
         )
 
     req.status = BookExchangeRequest.Status.ACCEPTED
@@ -279,6 +293,7 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
         user_id=owner_id,
         borrowed_from_id=None,
         return_pending=False,
+        due_date=None,
     )
     message_service.notify_borrow_return_confirmed(lender, borrower, book_title)
     return True, None

@@ -21,8 +21,12 @@ staticfiles/
 local_settings.py
 
 # Environment files
-bookworms/.env
+.env
 .env.*
+!.env.example
+!**/.env.example
+bookworms/.env
+deploy/qnap/.env
 
 # IDEs
 .idea/
@@ -31,4 +35,8 @@ bookworms/.env
 # OS
 .DS_Store
 Thumbs.db
-/bookworms/.env
+
+# Date Due Slip (Expo)
+date-due-slip/node_modules/
+date-due-slip/.expo/
+date-due-slip/dist/

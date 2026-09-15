@@ -1,0 +1,13 @@
+.git
+.github
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/*.sqlite3
+date-due-slip
+media
+staticfiles
+*.md
+.env
+deploy/qnap/.env

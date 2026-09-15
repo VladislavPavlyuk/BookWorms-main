@@ -1,0 +1,98 @@
+import { useCallback, useState } from "react";
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect } from "expo-router";
+import { ApiError, SlipApi } from "../../src/api";
+import { colors } from "../../src/theme";
+import type { Shelf } from "../../src/types";
+
+function Slip({ s, role }: { s: Shelf; role: "borrowed" | "lent" }) {
+  const overdue = s.is_overdue;
+  return (
+    <View style={[styles.slip, overdue && styles.overdue]}>
+      <Text style={styles.library}>DATE DUE SLIP</Text>
+      <Text style={styles.title}>{s.book.title}</Text>
+      <Text style={styles.meta}>{s.book.authors || "—"}</Text>
+      <View style={styles.stampBox}>
+        <Text style={[styles.stamp, overdue && { color: colors.danger }]}>
+          {overdue ? "OVERDUE" : s.due_date ? `DUE ${s.due_date}` : "NO DATE"}
+        </Text>
+        {s.days_left != null && (
+          <Text style={styles.days}>
+            {overdue ? `${Math.abs(s.days_left)} дн. прострочено` : `${s.days_left} дн. лишилось`}
+          </Text>
+        )}
+      </View>
+      <Text style={styles.footer}>
+        {role === "borrowed"
+          ? `Позичено у ${s.borrowed_from?.username}`
+          : `У ${s.user.username}`}
+        {s.return_pending ? " · повернення надіслано" : ""}
+      </Text>
+    </View>
+  );
+}
+
+export default function Slips() {
+  const [borrowed, setBorrowed] = useState<Shelf[]>([]);
+  const [lent, setLent] = useState<Shelf[]>([]);
+  const [loanDays, setLoanDays] = useState(14);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = async () => {
+    const data = await SlipApi.list();
+    setBorrowed(data.borrowed);
+    setLent(data.lent);
+    setLoanDays(data.loan_days);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      load().catch((e) => Alert.alert("Slips", e instanceof ApiError ? e.message : String(e)));
+    }, [])
+  );
+
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.paper }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            await load();
+            setRefreshing(false);
+          }}
+        />
+      }
+    >
+      <Text style={styles.hint}>Стандартний термін позики: {loanDays} днів від прийняття запиту.</Text>
+      <Text style={styles.sec}>Мої позики</Text>
+      {borrowed.length === 0 ? <Text style={styles.empty}>Немає позичених книг</Text> : borrowed.map((s) => <Slip key={s.id} s={s} role="borrowed" />)}
+      <Text style={styles.sec}>Видано мною</Text>
+      {lent.length === 0 ? <Text style={styles.empty}>Ніхто не тримає ваші книги</Text> : lent.map((s) => <Slip key={s.id} s={s} role="lent" />)}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  hint: { color: colors.muted, marginBottom: 16, fontSize: 13 },
+  sec: { color: colors.ink, fontWeight: "800", letterSpacing: 1, marginBottom: 8, marginTop: 8 },
+  empty: { color: colors.muted, marginBottom: 16 },
+  slip: {
+    borderWidth: 2,
+    borderColor: colors.ink,
+    backgroundColor: colors.white,
+    padding: 16,
+    marginBottom: 12,
+    borderStyle: "dashed",
+  },
+  overdue: { borderColor: colors.stamp, backgroundColor: "#FBE9E5" },
+  library: { color: colors.stamp, fontWeight: "800", letterSpacing: 2, fontSize: 12 },
+  title: { color: colors.ink, fontSize: 18, fontWeight: "700", marginTop: 6 },
+  meta: { color: colors.muted, marginTop: 2 },
+  stampBox: { marginTop: 12, alignItems: "flex-end" },
+  stamp: { color: colors.stampOk, fontWeight: "900", fontSize: 18, letterSpacing: 1 },
+  days: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  footer: { color: colors.ink, marginTop: 12, fontSize: 12, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 8 },
+});

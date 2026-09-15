@@ -121,6 +121,13 @@ class Shelf(models.Model):
     )
     # Позичальник натиснув "повернути"; перенос на полицю позикодавця - лише після confirm_borrow_return.
     return_pending = models.BooleanField(default=False, verbose_name="Очікує підтвердження повернення")
+    # Date Due Slip: термін повернення позиченої книги (лише якщо borrowed_from заповнено).
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Термін повернення",
+        help_text="Заповнюється при позиці. Обмін без позики — порожнє.",
+    )
     added_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

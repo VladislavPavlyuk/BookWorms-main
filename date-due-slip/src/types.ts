@@ -1,0 +1,81 @@
+export type User = {
+  id: number;
+  username: string;
+  email?: string;
+  biography: string;
+  avatar_url: string | null;
+};
+
+export type Book = {
+  id: number;
+  isbn: string;
+  title: string;
+  authors: string;
+  publisher: string;
+  publish_date: string;
+  cover_url: string;
+  info_url: string;
+  min_readers_age: number;
+  max_readers_age: number;
+  reader_age_summary: string;
+};
+
+export type Shelf = {
+  id: number;
+  user: User;
+  book: Book;
+  borrowed_from: User | null;
+  return_pending: boolean;
+  due_date: string | null;
+  is_overdue: boolean;
+  days_left: number | null;
+  added_at: string;
+};
+
+export type Comment = {
+  id: number;
+  author: User;
+  text: string;
+  created_at: string;
+};
+
+export type Post = {
+  id: number;
+  author: User;
+  book: Book | null;
+  title: string;
+  text: string;
+  created_ad: string;
+  likes_count: number;
+  comments_count: number;
+  liked_by_me: boolean;
+  comments: Comment[];
+};
+
+export type Exchange = {
+  id: number;
+  requester: User;
+  shelf_owner: User;
+  target_shelf: Shelf;
+  offer_shelf: Shelf | null;
+  status: string;
+  kind: "borrow" | "exchange";
+  created_at: string;
+  resolved_at: string | null;
+};
+
+export type Message = {
+  id: number;
+  sender: User;
+  recipient: User;
+  body: string;
+  created_at: string;
+  read_at: string | null;
+};
+
+export type Paginated<T> = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+};

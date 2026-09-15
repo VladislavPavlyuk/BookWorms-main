@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Date Due Slip",
+    "slug": "date-due-slip",
+    "scheme": "datedueslip",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "plugins": ["expo-router", "expo-secure-store"],
+    "android": {
+      "package": "com.bookworms.datedueslip",
+      "usesCleartextTraffic": true
+    },
+    "ios": {
+      "bundleIdentifier": "com.bookworms.datedueslip",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
+    },
+    "extra": {
+      "apiUrl": "http://192.168.0.213:8088"
+    }
+  }
+}

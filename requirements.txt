@@ -14,3 +14,9 @@ whitenoise>=6.6.0
 # Azure SQL (коли задано AZURE_SQL_HOST; для Django 6 потрібен mssql-django 1.7+)
 mssql-django>=1.7
 pyodbc>=5.0.0
+
+# Date Due Slip / QNAP (Postgres + REST для React Native)
+psycopg[binary]>=3.1
+djangorestframework>=3.15.0
+djangorestframework-simplejwt>=5.3.0
+django-cors-headers>=4.4.0

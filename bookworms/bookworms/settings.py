@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -10,10 +11,31 @@ dotenv_path = BASE_DIR / ".env"
 if dotenv_path.exists():
     load_dotenv(dotenv_path)
 
-# Azure SQL або локальний SQLite
+# Термін позики для Date Due Slip (днів від прийняття запиту).
+DEFAULT_LOAN_DAYS = int(os.environ.get("DEFAULT_LOAN_DAYS", "14"))
+# LAN/QNAP: реєстрація без SMTP (is_active=True одразу).
+SKIP_EMAIL_ACTIVATION = os.environ.get("SKIP_EMAIL_ACTIVATION", "").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
+# Postgres (QNAP) → Azure SQL → SQLite
 # На Linux потрібен установлений ODBC (див. startup.sh для App Service).
 # Ім'я драйвера: odbcinst -q -d у SSH; за замовчуванням 18, можна MSSQL_ODBC_DRIVER у env.
-if os.getenv("AZURE_SQL_HOST"):
+if os.getenv("POSTGRES_HOST"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB", "bookworms"),
+            "USER": os.environ.get("POSTGRES_USER", "bookworms"),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
+            "HOST": os.environ["POSTGRES_HOST"],
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            "CONN_MAX_AGE": 60,
+        },
+    }
+elif os.getenv("AZURE_SQL_HOST"):
     _odbc_driver = os.environ.get(
         "MSSQL_ODBC_DRIVER", "ODBC Driver 18 for SQL Server"
     )
@@ -79,11 +101,16 @@ INSTALLED_APPS = [
     'bookworms',
     'mainApp',
     'profileApp',
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'corsheaders',
+    'api',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -121,7 +148,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = 'ru-ru'  # Сменил на русский для удобства админки
-TIME_ZONE = 'UTC'
+TIME_ZONE = os.environ.get("TIME_ZONE", "Europe/Kyiv")
 USE_I18N = True
 USE_TZ = True
 
@@ -159,4 +186,38 @@ DEFAULT_FROM_EMAIL = 'admin@bookworms.com'
 
 # Тип ID моделей по умолчанию (убирает Warnings)
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=int(os.environ.get("JWT_ACCESS_DAYS", "7"))),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.environ.get("JWT_REFRESH_DAYS", "30"))),
+    "ROTATE_REFRESH_TOKENS": False,
+}
+
+# React Native (LAN). За замовчуванням дозволити все в локальній мережі.
+_cors = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
+if _cors:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors.split(",") if o.strip()]
+    CORS_ALLOW_ALL_ORIGINS = False
+else:
+    CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "origin",
+    "user-agent",
+    "x-requested-with",
+]
 

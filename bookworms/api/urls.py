@@ -1,0 +1,35 @@
+from django.urls import path
+from rest_framework_simplejwt.views import TokenRefreshView
+
+from . import views
+
+urlpatterns = [
+    path("health/", views.health),
+    path("auth/register/", views.register),
+    path("auth/login/", views.login_view),
+    path("auth/refresh/", TokenRefreshView.as_view()),
+    path("auth/me/", views.me),
+    path("posts/", views.post_list),
+    path("posts/create/", views.post_create),
+    path("posts/<int:post_id>/", views.post_detail),
+    path("posts/<int:post_id>/like/", views.post_like),
+    path("posts/<int:post_id>/comments/", views.post_comment),
+    path("shelf/", views.my_shelf),
+    path("shelf/isbn/", views.shelf_add_isbn),
+    path("shelf/manual/", views.shelf_add_manual),
+    path("shelf/<int:shelf_id>/", views.shelf_remove),
+    path("shelf/<int:shelf_id>/reader-age/", views.shelf_reader_age),
+    path("shelf/<int:shelf_id>/return/", views.shelf_return),
+    path("shelf/<int:shelf_id>/confirm-return/", views.shelf_confirm_return),
+    path("slips/", views.due_slips),
+    path("browse/", views.browse_shelves),
+    path("users/<int:user_id>/shelf/", views.user_shelf),
+    path("books/<int:book_id>/", views.book_detail),
+    path("exchanges/", views.exchange_list),
+    path("exchanges/create/", views.exchange_create),
+    path("exchanges/<int:request_id>/accept/", views.exchange_accept_view),
+    path("exchanges/<int:request_id>/reject/", views.exchange_reject_view),
+    path("exchanges/<int:request_id>/cancel/", views.exchange_cancel_view),
+    path("messages/partners/", views.message_partners),
+    path("messages/<int:partner_id>/", views.message_thread),
+]
