@@ -58,8 +58,11 @@ export default function Register() {
       }
       Alert.alert(
         "Реєстрація",
-        data.detail ||
-          "Перевірте inbox email, прив’язаний до Web3Forms, і відкрийте посилання активації."
+        (data.detail ||
+          "Перевірте inbox Web3Forms і відкрийте посилання активації.") +
+          (data.activation_timeout_minutes
+            ? `\n\nУвага: маєте ${data.activation_timeout_minutes} хв, інакше акаунт видалять.`
+            : "\n\nУвага: маєте 5 хв на підтвердження, інакше акаунт видалять.")
       );
       router.replace("/(auth)/login");
     } catch (e) {
@@ -76,6 +79,10 @@ export default function Register() {
     >
       <ScrollView contentContainerStyle={styles.wrap}>
         <Text style={styles.title}>Новий квиток</Text>
+        <Text style={styles.warn}>
+          Підтвердіть email протягом 5 хвилин після реєстрації. Інакше акаунт буде
+          автоматично видалено з бази — доведеться реєструватися знову.
+        </Text>
         <TextInput placeholder="Логін" placeholderTextColor={colors.muted} autoCapitalize="none" style={styles.input} value={username} onChangeText={setUsername} />
         <TextInput placeholder="Email" placeholderTextColor={colors.muted} autoCapitalize="none" keyboardType="email-address" style={styles.input} value={email} onChangeText={setEmail} />
         <TextInput placeholder="Пароль (мін. 8)" placeholderTextColor={colors.muted} secureTextEntry style={styles.input} value={password} onChangeText={setPassword} />
@@ -93,7 +100,13 @@ export default function Register() {
 
 const styles = StyleSheet.create({
   wrap: { padding: 28, paddingTop: 80 },
-  title: { fontSize: 24, fontWeight: "800", color: colors.ink, marginBottom: 24 },
+  title: { fontSize: 24, fontWeight: "800", color: colors.ink, marginBottom: 12 },
+  warn: {
+    color: colors.danger,
+    marginBottom: 20,
+    lineHeight: 20,
+    fontWeight: "600",
+  },
   input: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 10, marginBottom: 16, fontSize: 16 },
   btn: { backgroundColor: colors.stamp, padding: 14, marginTop: 8 },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },

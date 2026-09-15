@@ -131,6 +131,7 @@ export const AuthApi = {
       email_sent?: boolean;
       server_error?: string | null;
       web3forms_payload?: Record<string, unknown> | null;
+      activation_timeout_minutes?: number;
     }>("/api/auth/register/", {
       method: "POST",
       body: { username, email, password, biography },

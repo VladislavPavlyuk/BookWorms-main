@@ -41,6 +41,11 @@ from mainApp.web3forms_mail import (
     activation_url_for,
     send_activation_email,
 )
+from mainApp.registration_service import (
+    activation_timeout,
+    is_activation_expired,
+    purge_expired_unactivated_users,
+)
 from .serializers import (
     AddBookManualSerializer,
     AddIsbnSerializer,
@@ -114,6 +119,7 @@ def health(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register(request):
+    purge_expired_unactivated_users()
     ser = RegisterSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
     user = User(
@@ -124,6 +130,7 @@ def register(request):
     )
     user.set_password(ser.validated_data["password"])
     user.save()
+    minutes = int(activation_timeout().total_seconds() // 60)
     if not user.is_active:
         url = activation_url_for(user, request)
         w3_payload = activation_payload(user, url)
@@ -138,15 +145,14 @@ def register(request):
         return Response(
             {
                 "detail": (
-                    "Акаунт створено. Лист активації — через Web3Forms "
-                    "(inbox email access key)."
-                    if email_sent
-                    else "Акаунт створено. Досилаємо лист з клієнта (Web3Forms)."
+                    f"Акаунт створено. Підтвердіть email протягом {minutes} хв, "
+                    f"інакше акаунт буде видалено. Лист — через Web3Forms."
                 ),
                 "needs_activation": True,
                 "email_sent": email_sent,
                 "server_error": server_error,
                 "web3forms_payload": None if email_sent else w3_payload,
+                "activation_timeout_minutes": minutes,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -158,13 +164,21 @@ def register(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def login_view(request):
+    purge_expired_unactivated_users()
     username = (request.data.get("username") or "").strip()
     password = request.data.get("password") or ""
     user = User.objects.filter(username=username).first()
     if user is None or not user.check_password(password):
         return _error("Невірний логін або пароль.", 401)
     if not user.is_active:
-        return _error("Акаунт не активовано.", 403)
+        if is_activation_expired(user):
+            user.delete()
+            return _error("Час підтвердження email вичерпано. Акаунт видалено — зареєструйтесь знову.", 403)
+        minutes = int(activation_timeout().total_seconds() // 60)
+        return _error(
+            f"Акаунт не активовано. Підтвердіть email протягом {minutes} хв після реєстрації.",
+            403,
+        )
     payload = _tokens(user)
     payload["user"] = MeSerializer(user, context={"request": request}).data
     return Response(payload)

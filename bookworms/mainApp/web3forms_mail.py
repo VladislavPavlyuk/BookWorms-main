@@ -46,10 +46,13 @@ def activation_url_for(user, request=None) -> str:
 
 
 def activation_payload(user, activation_url: str) -> dict[str, Any]:
+    minutes = int(getattr(settings, "ACTIVATION_TIMEOUT_MINUTES", 5))
     subject = "Підтвердження реєстрації BookWorms / Date Due Slip"
     message = (
         f"Нова реєстрація: {user.username} <{user.email}>\n\n"
-        f"Для активації акаунта відкрийте посилання:\n{activation_url}\n\n"
+        f"Для активації акаунта відкрийте посилання (дійсне {minutes} хв):\n"
+        f"{activation_url}\n\n"
+        f"Якщо email не підтвердити протягом {minutes} хвилин, акаунт буде автоматично видалено.\n"
         f"Якщо реєстрацію не запитували — ігноруйте цей лист."
     )
     return {

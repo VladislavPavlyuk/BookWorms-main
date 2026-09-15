@@ -18,6 +18,10 @@
             <p class="small text-warning">Сервер: {{ server_error }}</p>
         {% endif %}
         <hr>
+        <p class="alert alert-warning small text-start mb-3">
+            Підтвердіть email протягом <strong>{{ activation_timeout_minutes }}&nbsp;хв</strong>
+            з моменту реєстрації — інакше акаунт буде видалено автоматично.
+        </p>
         <p class="text-muted small">
             Web3Forms доставляє на адресу акаунта access key (не класичний SMTP на реєстраційний email).
             У листі — посилання активації; reply-to — email з форми реєстрації.

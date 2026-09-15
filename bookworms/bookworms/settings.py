@@ -19,6 +19,8 @@ SKIP_EMAIL_ACTIVATION = os.environ.get("SKIP_EMAIL_ACTIVATION", "").lower() in (
     "true",
     "yes",
 )
+# Неактивований акаунт видаляється, якщо email не підтверджено за N хвилин.
+ACTIVATION_TIMEOUT_MINUTES = int(os.environ.get("ACTIVATION_TIMEOUT_MINUTES", "5"))
 
 # Postgres (QNAP) → Azure SQL → SQLite
 # На Linux потрібен установлений ODBC (див. startup.sh для App Service).

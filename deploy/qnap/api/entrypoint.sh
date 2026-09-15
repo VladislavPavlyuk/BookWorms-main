@@ -18,6 +18,9 @@ PY
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
+# Фонове видалення неактивованих акаунтів (ACTIVATION_TIMEOUT_MINUTES).
+python manage.py purge_unactivated --loop 60 &
+
 if [ -n "${DJANGO_SUPERUSER_USERNAME:-}" ]; then
   python - <<'PY'
 import os

@@ -54,8 +54,17 @@ from .web3forms_mail import (
     activation_url_for,
     send_activation_email,
 )
+from .registration_service import (
+    activation_timeout,
+    is_activation_expired,
+    purge_expired_unactivated_users,
+)
 
 from .tokens import account_activation_token
+
+
+def _activation_minutes() -> int:
+    return int(activation_timeout().total_seconds() // 60)
 
 
 def home(request):
@@ -85,12 +94,22 @@ class CustomLoginView(LoginView):
     template_name = 'mainApp/login.html'
     authentication_form = UserLoginForm
 
+    def dispatch(self, request, *args, **kwargs):
+        purge_expired_unactivated_users()
+        return super().dispatch(request, *args, **kwargs)
+
 class CustomRegisterView(CreateView):
     template_name = 'mainApp/register.html'
     form_class = UserRegisterForm
     success_url = reverse_lazy('confirm_email')
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["activation_timeout_minutes"] = _activation_minutes()
+        return ctx
+
     def form_valid(self, form):
+        purge_expired_unactivated_users()
         user = form.save(commit=False)
         user.is_active = False
         user.save()
@@ -112,6 +131,7 @@ class CustomRegisterView(CreateView):
 
 
 def activate(request, uidb64, token):
+    purge_expired_unactivated_users()
     User = get_user_model()
     try:
         uid = force_str(urlsafe_base64_decode(uidb64))
@@ -119,14 +139,23 @@ def activate(request, uidb64, token):
     except (TypeError, ValueError, OverflowError, User.DoesNotExist):
         user = None
 
-    # Проверяем токен
+    if user is not None and is_activation_expired(user):
+        user.delete()
+        return render(
+            request,
+            "mainApp/activation_invalid.html",
+            {
+                "expired": True,
+                "activation_timeout_minutes": _activation_minutes(),
+            },
+        )
+
     if user is not None and account_activation_token.check_token(user, token):
         user.is_active = True
         user.save()
         login(request, user)
         return render(request, 'mainApp/activation_success.html')
-    else:
-        return render(request, 'mainApp/activation_invalid.html')
+    return render(request, 'mainApp/activation_invalid.html')
 
 
 def activation_success_view(request):
@@ -136,6 +165,7 @@ def activation_invalid_view(request):
     return render(request, 'mainApp/activation_invalid.html')
 
 def confirm_email_view(request):
+    purge_expired_unactivated_users()
     payload = request.session.pop("web3forms_activation", None)
     sent_server = request.session.pop("web3forms_sent_server", False)
     server_error = request.session.pop("web3forms_server_error", "")
@@ -147,6 +177,7 @@ def confirm_email_view(request):
             "web3forms_access_key": settings.WEB3FORMS_ACCESS_KEY,
             "sent_server": sent_server,
             "server_error": server_error,
+            "activation_timeout_minutes": _activation_minutes(),
         },
     )
 
