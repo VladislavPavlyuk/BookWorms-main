@@ -5,12 +5,27 @@
     "scheme": "datedueslip",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
-    "plugins": ["expo-router", "expo-secure-store"],
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F3E6C9"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-asset",
+      "expo-font"
+    ],
     "android": {
       "package": "com.bookworms.datedueslip",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F3E6C9"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.bookworms.datedueslip",
@@ -21,7 +36,7 @@
       }
     },
     "extra": {
-      "apiUrl": "http://192.168.0.213:8088"
+      "apiUrl": "http://192.168.0.213:18088"
     }
   }
 }

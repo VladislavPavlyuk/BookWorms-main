@@ -1,8 +1,9 @@
-# QNAP TS-233 (ARM64, 2GB RAM) — Postgres + Django API + Nginx
-# Container Station: Application → Create → docker-compose
-# Порт 8088, щоб не битися з UI QNAP (8080/443).
+# QNAP TS-233: НЕ створювати user-defined bridge (lan) —
+# QNET вішає NAT/dnsmasq на br-* → "dnsmasg add fail".
+# docker0 + links: DNS імен postgres/api через /etc/hosts.
 #
-# cp deploy/qnap/.env.example .env
+# cd /share/Container/BookWorms-main
+# cp deploy/qnap/.env.example .env && vi .env
 # docker compose -f docker-compose.qnap.yml up -d --build
 
 name: date-due-slip
@@ -10,7 +11,9 @@ name: date-due-slip
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: dds-postgres
     restart: unless-stopped
+    network_mode: bridge
     env_file:
       - .env
     environment:
@@ -35,18 +38,20 @@ services:
       timeout: 5s
       retries: 10
     mem_limit: 256m
-    networks:
-      - lan
 
   api:
     build:
       context: .
       dockerfile: deploy/qnap/api/Dockerfile
+    container_name: dds-api
     restart: unless-stopped
+    network_mode: bridge
     env_file:
       - .env
     depends_on:
       - postgres
+    links:
+      - postgres:postgres
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
@@ -56,7 +61,7 @@ services:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
       DEBUG: ${DEBUG:-0}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-192.168.0.213,localhost,127.0.0.1,api}
-      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://192.168.0.213:8088}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://192.168.0.213:18088}
       SKIP_EMAIL_ACTIVATION: ${SKIP_EMAIL_ACTIVATION:-1}
       DEFAULT_LOAN_DAYS: ${DEFAULT_LOAN_DAYS:-14}
       TIME_ZONE: ${TIME_ZONE:-Europe/Kyiv}
@@ -69,29 +74,25 @@ services:
       - media:/app/media
       - staticfiles:/app/staticfiles
     mem_limit: 384m
-    networks:
-      - lan
 
   nginx:
     image: nginx:1.27-alpine
+    container_name: dds-nginx
     restart: unless-stopped
+    network_mode: bridge
     depends_on:
       - api
+    links:
+      - api:api
     ports:
-      - "8088:80"
+      - "18088:80"
     volumes:
       - ./deploy/qnap/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - media:/app/media:ro
       - staticfiles:/app/staticfiles:ro
     mem_limit: 32m
-    networks:
-      - lan
 
 volumes:
   pgdata:
   media:
   staticfiles:
-
-networks:
-  lan:
-    driver: bridge
