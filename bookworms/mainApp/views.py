@@ -112,18 +112,20 @@ class CustomRegisterView(CreateView):
         purge_expired_unactivated_users()
         user = form.save(commit=False)
         user.is_active = False
+        user.email_confirmed = False
         user.save()
 
         url = activation_url_for(user, self.request)
         payload = activation_payload(user, url)
         # Для клієнтського fallback (free Web3Forms рекомендує browser-side).
         self.request.session["web3forms_activation"] = payload
+        self.request.session["activation_url"] = url
 
         try:
             send_activation_email(user, self.request)
             self.request.session["web3forms_sent_server"] = True
         except Web3FormsError as e:
-            # Не відкочуємо юзера: сторінка confirm_email дошле через JS.
+            # Не відкочуємо юзера: сторінка confirm_email дошле через JS + покаже лінк.
             self.request.session["web3forms_sent_server"] = False
             self.request.session["web3forms_server_error"] = str(e)
 
@@ -152,6 +154,7 @@ def activate(request, uidb64, token):
 
     if user is not None and account_activation_token.check_token(user, token):
         user.is_active = True
+        user.email_confirmed = True
         user.save()
         login(request, user)
         return render(request, 'mainApp/activation_success.html')
@@ -169,6 +172,7 @@ def confirm_email_view(request):
     payload = request.session.pop("web3forms_activation", None)
     sent_server = request.session.pop("web3forms_sent_server", False)
     server_error = request.session.pop("web3forms_server_error", "")
+    activation_url = request.session.pop("activation_url", "") or ""
     return render(
         request,
         "mainApp/confirm_email.html",
@@ -177,6 +181,7 @@ def confirm_email_view(request):
             "web3forms_access_key": settings.WEB3FORMS_ACCESS_KEY,
             "sent_server": sent_server,
             "server_error": server_error,
+            "activation_url": activation_url,
             "activation_timeout_minutes": _activation_minutes(),
         },
     )

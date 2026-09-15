@@ -21,6 +21,13 @@ class AvatarCollection(models.Model):
 class CustomUser(AbstractUser):
     biography = models.CharField(max_length=500, blank=True, verbose_name="Біографія")
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name="Аватар")
+    # False = чекає підтвердження (лінк / Web3Forms). Purge дивиться на це поле, не лише is_active.
+    email_confirmed = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name="Email підтверджено",
+        help_text="False після реєстрації до активації; True для суперюзерів і після confirm.",
+    )
 
     def __str__(self):
         return self.username

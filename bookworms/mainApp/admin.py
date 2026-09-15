@@ -5,9 +5,27 @@ from .models import AvatarCollection
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
-    fieldsets = UserAdmin.fieldsets + (
-        (None, {'fields': ('biography', 'avatar')}),
+    list_display = (
+        "username",
+        "email",
+        "is_active",
+        "email_confirmed",
+        "date_joined",
+        "is_staff",
     )
+    list_filter = ("is_active", "email_confirmed", "is_staff", "date_joined")
+    actions = ("purge_expired_unconfirmed",)
+    fieldsets = UserAdmin.fieldsets + (
+        (None, {"fields": ("biography", "avatar", "email_confirmed")}),
+    )
+
+    @admin.action(description="Видалити прострочених непідтверджених (email_confirmed=False)")
+    def purge_expired_unconfirmed(self, request, queryset):
+        from .registration_service import purge_expired_unactivated_users
+
+        n = purge_expired_unactivated_users()
+        self.message_user(request, f"Видалено: {n}")
+
 
 admin.site.register(CustomUser, CustomUserAdmin)
 @admin.register(Post)

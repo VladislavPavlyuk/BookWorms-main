@@ -12,11 +12,19 @@ WORKDIR /app
 COPY requirements-nas.txt /app/requirements-nas.txt
 RUN pip install -r /app/requirements-nas.txt
 
+# CACHEBUST ламає Docker layer cache після sync файлів на NAS.
+ARG CACHEBUST=1
+RUN echo "cachebust=${CACHEBUST}" > /tmp/cachebust
+
 COPY bookworms/ /app/
 
 COPY deploy/qnap/api/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh \
-    && mkdir -p /app/media /app/staticfiles
+    && mkdir -p /app/media /app/staticfiles \
+    && test -f /app/mainApp/middleware.py \
+    && test -f /app/mainApp/migrations/0013_customuser_email_confirmed.py \
+    && grep -q purged_now /app/api/views.py \
+    && grep -q "purge loop" /entrypoint.sh
 
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]

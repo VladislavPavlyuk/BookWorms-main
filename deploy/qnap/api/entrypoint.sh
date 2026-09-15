@@ -18,9 +18,6 @@ PY
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
-# Фонове видалення неактивованих акаунтів (ACTIVATION_TIMEOUT_MINUTES).
-python manage.py purge_unactivated --loop 60 &
-
 if [ -n "${DJANGO_SUPERUSER_USERNAME:-}" ]; then
   python - <<'PY'
 import os
@@ -36,16 +33,48 @@ if not User.objects.filter(username=u).exists():
         email=os.environ.get("DJANGO_SUPERUSER_EMAIL", "admin@local"),
         password=os.environ["DJANGO_SUPERUSER_PASSWORD"],
     )
-    print("superuser created")
+    print("superuser created", flush=True)
 else:
-    print("superuser exists")
+    print("superuser exists", flush=True)
 PY
 fi
 
-exec gunicorn bookworms.wsgi:application \
+PURGE_INTERVAL="${PURGE_UNACTIVATED_INTERVAL:-30}"
+PURGE_PID=""
+GUNI_PID=""
+
+term() {
+  echo "entrypoint: shutting down..."
+  [ -n "$GUNI_PID" ] && kill -TERM "$GUNI_PID" 2>/dev/null || true
+  [ -n "$PURGE_PID" ] && kill -TERM "$PURGE_PID" 2>/dev/null || true
+  wait 2>/dev/null || true
+  exit 0
+}
+trap term TERM INT
+
+# Окремий процес purge — shell лишається PID1 і тримає обидва.
+if [ "${PURGE_UNACTIVATED:-1}" = "1" ] || [ "${PURGE_UNACTIVATED:-1}" = "true" ]; then
+  (
+    echo "entrypoint: purge loop every ${PURGE_INTERVAL}s" >&2
+    while true; do
+      python manage.py purge_unactivated || echo "purge command failed" >&2
+      sleep "${PURGE_INTERVAL}"
+    done
+  ) &
+  PURGE_PID=$!
+  echo "entrypoint: purge pid ${PURGE_PID}" >&2
+fi
+
+gunicorn bookworms.wsgi:application \
+  --config bookworms/gunicorn.conf.py \
   --bind 0.0.0.0:8000 \
   --workers "${GUNICORN_WORKERS:-1}" \
   --threads "${GUNICORN_THREADS:-2}" \
   --timeout 60 \
   --access-logfile - \
-  --error-logfile -
+  --error-logfile - &
+GUNI_PID=$!
+echo "entrypoint: gunicorn pid ${GUNI_PID}" >&2
+
+wait "$GUNI_PID"
+term

@@ -2,8 +2,7 @@
 Відправка листів через Web3Forms (https://api.web3forms.com/submit).
 
 Лист приходить на email, верифікований у кабінеті Web3Forms для access_key
-(не на довільну адресу отримувача — це не SMTP). Поле email/replyto —
-адреса нового користувача для відповіді; посилання активації в body.
+(не на довільну адресу отримувача — це не SMTP).
 """
 from __future__ import annotations
 
@@ -11,6 +10,7 @@ import json
 import logging
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from django.conf import settings
@@ -45,40 +45,38 @@ def activation_url_for(user, request=None) -> str:
     return f"{public_base_url(request)}{path}"
 
 
-def activation_payload(user, activation_url: str) -> dict[str, Any]:
+def activation_message(user, activation_url: str) -> str:
     minutes = int(getattr(settings, "ACTIVATION_TIMEOUT_MINUTES", 5))
-    subject = "Підтвердження реєстрації BookWorms / Date Due Slip"
-    message = (
-        f"Нова реєстрація: {user.username} <{user.email}>\n\n"
-        f"Для активації акаунта відкрийте посилання (дійсне {minutes} хв):\n"
-        f"{activation_url}\n\n"
-        f"Якщо email не підтвердити протягом {minutes} хвилин, акаунт буде автоматично видалено.\n"
-        f"Якщо реєстрацію не запитували — ігноруйте цей лист."
+    return (
+        f"Нова реєстрація Date Due Slip / BookWorms\n\n"
+        f"Логін: {user.username}\n"
+        f"Email (reply): {user.email}\n\n"
+        f"Активація (дійсна {minutes} хв):\n{activation_url}\n\n"
+        f"Якщо не підтвердити за {minutes} хв — акаунт буде видалено."
     )
+
+
+def activation_payload(user, activation_url: str) -> dict[str, Any]:
+    """
+    Тільки поля, які Web3Forms офіційно очікує.
+    Кастомні ключі інколи ламають доставку на free-плані.
+    """
     return {
-        "access_key": settings.WEB3FORMS_ACCESS_KEY,
-        "subject": subject,
-        "from_name": "BookWorms",
-        "email": user.email,
-        "replyto": user.email,
+        "access_key": (settings.WEB3FORMS_ACCESS_KEY or "").strip(),
+        "subject": "Date Due Slip — підтвердження реєстрації",
+        "from_name": "Date Due Slip",
         "name": user.username,
-        "message": message,
-        "activation_url": activation_url,
-        "botcheck": False,
+        "email": user.email,
+        "message": activation_message(user, activation_url),
     }
 
 
-def send_web3forms(payload: dict[str, Any]) -> dict[str, Any]:
-    key = (payload.get("access_key") or "").strip()
-    if not key:
-        raise Web3FormsError("WEB3FORMS_ACCESS_KEY не задано.")
-
-    body = json.dumps(payload).encode("utf-8")
+def _post(body: bytes, content_type: str) -> dict[str, Any]:
     req = Request(
         WEB3FORMS_ENDPOINT,
         data=body,
         headers={
-            "Content-Type": "application/json",
+            "Content-Type": content_type,
             "Accept": "application/json",
             "User-Agent": "BookWorms/DateDueSlip",
         },
@@ -90,19 +88,43 @@ def send_web3forms(payload: dict[str, Any]) -> dict[str, Any]:
             status = getattr(resp, "status", 200)
     except HTTPError as e:
         raw = e.read().decode("utf-8", errors="replace")
+        print(f"Web3Forms HTTPError {e.code}: {raw[:400]}", flush=True)
         raise Web3FormsError(f"Web3Forms HTTP {e.code}: {raw[:300]}") from e
     except URLError as e:
-        raise Web3FormsError(f"Мережа: {e.reason!s}") from e
+        print(f"Web3Forms URLError: {e.reason}", flush=True)
+        raise Web3FormsError(f"Мережа (контейнер→api.web3forms.com): {e.reason!s}") from e
 
     try:
         data = json.loads(raw) if raw else {}
     except json.JSONDecodeError as e:
         raise Web3FormsError(f"Некоректна відповідь Web3Forms: {raw[:200]}") from e
 
+    print(f"Web3Forms OK? status={status} body={raw[:400]}", flush=True)
     if status >= 400 or data.get("success") is False:
-        msg = data.get("message") or data.get("body", {}).get("message") or raw[:200]
+        msg = data.get("message") or raw[:200]
         raise Web3FormsError(str(msg))
     return data
+
+
+def send_web3forms(payload: dict[str, Any]) -> dict[str, Any]:
+    key = (payload.get("access_key") or "").strip()
+    if not key:
+        raise Web3FormsError("WEB3FORMS_ACCESS_KEY не задано.")
+
+    # 1) form-urlencoded — найсумісніший варіант для Web3Forms
+    try:
+        return _post(
+            urlencode(payload).encode("utf-8"),
+            "application/x-www-form-urlencoded",
+        )
+    except Web3FormsError as first:
+        logger.warning("Web3Forms form-urlencoded failed: %s — retry JSON", first)
+
+    # 2) JSON fallback
+    return _post(
+        json.dumps(payload).encode("utf-8"),
+        "application/json",
+    )
 
 
 def send_activation_email(user, request=None) -> str:

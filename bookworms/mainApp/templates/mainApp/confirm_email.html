@@ -4,54 +4,65 @@
 <div class="container mt-5 text-center">
     <div class="card shadow p-5">
         <h2 class="text-primary">Майже готово</h2>
-        <p class="lead mt-3">Надсилаємо лист підтвердження через Web3Forms.</p>
+        <p class="lead mt-3">Активація акаунта</p>
+
+        {% if activation_url %}
+        <div class="alert alert-success text-start">
+            <strong>Лінк активації (відкрий прямо зараз):</strong>
+            <p class="mb-2 mt-2" style="word-break:break-all">
+                <a id="act-link" href="{{ activation_url }}">{{ activation_url }}</a>
+            </p>
+            <a class="btn btn-primary" href="{{ activation_url }}">Активувати акаунт</a>
+        </div>
+        {% endif %}
+
         <p id="w3-status" class="text-muted">
-            {% if sent_server %}
-                Лист надіслано (сервер). Перевірте inbox email, прив’язаний до ключа Web3Forms.
-            {% elif web3forms_payload %}
-                Відправка з браузера…
+            {% if web3forms_payload %}
+                Паралельно надсилаємо через Web3Forms…
+            {% elif sent_server %}
+                Сервер спробував Web3Forms. Якщо листа немає — використай лінк вище.
             {% else %}
-                Якщо щойно реєструвались — перевірте пошту Web3Forms або зареєструйтесь знову.
+                Немає payload у сесії (онови сторінку одразу після реєстрації з того ж origin).
             {% endif %}
         </p>
-        {% if server_error and not sent_server %}
-            <p class="small text-warning">Сервер: {{ server_error }}</p>
+        {% if server_error %}
+            <p class="small text-warning">Сервер Web3Forms: {{ server_error }}</p>
         {% endif %}
         <hr>
         <p class="alert alert-warning small text-start mb-3">
-            Підтвердіть email протягом <strong>{{ activation_timeout_minutes }}&nbsp;хв</strong>
-            з моменту реєстрації — інакше акаунт буде видалено автоматично.
+            Підтверди протягом <strong>{{ activation_timeout_minutes }}&nbsp;хв</strong>
+            — інакше акаунт видалять. Лист Web3Forms (якщо дійде) йде на
+            <em>inbox власника access key</em>, не на email з форми.
         </p>
-        <p class="text-muted small">
-            Web3Forms доставляє на адресу акаунта access key (не класичний SMTP на реєстраційний email).
-            У листі — посилання активації; reply-to — email з форми реєстрації.
-        </p>
+        <pre id="w3-debug" class="small text-start text-muted" style="white-space:pre-wrap"></pre>
     </div>
 </div>
-{% if web3forms_payload and not sent_server %}
+{% if web3forms_payload %}
 {{ web3forms_payload|json_script:"web3forms-payload" }}
 <script>
 (function () {
   var el = document.getElementById("web3forms-payload");
   var status = document.getElementById("w3-status");
+  var debug = document.getElementById("w3-debug");
   if (!el) return;
   var payload = JSON.parse(el.textContent);
-  status.textContent = "Відправка через Web3Forms…";
-  fetch("https://api.web3forms.com/submit", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify(payload)
-  })
-    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  status.textContent = "Відправка через Web3Forms (FormData)…";
+  var fd = new FormData();
+  Object.keys(payload).forEach(function (k) {
+    if (payload[k] !== undefined && payload[k] !== null) fd.append(k, String(payload[k]));
+  });
+  fetch("https://api.web3forms.com/submit", { method: "POST", body: fd })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
     .then(function (res) {
       if (res.ok && res.j.success !== false) {
-        status.textContent = "Лист надіслано. Перевірте inbox Web3Forms.";
+        status.textContent = "Web3Forms прийняв запит. Немає листа → тисни лінк активації вище.";
       } else {
-        status.textContent = "Помилка: " + (res.j.message || JSON.stringify(res.j));
+        status.textContent = "Web3Forms помилка: " + (res.j.message || JSON.stringify(res.j));
       }
+      if (debug) debug.textContent = "HTTP " + res.status + " " + JSON.stringify(res.j);
     })
     .catch(function (e) {
-      status.textContent = "Мережева помилка: " + e;
+      status.textContent = "Мережева помилка Web3Forms: " + e + " — використай лінк активації.";
     });
 })();
 </script>

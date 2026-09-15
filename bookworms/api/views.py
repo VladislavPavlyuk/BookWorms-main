@@ -11,6 +11,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
+import logging
+
 from mainApp.exchange_service import (
     accept_exchange_request,
     cancel_exchange_request,
@@ -66,6 +68,7 @@ from .serializers import (
 )
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 def _tokens(user):
@@ -113,7 +116,39 @@ def _posts_same_book(book):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health(request):
-    return Response({"status": "ok", "app": "date-due-slip"})
+    from mainApp.registration_service import purge_expired_unactivated_users, purge_status
+    from mainApp.web3forms_mail import Web3FormsError, send_web3forms
+
+    purged = purge_expired_unactivated_users()
+    st = purge_status()
+    payload = {
+        "status": "ok",
+        "app": "date-due-slip",
+        "code_rev": "2026-09-15-purge-v3",
+        "purged_now": purged,
+        **st,
+        "web3forms_key_set": bool(getattr(settings, "WEB3FORMS_ACCESS_KEY", "")),
+        "web3forms_key_suffix": (getattr(settings, "WEB3FORMS_ACCESS_KEY", "") or "")[-6:],
+        "public_base_url": getattr(settings, "PUBLIC_BASE_URL", "") or None,
+    }
+    if request.GET.get("test_mail") == "1":
+        try:
+            send_web3forms(
+                {
+                    "access_key": settings.WEB3FORMS_ACCESS_KEY,
+                    "subject": "Date Due Slip — health test",
+                    "from_name": "Date Due Slip",
+                    "name": "health-check",
+                    "email": "health@localhost",
+                    "message": "Тестовий ping з /api/health/?test_mail=1 — якщо бачиш цей лист, Web3Forms працює.",
+                }
+            )
+            payload["web3forms_test"] = "accepted"
+        except Web3FormsError as e:
+            payload["web3forms_test"] = f"failed: {e}"
+        except Exception as e:
+            payload["web3forms_test"] = f"error: {e}"
+    return Response(payload)
 
 
 @api_view(["POST"])
@@ -127,6 +162,7 @@ def register(request):
         email=ser.validated_data["email"],
         biography=ser.validated_data.get("biography") or "",
         is_active=bool(settings.SKIP_EMAIL_ACTIVATION),
+        email_confirmed=bool(settings.SKIP_EMAIL_ACTIVATION),
     )
     user.set_password(ser.validated_data["password"])
     user.save()
@@ -140,18 +176,21 @@ def register(request):
             send_activation_email(user, request)
             email_sent = True
         except Web3FormsError as e:
-            # Free Web3Forms часто блокує server-side — клієнт дошле payload.
+            # Free Web3Forms часто блокує server-side / порожній key —
+            # клієнт завжди отримує payload і досилає з IP телефону.
             server_error = str(e)
+            logger.warning("Web3Forms server send failed: %s", e)
         return Response(
             {
                 "detail": (
-                    f"Акаунт створено. Підтвердіть email протягом {minutes} хв, "
-                    f"інакше акаунт буде видалено. Лист — через Web3Forms."
+                    f"Акаунт створено. Підтвердіть протягом {minutes} хв "
+                    f"(лінк нижче / лист Web3Forms на inbox власника ключа)."
                 ),
                 "needs_activation": True,
                 "email_sent": email_sent,
                 "server_error": server_error,
-                "web3forms_payload": None if email_sent else w3_payload,
+                "web3forms_payload": w3_payload,
+                "activation_url": url,
                 "activation_timeout_minutes": minutes,
             },
             status=status.HTTP_201_CREATED,

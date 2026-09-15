@@ -36,33 +36,42 @@ export default function Register() {
       }
       if (data.web3forms_payload) {
         try {
+          const fd = new FormData();
+          for (const [k, v] of Object.entries(data.web3forms_payload)) {
+            if (v !== undefined && v !== null) fd.append(k, String(v));
+          }
           const res = await fetch("https://api.web3forms.com/submit", {
             method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify(data.web3forms_payload),
+            body: fd,
           });
           const body = await res.json();
           if (!res.ok || body.success === false) {
             Alert.alert(
               "Реєстрація",
-              `Акаунт створено, але лист не пішов: ${body.message || res.status}. ${data.server_error || ""}`
+              `Акаунт створено. Web3Forms: ${body.message || res.status}. Використай лінк з наступного вікна.`
             );
-            router.replace("/(auth)/login");
-            return;
           }
         } catch (err) {
-          Alert.alert("Реєстрація", `Акаунт створено. Web3Forms: ${String(err)}`);
-          router.replace("/(auth)/login");
-          return;
+          Alert.alert("Реєстрація", `Акаунт створено. Web3Forms offline: ${String(err)}`);
         }
+      } else if (data.needs_activation && !data.activation_url) {
+        Alert.alert(
+          "Реєстрація",
+          `Акаунт створено, але немає activation_url/payload. ${data.server_error || "Оновіть api на NAS."}`
+        );
+        router.replace("/(auth)/login");
+        return;
       }
       Alert.alert(
         "Реєстрація",
-        (data.detail ||
-          "Перевірте inbox Web3Forms і відкрийте посилання активації.") +
-          (data.activation_timeout_minutes
-            ? `\n\nУвага: маєте ${data.activation_timeout_minutes} хв, інакше акаунт видалять.`
-            : "\n\nУвага: маєте 5 хв на підтвердження, інакше акаунт видалять.")
+        [
+          data.detail || "Акаунт створено.",
+          data.activation_url ? `\n\nЛінк активації:\n${data.activation_url}` : "",
+          data.activation_timeout_minutes
+            ? `\n\nМаєш ${data.activation_timeout_minutes} хв, інакше акаунт видалять.`
+            : "\n\nМаєш 5 хв на підтвердження.",
+          "\n\nЛист Web3Forms (якщо дійде) — на inbox власника ключа, не на твій email з форми.",
+        ].join("")
       );
       router.replace("/(auth)/login");
     } catch (e) {

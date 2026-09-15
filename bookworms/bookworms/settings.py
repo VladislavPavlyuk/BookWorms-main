@@ -90,6 +90,14 @@ for _o in (_x.strip() for _x in _csrf.split(",") if _x.strip()):
         _o if "://" in _o else f"https://{_o}"
     )
 
+# За nginx (Host / scheme з X-Forwarded-*).
+USE_X_FORWARDED_HOST = os.environ.get("USE_X_FORWARDED_HOST", "1").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -101,7 +109,7 @@ INSTALLED_APPS = [
 
     # Твои приложения
     'bookworms',
-    'mainApp',
+    'mainApp.apps.MainappConfig',
     'profileApp',
     'rest_framework',
     'rest_framework_simplejwt',
@@ -119,6 +127,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'mainApp.middleware.PurgeUnactivatedMiddleware',
 ]
 
 ROOT_URLCONF = 'bookworms.urls'
@@ -176,10 +185,12 @@ LOGIN_URL = 'login'
 
 # --- Пошта: Web3Forms (замість Mailtrap/SMTP) ---
 # Лист іде на email, прив’язаний до access_key у кабінеті web3forms.com.
-WEB3FORMS_ACCESS_KEY = os.environ.get(
-    "WEB3FORMS_ACCESS_KEY",
-    "d76edac5-49fd-4574-b89b-45e24170aeab",
-)
+# Увага: compose часто сетить WEB3FORMS_ACCESS_KEY="" — os.environ.get тоді
+# НЕ падає на default (порожній рядок ≠ відсутній ключ).
+_WEB3FORMS_DEFAULT_KEY = "d76edac5-49fd-4574-b89b-45e24170aeab"
+WEB3FORMS_ACCESS_KEY = (
+    os.environ.get("WEB3FORMS_ACCESS_KEY") or _WEB3FORMS_DEFAULT_KEY
+).strip()
 # Публічний origin для лінка активації (NAS): http://192.168.0.213:18088
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@bookworms.local")
