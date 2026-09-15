@@ -1,51 +1,61 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
-import { ApiError, BrowseApi, ExchangeApi } from "../../src/api";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { ApiError, BrowseApi } from "../../src/api";
+import { RequestModal } from "../../src/RequestModal";
+import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
 import type { Shelf, User } from "../../src/types";
 
 export default function UserShelf() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
+  const router = useRouter();
   const [owner, setOwner] = useState<User | null>(null);
   const [shelves, setShelves] = useState<Shelf[]>([]);
+  const [isOwn, setIsOwn] = useState(false);
+  const [myOwned, setMyOwned] = useState<Shelf[]>([]);
+  const [target, setTarget] = useState<Shelf | null>(null);
+
+  const load = async () => {
+    const [d, browse] = await Promise.all([BrowseApi.user(Number(id)), BrowseApi.list()]);
+    setOwner(d.user);
+    setShelves(d.shelves);
+    setIsOwn(d.is_own);
+    setMyOwned(browse.my_owned);
+  };
 
   useEffect(() => {
-    BrowseApi.user(Number(id))
-      .then((d) => {
-        setOwner(d.user);
-        setShelves(d.shelves);
-      })
-      .catch((e) => Alert.alert("Полиця", e instanceof ApiError ? e.message : String(e)));
+    load().catch((e) => Alert.alert("Полиця", e instanceof ApiError ? e.message : String(e)));
   }, [id]);
-
-  const borrow = async (s: Shelf) => {
-    try {
-      await ExchangeApi.create(s.id);
-      Alert.alert("Запит", "Надіслано.");
-    } catch (e) {
-      Alert.alert("Запит", e instanceof ApiError ? e.message : String(e));
-    }
-  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.paper }} contentContainerStyle={{ padding: 16 }}>
       <Text style={styles.h}>{owner?.username}</Text>
-      <Text style={styles.bio}>{owner?.biography}</Text>
+      <Text style={styles.bio}>{owner?.biography || "—"}</Text>
       {shelves.map((s) => (
         <View key={s.id} style={styles.card}>
-          <Text style={styles.title}>{s.book.title}</Text>
+          <Pressable onPress={() => router.push(`/book/${s.book.id}`)}>
+            <Text style={styles.title}>{s.book.title}</Text>
+          </Pressable>
           <Text style={styles.meta}>
             {s.borrowed_from ? `позичено у ${s.borrowed_from.username}` : "власна"}
             {s.due_date ? ` · до ${s.due_date}` : ""}
+            {` · ${s.book.reader_age_summary}`}
           </Text>
-          {!s.borrowed_from && (
-            <Pressable onPress={() => borrow(s)}>
-              <Text style={styles.act}>Позичити</Text>
+          {!isOwn && !s.borrowed_from && user && (
+            <Pressable onPress={() => setTarget(s)}>
+              <Text style={styles.act}>Позичити / обмін</Text>
+            </Pressable>
+          )}
+          {!isOwn && !s.borrowed_from && (
+            <Pressable onPress={() => router.push({ pathname: "/post/new", params: { book_id: String(s.book.id) } })}>
+              <Text style={[styles.act, { color: colors.muted }]}>Написати пост (якщо книга у вас)</Text>
             </Pressable>
           )}
         </View>
       ))}
+      <RequestModal target={target} myOwned={myOwned} onClose={() => setTarget(null)} onDone={load} />
     </ScrollView>
   );
 }

@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { DEFAULT_API } from "./theme";
 import type {
   Book,
+  Comment,
   Exchange,
   Message,
   Paginated,
@@ -126,28 +127,41 @@ export const AuthApi = {
       { method: "POST", body: { username, email, password, biography }, auth: false }
     ),
   me: () => api<User>("/api/auth/me/"),
+  updateMe: (body: { username?: string; biography?: string }) =>
+    api<User>("/api/auth/me/", { method: "PATCH", body }),
 };
 
 export const FeedApi = {
   list: (page = 1, filter?: "my") =>
     api<Paginated<Post>>(`/api/posts/?page=${page}${filter === "my" ? "&filter=my" : ""}`),
+  get: (id: number) => api<Post>(`/api/posts/${id}/`),
   create: (body: { title: string; text: string; book_id?: number; confirm_new_post?: boolean }) =>
     api<Post>("/api/posts/create/", { method: "POST", body }),
+  update: (id: number, body: { title: string; text: string }) =>
+    api<Post>(`/api/posts/${id}/`, { method: "PATCH", body }),
+  remove: (id: number) => api(`/api/posts/${id}/`, { method: "DELETE" }),
   like: (id: number) => api<{ liked: boolean; likes_count: number }>(`/api/posts/${id}/like/`, { method: "POST" }),
   comment: (id: number, text: string) =>
-    api(`/api/posts/${id}/comments/`, { method: "POST", body: { text } }),
+    api<Comment>(`/api/posts/${id}/comments/`, { method: "POST", body: { text } }),
 };
 
 export const ShelfApi = {
   mine: () => api<{ shelves: Shelf[]; pending_returns: Shelf[] }>("/api/shelf/"),
   addIsbn: (isbn: string) => api<Shelf>("/api/shelf/isbn/", { method: "POST", body: { isbn } }),
-  addManual: (body: Record<string, string>) =>
-    api<Shelf>("/api/shelf/manual/", { method: "POST", body }),
+  addManual: (body: {
+    isbn: string;
+    title: string;
+    authors?: string;
+    publisher?: string;
+    publish_date?: string;
+    cover_url?: string;
+    info_url?: string;
+  }) => api<Shelf>("/api/shelf/manual/", { method: "POST", body }),
   remove: (id: number) => api(`/api/shelf/${id}/`, { method: "DELETE" }),
   returnBook: (id: number) => api(`/api/shelf/${id}/return/`, { method: "POST" }),
   confirmReturn: (id: number) => api(`/api/shelf/${id}/confirm-return/`, { method: "POST" }),
   readerAge: (id: number, min_readers_age: number, max_readers_age: number) =>
-    api(`/api/shelf/${id}/reader-age/`, { method: "POST", body: { min_readers_age, max_readers_age } }),
+    api<Book>(`/api/shelf/${id}/reader-age/`, { method: "POST", body: { min_readers_age, max_readers_age } }),
 };
 
 export const SlipApi = {
@@ -166,7 +180,7 @@ export const ExchangeApi = {
   list: () =>
     api<{ pending_in: Exchange[]; pending_out: Exchange[]; history: Exchange[] }>("/api/exchanges/"),
   create: (target_shelf_id: number, offer_shelf_id?: number | null) =>
-    api("/api/exchanges/create/", {
+    api<{ created: Exchange[]; errors: string[] }>("/api/exchanges/create/", {
       method: "POST",
       body: { target_shelf_id, offer_shelf_id: offer_shelf_id || null },
     }),
