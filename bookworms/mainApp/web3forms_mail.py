@@ -132,3 +132,30 @@ def send_activation_email(user, request=None) -> str:
     url = activation_url_for(user, request)
     send_web3forms(activation_payload(user, url))
     return url
+
+
+def stash_web3forms_bridge(payload: dict[str, Any], activation_url: str, request=None) -> str:
+    """
+    Free Web3Forms блокує server-side і React Native fetch (немає browser Origin).
+    Зберігаємо payload і віддаємо URL HTML-сторінки, яка шле FormData з браузера.
+    """
+    import secrets
+
+    from django.core.cache import cache
+
+    token = secrets.token_urlsafe(24)
+    cache.set(
+        f"w3bridge:{token}",
+        {"payload": payload, "activation_url": activation_url},
+        timeout=600,
+    )
+    return f"{public_base_url(request)}/register/send-web3forms/{token}/"
+
+
+def pop_web3forms_bridge(token: str) -> dict[str, Any] | None:
+    from django.core.cache import cache
+
+    key = f"w3bridge:{token}"
+    data = cache.get(key)
+    # не pop одразу — дозволити reload сторінки раз; TTL 10 хв
+    return data if isinstance(data, dict) else None

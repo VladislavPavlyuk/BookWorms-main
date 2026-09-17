@@ -1,11 +1,28 @@
 import { useCallback, useState } from "react";
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useFocusEffect } from "expo-router";
+import {
+  Alert,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, SlipApi } from "../../src/api";
+import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
 import type { Shelf } from "../../src/types";
 
-function Slip({ s, role }: { s: Shelf; role: "borrowed" | "lent" }) {
+function Slip({
+  s,
+  role,
+  onChat,
+}: {
+  s: Shelf;
+  role: "borrowed" | "lent";
+  onChat?: () => void;
+}) {
   const overdue = s.is_overdue;
   return (
     <View style={[styles.slip, overdue && styles.overdue]}>
@@ -18,7 +35,9 @@ function Slip({ s, role }: { s: Shelf; role: "borrowed" | "lent" }) {
         </Text>
         {s.days_left != null && (
           <Text style={styles.days}>
-            {overdue ? `${Math.abs(s.days_left)} дн. прострочено` : `${s.days_left} дн. лишилось`}
+            {overdue
+              ? `${Math.abs(s.days_left)} дн. прострочено`
+              : `${s.days_left} дн. лишилось`}
           </Text>
         )}
       </View>
@@ -28,11 +47,20 @@ function Slip({ s, role }: { s: Shelf; role: "borrowed" | "lent" }) {
           : `У ${s.user.username}`}
         {s.return_pending ? " · повернення надіслано" : ""}
       </Text>
+      {onChat && (
+        <Pressable onPress={onChat}>
+          <Text style={styles.chat}>
+            {role === "borrowed" ? "Чат з власником" : "Чат з позичальником"}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
 
 export default function Slips() {
+  const router = useRouter();
+  const { user } = useAuth();
   const [borrowed, setBorrowed] = useState<Shelf[]>([]);
   const [lent, setLent] = useState<Shelf[]>([]);
   const [loanDays, setLoanDays] = useState(14);
@@ -47,7 +75,9 @@ export default function Slips() {
 
   useFocusEffect(
     useCallback(() => {
-      load().catch((e) => Alert.alert("Slips", e instanceof ApiError ? e.message : String(e)));
+      load().catch((e) =>
+        Alert.alert("Slips", e instanceof ApiError ? e.message : String(e))
+      );
     }, [])
   );
 
@@ -66,18 +96,56 @@ export default function Slips() {
         />
       }
     >
-      <Text style={styles.hint}>Стандартний термін позики: {loanDays} днів від прийняття запиту.</Text>
+      <Text style={styles.hint}>
+        Стандартний термін позики: {loanDays} днів від прийняття запиту.
+      </Text>
       <Text style={styles.sec}>Мої позики</Text>
-      {borrowed.length === 0 ? <Text style={styles.empty}>Немає позичених книг</Text> : borrowed.map((s) => <Slip key={s.id} s={s} role="borrowed" />)}
+      {borrowed.length === 0 ? (
+        <Text style={styles.empty}>Немає позичених книг</Text>
+      ) : (
+        borrowed.map((s) => (
+          <Slip
+            key={s.id}
+            s={s}
+            role="borrowed"
+            onChat={
+              s.borrowed_from
+                ? () => router.push(`/chat/${s.borrowed_from!.id}`)
+                : undefined
+            }
+          />
+        ))
+      )}
       <Text style={styles.sec}>Видано мною</Text>
-      {lent.length === 0 ? <Text style={styles.empty}>Ніхто не тримає ваші книги</Text> : lent.map((s) => <Slip key={s.id} s={s} role="lent" />)}
+      {lent.length === 0 ? (
+        <Text style={styles.empty}>Ніхто не тримає ваші книги</Text>
+      ) : (
+        lent.map((s) => (
+          <Slip
+            key={s.id}
+            s={s}
+            role="lent"
+            onChat={
+              s.user.id !== user?.id
+                ? () => router.push(`/chat/${s.user.id}`)
+                : undefined
+            }
+          />
+        ))
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   hint: { color: colors.muted, marginBottom: 16, fontSize: 13 },
-  sec: { color: colors.ink, fontWeight: "800", letterSpacing: 1, marginBottom: 8, marginTop: 8 },
+  sec: {
+    color: colors.ink,
+    fontWeight: "800",
+    letterSpacing: 1,
+    marginBottom: 8,
+    marginTop: 8,
+  },
   empty: { color: colors.muted, marginBottom: 16 },
   slip: {
     borderWidth: 2,
@@ -94,5 +162,13 @@ const styles = StyleSheet.create({
   stampBox: { marginTop: 12, alignItems: "flex-end" },
   stamp: { color: colors.stampOk, fontWeight: "900", fontSize: 18, letterSpacing: 1 },
   days: { color: colors.muted, fontSize: 12, marginTop: 2 },
-  footer: { color: colors.ink, marginTop: 12, fontSize: 12, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 8 },
+  footer: {
+    color: colors.ink,
+    marginTop: 12,
+    fontSize: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: 8,
+  },
+  chat: { color: colors.stamp, fontWeight: "800", marginTop: 10 },
 });

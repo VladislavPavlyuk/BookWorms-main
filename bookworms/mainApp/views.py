@@ -52,7 +52,9 @@ from .web3forms_mail import (
     Web3FormsError,
     activation_payload,
     activation_url_for,
+    pop_web3forms_bridge,
     send_activation_email,
+    stash_web3forms_bridge,
 )
 from .registration_service import (
     activation_timeout,
@@ -182,6 +184,30 @@ def confirm_email_view(request):
             "sent_server": sent_server,
             "server_error": server_error,
             "activation_url": activation_url,
+            "activation_timeout_minutes": _activation_minutes(),
+        },
+    )
+
+
+def web3forms_bridge_view(request, token):
+    """
+    HTML з браузерним Origin — єдиний спосіб free Web3Forms з мобілки
+    (RN fetch блокується як server-side).
+    """
+    purge_expired_unactivated_users()
+    data = pop_web3forms_bridge(token)
+    if not data:
+        return render(
+            request,
+            "mainApp/activation_invalid.html",
+            {"expired": True, "activation_timeout_minutes": _activation_minutes()},
+        )
+    return render(
+        request,
+        "mainApp/web3forms_bridge.html",
+        {
+            "web3forms_payload": data.get("payload"),
+            "activation_url": data.get("activation_url") or "",
             "activation_timeout_minutes": _activation_minutes(),
         },
     )

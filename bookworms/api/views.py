@@ -38,10 +38,9 @@ from mainApp.models import (
 )
 from mainApp.openlibrary import fetch_book_by_isbn, normalize_isbn
 from mainApp.web3forms_mail import (
-    Web3FormsError,
     activation_payload,
     activation_url_for,
-    send_activation_email,
+    stash_web3forms_bridge,
 )
 from mainApp.registration_service import (
     activation_timeout,
@@ -121,15 +120,18 @@ def health(request):
 
     purged = purge_expired_unactivated_users()
     st = purge_status()
+    from mainApp.openlibrary import openlibrary_ping
+
     payload = {
         "status": "ok",
         "app": "date-due-slip",
-        "code_rev": "2026-09-15-purge-v3",
+        "code_rev": "2026-09-17-openlibrary-v2",
         "purged_now": purged,
         **st,
         "web3forms_key_set": bool(getattr(settings, "WEB3FORMS_ACCESS_KEY", "")),
         "web3forms_key_suffix": (getattr(settings, "WEB3FORMS_ACCESS_KEY", "") or "")[-6:],
         "public_base_url": getattr(settings, "PUBLIC_BASE_URL", "") or None,
+        **openlibrary_ping(),
     }
     if request.GET.get("test_mail") == "1":
         try:
@@ -170,26 +172,24 @@ def register(request):
     if not user.is_active:
         url = activation_url_for(user, request)
         w3_payload = activation_payload(user, url)
+        # Free Web3Forms: server-side і RN fetch блокуються.
+        # Лист іде лише з браузерної bridge-сторінки (FormData + Origin).
         email_sent = False
-        server_error = None
-        try:
-            send_activation_email(user, request)
-            email_sent = True
-        except Web3FormsError as e:
-            # Free Web3Forms часто блокує server-side / порожній key —
-            # клієнт завжди отримує payload і досилає з IP телефону.
-            server_error = str(e)
-            logger.warning("Web3Forms server send failed: %s", e)
+        server_error = (
+            "Free Web3Forms: лише client-side. Відкрий web3forms_browser_url у браузері."
+        )
+        bridge = stash_web3forms_bridge(w3_payload, url, request)
         return Response(
             {
                 "detail": (
-                    f"Акаунт створено. Підтвердіть протягом {minutes} хв "
-                    f"(лінк нижче / лист Web3Forms на inbox власника ключа)."
+                    f"Акаунт створено. Підтвердіть протягом {minutes} хв. "
+                    f"Відкриється сторінка відправки листа; також є лінк активації."
                 ),
                 "needs_activation": True,
                 "email_sent": email_sent,
                 "server_error": server_error,
                 "web3forms_payload": w3_payload,
+                "web3forms_browser_url": bridge,
                 "activation_url": url,
                 "activation_timeout_minutes": minutes,
             },

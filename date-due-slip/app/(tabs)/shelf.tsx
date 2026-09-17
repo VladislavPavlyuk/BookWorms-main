@@ -155,6 +155,11 @@ export default function ShelfScreen() {
               </Text>
             </Pressable>
             <View style={styles.actions}>
+              {item.borrowed_from && (
+                <Pressable onPress={() => router.push(`/chat/${item.borrowed_from!.id}`)}>
+                  <Text style={styles.link}>Чат з власником</Text>
+                </Pressable>
+              )}
               {!item.borrowed_from && (
                 <Pressable
                   onPress={() => {

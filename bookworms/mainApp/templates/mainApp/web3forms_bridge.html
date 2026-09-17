@@ -1,0 +1,49 @@
+{% extends 'mainApp/base.html' %}
+
+{% block content %}
+<div class="container mt-5 text-center">
+  <div class="card shadow p-5">
+    <h2 class="text-primary">Надсилання листа</h2>
+    <p id="w3-status" class="lead mt-3 text-muted">Відправка через Web3Forms (браузер)…</p>
+    {% if activation_url %}
+    <div class="alert alert-success text-start mt-3">
+      <strong>Лінк активації:</strong>
+      <p style="word-break:break-all" class="mb-2 mt-2">
+        <a href="{{ activation_url }}">{{ activation_url }}</a>
+      </p>
+      <a class="btn btn-primary" href="{{ activation_url }}">Активувати акаунт</a>
+    </div>
+    {% endif %}
+    <pre id="w3-debug" class="small text-start text-muted" style="white-space:pre-wrap"></pre>
+  </div>
+</div>
+{% if web3forms_payload %}
+{{ web3forms_payload|json_script:"web3forms-payload" }}
+<script>
+(function () {
+  var el = document.getElementById("web3forms-payload");
+  var status = document.getElementById("w3-status");
+  var debug = document.getElementById("w3-debug");
+  if (!el) return;
+  var payload = JSON.parse(el.textContent);
+  var fd = new FormData();
+  Object.keys(payload).forEach(function (k) {
+    if (payload[k] !== undefined && payload[k] !== null) fd.append(k, String(payload[k]));
+  });
+  fetch("https://api.web3forms.com/submit", { method: "POST", body: fd })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+    .then(function (res) {
+      if (res.ok && res.j.success !== false) {
+        status.textContent = "Лист прийнято Web3Forms. Перевір inbox власника ключа або тисни лінк вище.";
+      } else {
+        status.textContent = "Помилка: " + (res.j.message || JSON.stringify(res.j));
+      }
+      if (debug) debug.textContent = "HTTP " + res.status + " " + JSON.stringify(res.j);
+    })
+    .catch(function (e) {
+      status.textContent = "Мережева помилка: " + e + " — використай лінк активації.";
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

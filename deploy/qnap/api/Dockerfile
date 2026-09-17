@@ -24,7 +24,9 @@ RUN chmod +x /entrypoint.sh \
     && test -f /app/mainApp/middleware.py \
     && test -f /app/mainApp/migrations/0013_customuser_email_confirmed.py \
     && grep -q purged_now /app/api/views.py \
-    && grep -q "purge loop" /entrypoint.sh
+    && grep -q "purge loop" /entrypoint.sh \
+    && grep -q 'OL_HOST' /app/mainApp/openlibrary.py \
+    && ! grep -q 'openlibrary.org/api/books' /app/mainApp/openlibrary.py
 
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]

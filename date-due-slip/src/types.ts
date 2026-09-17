@@ -69,6 +69,7 @@ export type Message = {
   sender: User;
   recipient: User;
   body: string;
+  exchange_request: number | null;
   created_at: string;
   read_at: string | null;
 };

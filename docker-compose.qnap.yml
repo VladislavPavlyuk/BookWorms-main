@@ -70,6 +70,8 @@ services:
       WEB3FORMS_ACCESS_KEY: ${WEB3FORMS_ACCESS_KEY:-d76edac5-49fd-4574-b89b-45e24170aeab}
       DEFAULT_LOAN_DAYS: ${DEFAULT_LOAN_DAYS:-14}
       TIME_ZONE: ${TIME_ZONE:-Europe/Kyiv}
+      OPENLIBRARY_CONTACT_EMAIL: ${OPENLIBRARY_CONTACT_EMAIL:-admin@datedueslip.com}
+      OPENLIBRARY_USER_AGENT: ${OPENLIBRARY_USER_AGENT:-DateDueSlip/1.0 (mailto:admin@datedueslip.com)}
       GUNICORN_WORKERS: "1"
       GUNICORN_THREADS: "2"
       DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-}
@@ -81,6 +83,12 @@ services:
       - media:/app/media
       - staticfiles:/app/staticfiles
     mem_limit: 384m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
 
   nginx:
     image: nginx:1.27-alpine
