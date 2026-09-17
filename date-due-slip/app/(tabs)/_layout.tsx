@@ -17,7 +17,13 @@ export default function TabsLayout() {
       <Tabs.Screen name="shelf" options={{ title: "Полиця", tabBarLabel: "Полиця" }} />
       <Tabs.Screen name="slips" options={{ title: "Date Due Slip", tabBarLabel: "Терміни" }} />
       <Tabs.Screen name="browse" options={{ title: "Чужі полиці", tabBarLabel: "Каталог" }} />
-      <Tabs.Screen name="more" options={{ title: "Ще", tabBarLabel: "Ще" }} />
+      <Tabs.Screen
+        name="more"
+        options={{
+          title: "Ще",
+          tabBarLabel: "Ще",
+        }}
+      />
     </Tabs>
   );
 }

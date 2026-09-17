@@ -53,14 +53,14 @@ def notify_exchange_request_created(req: BookExchangeRequest) -> PrivateMessage:
     if req.offer_shelf_id:
         offer_title = req.offer_shelf.book.title
         body = (
-            f'Запит на обмін: я пропоную вам "{offer_title}" замість вашої "{book_title}". '
-            f'Перегляньте запити в розділі "Обміни".'
+            f'Запит на обмін: {req.requester.username} пропонує "{offer_title}" '
+            f'замість вашої "{book_title}". '
+            f"Відкрийте чат або розділ «Обміни», щоб відповісти."
         )
     else:
         body = (
-            f'Запит на позику книги "{book_title}". '
-            f"Якщо погодитесь, після прийняття я зможу тримати її на полиці та повернути вам. "
-            f'Деталі - у розділі "Обміни".'
+            f'Запит на позику: {req.requester.username} просить книгу "{book_title}". '
+            f"Відкрийте чат або «Обміни», щоб прийняти чи відхилити."
         )
     return _create_message(
         req.requester,
@@ -78,13 +78,13 @@ def notify_exchange_request_accepted(req: BookExchangeRequest) -> PrivateMessage
     book_title = req.target_shelf.book.title
     if req.offer_shelf_id:
         body = (
-            f'Ваш запит на обмін прийнято. Книга "{book_title}" тепер у вас на полиці, '
-            f'а "{req.offer_shelf.book.title}" - у власника.'
+            f'Ваш запит на обмін прийнято ({req.shelf_owner.username}). '
+            f'Книга "{book_title}" тепер у вас. Можете написати в чат.'
         )
     else:
         body = (
-            f'Ваш запит на позику прийнято. Книга "{book_title}" на вашій полиці як позичена; '
-            f'повернути її можна лише власнику через "Повернути власнику".'
+            f'Ваш запит на позику прийнято ({req.shelf_owner.username}). '
+            f'Книга "{book_title}" на вашій полиці. Можете написати в чат.'
         )
     return _create_message(req.shelf_owner, req.requester, body, exchange_request=req)
 

@@ -35,6 +35,7 @@ export default function Root() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="exchanges" options={{ headerShown: true, title: "Обміни" }} />
+          <Stack.Screen name="notifications" options={{ headerShown: true, title: "Сповіщення" }} />
           <Stack.Screen name="chat/[id]" options={{ headerShown: true, title: "Чат" }} />
           <Stack.Screen name="post/new" options={{ headerShown: true, title: "Новий пост" }} />
           <Stack.Screen name="post/[id]" options={{ headerShown: true, title: "Пост" }} />

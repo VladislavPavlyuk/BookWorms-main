@@ -32,4 +32,7 @@ urlpatterns = [
     path("exchanges/<int:request_id>/cancel/", views.exchange_cancel_view),
     path("messages/partners/", views.message_partners),
     path("messages/<int:partner_id>/", views.message_thread),
+    path("notifications/", views.notifications_list),
+    path("notifications/unread-count/", views.notifications_unread_count),
+    path("notifications/mark-read/", views.notifications_mark_read),
 ]

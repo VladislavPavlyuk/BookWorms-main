@@ -36,9 +36,11 @@ from django.conf import settings
 # Бізнес-правила обміну/позик винесені в exchange_service - тут лише HTTP і шаблони.
 from .message_service import (
     get_exchange_message_partners,
+    mark_messages_read_for_user,
     mark_thread_read,
     send_user_message,
 )
+from .notification_service import list_notifications, notification_payload, unread_count
 from .exchange_service import (
     accept_exchange_request,
     cancel_exchange_request,
@@ -805,6 +807,34 @@ def exchange_cancel(request, request_id):
     else:
         messages.error(request, err or "Помилка.")
     return redirect("exchange_requests")
+
+
+@login_required
+def notifications_inbox(request):
+    """
+    Скринька сповіщень (запити на книги тощо) з переходом у чат.
+    """
+    if request.method == "POST" and "mark_all_read" in request.POST:
+        mark_messages_read_for_user(request.user)
+        messages.success(request, "Усі сповіщення позначено прочитаними.")
+        return redirect("notifications_inbox")
+
+    items = [
+        {
+            **notification_payload(m),
+            "created_at": m.created_at,
+            "msg": m,
+        }
+        for m in list_notifications(request.user, limit=80)
+    ]
+    return render(
+        request,
+        "mainApp/notifications.html",
+        {
+            "items": items,
+            "unread_count": unread_count(request.user),
+        },
+    )
 
 
 @login_required

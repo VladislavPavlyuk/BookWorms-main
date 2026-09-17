@@ -24,8 +24,14 @@ from mainApp.exchange_service import (
 )
 from mainApp.message_service import (
     get_exchange_message_partners,
+    mark_messages_read_for_user,
     mark_thread_read,
     send_user_message,
+)
+from mainApp.notification_service import (
+    list_notifications,
+    notification_payload,
+    unread_count,
 )
 from mainApp.models import (
     Book,
@@ -125,7 +131,7 @@ def health(request):
     payload = {
         "status": "ok",
         "app": "date-due-slip",
-        "code_rev": "2026-09-17-openlibrary-v2",
+        "code_rev": "2026-09-17-notifications",
         "purged_now": purged,
         **st,
         "web3forms_key_set": bool(getattr(settings, "WEB3FORMS_ACCESS_KEY", "")),
@@ -674,3 +680,38 @@ def message_thread(request, partner_id):
             "messages": MessageSerializer(timeline, many=True, context={"request": request}).data,
         }
     )
+
+
+@api_view(["GET"])
+def notifications_list(request):
+    """Скринька сповіщень (запити на книги) з chat_partner_id для переходу в чат."""
+    items = []
+    for m in list_notifications(request.user, limit=80):
+        p = notification_payload(m)
+        p["created_at"] = m.created_at
+        p["read_at"] = m.read_at
+        p["sender"] = UserPublicSerializer(m.sender, context={"request": request}).data
+        items.append(p)
+    return Response(
+        {
+            "unread_count": unread_count(request.user),
+            "results": items,
+        }
+    )
+
+
+@api_view(["GET"])
+def notifications_unread_count(request):
+    return Response({"unread_count": unread_count(request.user)})
+
+
+@api_view(["POST"])
+def notifications_mark_read(request):
+    """
+    body: { "ids": [1,2] } — конкретні; без ids — усі непрочитані.
+    """
+    ids = request.data.get("ids")
+    if ids is not None and not isinstance(ids, list):
+        return _error("ids має бути списком.")
+    n = mark_messages_read_for_user(request.user, ids if ids is not None else None)
+    return Response({"marked": n, "unread_count": unread_count(request.user)})

@@ -1,0 +1,56 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Сповіщення{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h2 class="mb-1">Сповіщення</h2>
+        <p class="text-muted small mb-0">
+            Запити на позику/обмін і системні повідомлення. Звідси можна одразу відкрити чат.
+            {% if unread_count %}Непрочитаних: <strong>{{ unread_count }}</strong>.{% endif %}
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'exchange_requests' %}">Обміни</a>
+        {% if unread_count %}
+        <form method="post" class="m-0">
+            {% csrf_token %}
+            <button type="submit" name="mark_all_read" value="1" class="btn btn-primary btn-sm">
+                Позначити все прочитаним
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if not items %}
+    <div class="alert alert-light border">Поки немає сповіщень.</div>
+{% else %}
+    <div class="list-group shadow-sm">
+        {% for n in items %}
+        <div class="list-group-item {% if n.is_unread %}list-group-item-warning{% endif %}">
+            <div class="d-flex justify-content-between gap-3 flex-wrap">
+                <div>
+                    <div class="small text-muted mb-1">
+                        від <strong>{{ n.chat_partner_username }}</strong>
+                        · {{ n.created_at|date:"d.m.Y H:i" }}
+                        {% if n.is_unread %}<span class="badge text-bg-danger">нове</span>{% endif %}
+                        {% if n.kind == "exchange" %}<span class="badge text-bg-secondary">запит</span>{% endif %}
+                    </div>
+                    <div>{{ n.body|linebreaksbr }}</div>
+                </div>
+                <div class="d-flex flex-column gap-1 align-items-stretch">
+                    <a class="btn btn-sm btn-dark"
+                       href="{% url 'message_thread' n.chat_partner_id %}">Відкрити чат</a>
+                    {% if n.exchange_request_id %}
+                    <a class="btn btn-sm btn-outline-primary"
+                       href="{% url 'exchange_requests' %}">До обмінів</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endblock %}

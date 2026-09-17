@@ -208,3 +208,27 @@ export const MsgApi = {
   send: (id: number, body: string) =>
     api<Message>(`/api/messages/${id}/`, { method: "POST", body: { body } }),
 };
+
+export type AppNotification = {
+  id: number;
+  kind: string;
+  body: string;
+  created_at: string;
+  read_at: string | null;
+  is_unread: boolean;
+  chat_partner_id: number;
+  chat_partner_username: string;
+  exchange_request_id: number | null;
+  sender?: User;
+};
+
+export const NotifApi = {
+  list: () =>
+    api<{ unread_count: number; results: AppNotification[] }>("/api/notifications/"),
+  unreadCount: () => api<{ unread_count: number }>("/api/notifications/unread-count/"),
+  markRead: (ids?: number[]) =>
+    api<{ marked: number; unread_count: number }>("/api/notifications/mark-read/", {
+      method: "POST",
+      body: ids ? { ids } : {},
+    }),
+};

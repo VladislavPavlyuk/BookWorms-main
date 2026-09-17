@@ -1,8 +1,8 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../src/auth";
-import { ApiError, AuthApi, getApiBase, setApiBase } from "../../src/api";
+import { ApiError, AuthApi, NotifApi, getApiBase, setApiBase } from "../../src/api";
 import { colors } from "../../src/theme";
 
 export default function More() {
@@ -12,6 +12,7 @@ export default function More() {
   const [username, setUsername] = useState(user?.username || "");
   const [biography, setBiography] = useState(user?.biography || "");
   const [editing, setEditing] = useState(false);
+  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
     getApiBase().then(setApi);
@@ -21,6 +22,21 @@ export default function More() {
     setUsername(user?.username || "");
     setBiography(user?.biography || "");
   }, [user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      NotifApi.unreadCount()
+        .then((r) => setUnread(r.unread_count))
+        .catch(() => undefined);
+      const t = setInterval(() => {
+        NotifApi.unreadCount()
+          .then((r) => setUnread(r.unread_count))
+          .catch(() => undefined);
+      }, 15000);
+      return () => clearInterval(t);
+    }, [user])
+  );
 
   const saveApi = async () => {
     await setApiBase(api.trim());
@@ -39,13 +55,26 @@ export default function More() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.paper }} contentContainerStyle={{ padding: 20 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.paper }}
+      contentContainerStyle={{ padding: 20 }}
+    >
       {editing ? (
         <>
           <Text style={styles.label}>Логін</Text>
-          <TextInput style={styles.input} value={username} onChangeText={setUsername} autoCapitalize="none" />
+          <TextInput
+            style={styles.input}
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+          />
           <Text style={styles.label}>Біографія</Text>
-          <TextInput style={styles.input} value={biography} onChangeText={setBiography} multiline />
+          <TextInput
+            style={styles.input}
+            value={biography}
+            onChangeText={setBiography}
+            multiline
+          />
           <Pressable style={styles.btn} onPress={saveProfile}>
             <Text style={styles.btnText}>Зберегти профіль</Text>
           </Pressable>
@@ -69,6 +98,11 @@ export default function More() {
           <Text style={styles.rowText}>Моя публічна полиця</Text>
         </Pressable>
       )}
+      <Pressable style={styles.row} onPress={() => router.push("/notifications")}>
+        <Text style={styles.rowText}>
+          Сповіщення{unread > 0 ? ` (${unread})` : ""}
+        </Text>
+      </Pressable>
       <Pressable style={styles.row} onPress={() => router.push("/exchanges")}>
         <Text style={styles.rowText}>Обміни / позики / чати</Text>
       </Pressable>
@@ -77,11 +111,19 @@ export default function More() {
       </Pressable>
 
       <Text style={styles.label}>API (NAS)</Text>
-      <TextInput style={styles.input} value={api} onChangeText={setApi} autoCapitalize="none" />
+      <TextInput
+        style={styles.input}
+        value={api}
+        onChangeText={setApi}
+        autoCapitalize="none"
+      />
       <Pressable style={styles.btn} onPress={saveApi}>
         <Text style={styles.btnText}>Зберегти URL</Text>
       </Pressable>
-      <Pressable style={[styles.btn, { backgroundColor: colors.stamp, marginTop: 24 }]} onPress={logout}>
+      <Pressable
+        style={[styles.btn, { backgroundColor: colors.stamp, marginTop: 24 }]}
+        onPress={logout}
+      >
         <Text style={styles.btnText}>Вийти</Text>
       </Pressable>
     </ScrollView>
@@ -95,7 +137,12 @@ const styles = StyleSheet.create({
   row: { borderBottomWidth: 1, borderColor: colors.line, paddingVertical: 14 },
   rowText: { color: colors.ink, fontSize: 16, fontWeight: "600" },
   label: { marginTop: 20, color: colors.muted, fontSize: 12 },
-  input: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 8 },
+  input: {
+    borderBottomWidth: 1,
+    borderColor: colors.line,
+    color: colors.ink,
+    paddingVertical: 8,
+  },
   btn: { backgroundColor: colors.ink, padding: 12, marginTop: 12 },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },
   cancel: { color: colors.muted, textAlign: "center", marginTop: 12, fontWeight: "700" },
