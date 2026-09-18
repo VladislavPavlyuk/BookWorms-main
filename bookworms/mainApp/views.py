@@ -44,10 +44,12 @@ from .message_service import (
 from .notification_service import list_notifications, notification_payload, unread_count
 from .exchange_service import (
     accept_exchange_request,
+    available_owned_shelves_qs,
     cancel_exchange_request,
     confirm_borrow_return,
     create_many_exchange_requests,
     get_or_create_book_from_payload,
+    is_book_lent_out,
     reject_exchange_request,
     request_borrow_return,
 )
@@ -412,14 +414,21 @@ def my_library(request):
                 manual_form = AddBookManualForm(request.POST)
 
     # borrowed_from підтягуємо одним запитом - щоб у шаблоні знати, позичена книга чи власна.
-    shelves = (
+    shelves = list(
         request.user.shelf_entries.select_related("book", "borrowed_from").all()
     )
-    pending_returns_to_confirm = (
+    pending_returns_to_confirm = list(
         Shelf.objects.filter(borrowed_from=request.user, return_pending=True)
         .select_related("user", "book")
         .order_by("-added_at")
     )
+    lent_book_ids = set(
+        Shelf.objects.filter(borrowed_from=request.user).values_list("book_id", flat=True)
+    )
+    pending_by_book = {row.book_id: row for row in pending_returns_to_confirm}
+    for s in shelves:
+        s.is_lent_out = (not s.borrowed_from_id) and (s.book_id in lent_book_ids)
+        s.pending_return_row = None if s.borrowed_from_id else pending_by_book.get(s.book_id)
     locked_raw = request.session.get("reader_age_locked_shelf_ids", [])
     if not isinstance(locked_raw, list):
         locked_raw = []
@@ -509,6 +518,12 @@ def remove_shelf_entry(request, shelf_id):
             "Позичену книгу не можна видалити з полиці - лише повернути власнику.",
         )
         return redirect("my_library")
+    if is_book_lent_out(shelf.user_id, shelf.book_id):
+        messages.error(
+            request,
+            "Книга зараз у позиці — спочатку дочекайтесь повернення.",
+        )
+        return redirect("my_library")
     shelf.delete()
     messages.success(request, "Книгу видалено з полиці.")
     return redirect("my_library")
@@ -536,7 +551,10 @@ def confirm_return_borrowed_shelf_book(request, shelf_id):
         return redirect("my_library")
     ok, err = confirm_borrow_return(shelf_id, request.user)
     if ok:
-        messages.success(request, "Повернення підтверджено - книга на вашій полиці.")
+        messages.success(
+            request,
+            "Повернення підтверджено — позику знято з полиці позичальника.",
+        )
     else:
         messages.error(request, err or "Помилка.")
     return redirect("my_library")
@@ -549,14 +567,12 @@ def browse_shelves(request):
     і даємо випадати лише власні (не позичені) книги для поля "обмін".
     """
     others = (
-        Shelf.objects.exclude(user=request.user)
-        .filter(borrowed_from__isnull=True)
+        available_owned_shelves_qs(exclude_user_id=request.user.id)
         .select_related("user", "book")
         .order_by("-added_at")
     )
-    my_owned_shelves = (
-        request.user.shelf_entries.filter(borrowed_from__isnull=True)
-        .select_related("book")
+    my_owned_shelves = available_owned_shelves_qs().filter(user=request.user).select_related(
+        "book"
     )
     return render(
         request,
@@ -843,6 +859,26 @@ def notifications_inbox(request):
             "unread_count": unread_count(request.user),
         },
     )
+
+
+@login_required
+@require_POST
+def notification_confirm_return(request, message_id: int):
+    """Зі сповіщення про повернення — підтвердити позику і позначити лист прочитаним."""
+    msg = get_object_or_404(PrivateMessage, pk=message_id, recipient=request.user)
+    payload = notification_payload(msg)
+    shelf_id = payload.get("confirm_return_shelf_id")
+    if payload.get("kind") != "return" or not shelf_id:
+        messages.error(request, "Це сповіщення не є активним запитом на повернення.")
+        return redirect("notifications_inbox")
+    ok, err = confirm_borrow_return(shelf_id, request.user)
+    if ok:
+        if msg.read_at is None:
+            mark_messages_read_for_user(request.user, [msg.pk])
+        messages.success(request, "Повернення підтверджено.")
+    else:
+        messages.error(request, err or "Помилка підтвердження.")
+    return redirect("notifications_inbox")
 
 
 @login_required

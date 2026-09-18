@@ -7,7 +7,7 @@
     <div>
         <h2 class="mb-1">Сповіщення</h2>
         <p class="text-muted small mb-0">
-            Запити на позику/обмін і системні повідомлення. Звідси можна одразу відкрити чат.
+            Запити на позику/обмін і повернення. Звідси — чат, обміни або підтвердження повернення.
             {% if unread_count %}Непрочитаних: <strong>{{ unread_count }}</strong>.{% endif %}
         </p>
     </div>
@@ -24,6 +24,15 @@
     </div>
 </div>
 
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{% if 'error' in message.tags %}danger{% elif 'success' in message.tags %}success{% elif 'warning' in message.tags %}warning{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
 {% if not items %}
     <div class="alert alert-light border">Поки немає сповіщень.</div>
 {% else %}
@@ -37,18 +46,25 @@
                         · {{ n.created_at|date:"d.m.Y H:i" }}
                         {% if n.is_unread %}<span class="badge text-bg-danger">нове</span>{% endif %}
                         {% if n.kind == "exchange" %}<span class="badge text-bg-secondary">запит</span>{% endif %}
+                        {% if n.kind == "return" %}<span class="badge text-bg-success">повернення</span>{% endif %}
                     </div>
                     <div>{{ n.body|linebreaksbr }}</div>
                 </div>
-                <div class="d-flex flex-column gap-1 align-items-stretch">
-                    <form method="post" action="{% url 'notification_open_chat' n.id %}" class="m-0">
+                <div class="d-flex flex-column gap-1 align-items-stretch" style="min-width: 10rem;">
+                    {% if n.kind == "return" and n.confirm_return_shelf_id %}
+                    <form method="post" action="{% url 'notification_confirm_return' n.id %}" class="m-0">
                         {% csrf_token %}
-                        <button type="submit" class="btn btn-sm btn-dark w-100">Відкрити чат</button>
+                        <button type="submit" class="btn btn-sm btn-success w-100">Підтвердити</button>
                     </form>
+                    {% endif %}
                     {% if n.exchange_request_id %}
                     <a class="btn btn-sm btn-outline-primary"
                        href="{% url 'exchange_requests' %}">До обмінів</a>
                     {% endif %}
+                    <form method="post" action="{% url 'notification_open_chat' n.id %}" class="m-0">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-dark w-100">Чат</button>
+                    </form>
                 </div>
             </div>
         </div>

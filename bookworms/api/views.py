@@ -15,10 +15,12 @@ import logging
 
 from mainApp.exchange_service import (
     accept_exchange_request,
+    available_owned_shelves_qs,
     cancel_exchange_request,
     confirm_borrow_return,
     create_exchange_request,
     get_or_create_book_from_payload,
+    is_book_lent_out,
     reject_exchange_request,
     request_borrow_return,
 )
@@ -131,7 +133,7 @@ def health(request):
     payload = {
         "status": "ok",
         "app": "date-due-slip",
-        "code_rev": "2026-09-18-notif-live-badge",
+        "code_rev": "2026-09-18-confirm-only-return-notif",
         "purged_now": purged,
         **st,
         "web3forms_key_set": bool(getattr(settings, "WEB3FORMS_ACCESS_KEY", "")),
@@ -354,12 +356,23 @@ def post_comment(request, post_id):
 
 @api_view(["GET"])
 def my_shelf(request):
-    shelves = request.user.shelf_entries.select_related("book", "borrowed_from", "user")
-    pending = (
+    shelves = list(
+        request.user.shelf_entries.select_related("book", "borrowed_from", "user")
+    )
+    pending = list(
         Shelf.objects.filter(borrowed_from=request.user, return_pending=True)
         .select_related("user", "book", "borrowed_from")
         .order_by("-added_at")
     )
+    lent_book_ids = set(
+        Shelf.objects.filter(borrowed_from=request.user).values_list("book_id", flat=True)
+    )
+    pending_by_book = {p.book_id: p.id for p in pending}
+    for s in shelves:
+        s.is_lent_out = (not s.borrowed_from_id) and (s.book_id in lent_book_ids)
+        s.pending_return_shelf_id = (
+            None if s.borrowed_from_id else pending_by_book.get(s.book_id)
+        )
     return Response(
         {
             "shelves": ShelfSerializer(shelves, many=True, context={"request": request}).data,
@@ -441,6 +454,8 @@ def shelf_remove(request, shelf_id):
         return _error("Запис не знайдено.", 404)
     if shelf.borrowed_from_id:
         return _error("Позичену книгу не можна видалити — лише повернути власнику.")
+    if is_book_lent_out(shelf.user_id, shelf.book_id):
+        return _error("Книга зараз у позиці — спочатку дочекайтесь повернення.")
     shelf.delete()
     return Response(status=204)
 
@@ -482,13 +497,14 @@ def shelf_confirm_return(request, shelf_id):
 @api_view(["GET"])
 def browse_shelves(request):
     others = (
-        Shelf.objects.exclude(user=request.user)
-        .filter(borrowed_from__isnull=True)
+        available_owned_shelves_qs(exclude_user_id=request.user.id)
         .select_related("user", "book", "borrowed_from")
         .order_by("-added_at")
     )
-    mine = request.user.shelf_entries.filter(borrowed_from__isnull=True).select_related(
-        "book", "user", "borrowed_from"
+    mine = (
+        available_owned_shelves_qs()
+        .filter(user=request.user)
+        .select_related("book", "user", "borrowed_from")
     )
     return Response(
         {

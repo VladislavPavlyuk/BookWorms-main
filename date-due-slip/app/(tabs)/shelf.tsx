@@ -81,7 +81,13 @@ export default function ShelfScreen() {
   const act = async (s: Shelf) => {
     try {
       if (s.borrowed_from) await ShelfApi.returnBook(s.id);
-      else await ShelfApi.remove(s.id);
+      else {
+        if (s.is_lent_out) {
+          Alert.alert("Полиця", "Книга зараз у позиці — спочатку повернення.");
+          return;
+        }
+        await ShelfApi.remove(s.id);
+      }
       await load();
     } catch (e) {
       Alert.alert("Полиця", e instanceof ApiError ? e.message : String(e));
@@ -91,6 +97,19 @@ export default function ShelfScreen() {
   const confirm = async (s: Shelf) => {
     try {
       await ShelfApi.confirmReturn(s.id);
+      Alert.alert("Повернення", "Підтверджено.");
+      await load();
+    } catch (e) {
+      Alert.alert("Повернення", e instanceof ApiError ? e.message : String(e));
+    }
+  };
+
+  const confirmOwned = async (s: Shelf) => {
+    const id = s.pending_return_shelf_id;
+    if (!id) return;
+    try {
+      await ShelfApi.confirmReturn(id);
+      Alert.alert("Повернення", "Підтверджено.");
       await load();
     } catch (e) {
       Alert.alert("Повернення", e instanceof ApiError ? e.message : String(e));
@@ -130,13 +149,19 @@ export default function ShelfScreen() {
         }
         ListHeaderComponent={
           pending.length ? (
-            <View>
-              <Text style={styles.sec}>Очікують підтвердження повернення</Text>
+            <View style={styles.pendingBox}>
+              <Text style={styles.sec}>Підтвердити повернення ({pending.length})</Text>
+              <Text style={styles.pendingHint}>
+                Позичальник повідомив про повернення. Підтвердіть, коли книга у вас.
+              </Text>
               {pending.map((s) => (
-                <Pressable key={s.id} style={styles.card} onPress={() => confirm(s)}>
+                <View key={s.id} style={[styles.card, styles.pendingCard]}>
                   <Text style={styles.title}>{s.book.title}</Text>
-                  <Text style={styles.meta}>{s.user.username} повертає → підтвердити</Text>
-                </Pressable>
+                  <Text style={styles.meta}>від {s.user.username}</Text>
+                  <Pressable style={styles.confirmBtn} onPress={() => confirm(s)}>
+                    <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
+                  </Pressable>
+                </View>
               ))}
             </View>
           ) : null
@@ -149,6 +174,7 @@ export default function ShelfScreen() {
               <Text style={styles.meta}>
                 {item.book.authors}
                 {item.borrowed_from ? ` · позичено у ${item.borrowed_from.username}` : ""}
+                {item.is_lent_out && !item.borrowed_from ? " · зараз у позиці" : ""}
                 {item.due_date ? ` · до ${item.due_date}` : ""}
                 {item.return_pending ? " · очікує підтвердження" : ""}
                 {` · ${item.book.reader_age_summary}`}
@@ -158,6 +184,11 @@ export default function ShelfScreen() {
               {item.borrowed_from && (
                 <Pressable onPress={() => router.push(`/chat/${item.borrowed_from!.id}`)}>
                   <Text style={styles.link}>Чат з власником</Text>
+                </Pressable>
+              )}
+              {!!item.pending_return_shelf_id && (
+                <Pressable style={styles.confirmBtn} onPress={() => confirmOwned(item)}>
+                  <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
                 </Pressable>
               )}
               {!item.borrowed_from && (
@@ -179,7 +210,7 @@ export default function ShelfScreen() {
                 <Text style={styles.link}>Пост</Text>
               </Pressable>
               <Pressable onPress={() => act(item)}>
-                <Text style={styles.action}>
+                <Text style={[styles.action, item.is_lent_out && !item.borrowed_from ? { opacity: 0.4 } : null]}>
                   {item.borrowed_from ? "Повернути" : "Прибрати"}
                 </Text>
               </Pressable>
@@ -242,6 +273,17 @@ const styles = StyleSheet.create({
   add: { backgroundColor: colors.ink, paddingHorizontal: 12, justifyContent: "center" },
   addText: { color: colors.white, fontWeight: "700", textAlign: "center" },
   sec: { color: colors.stamp, fontWeight: "700", marginBottom: 8 },
+  pendingBox: { marginBottom: 12 },
+  pendingHint: { color: colors.muted, fontSize: 12, marginBottom: 10, lineHeight: 16 },
+  pendingCard: { borderColor: colors.stampOk, backgroundColor: "#E8F5E9" },
+  confirmBtn: {
+    marginTop: 10,
+    backgroundColor: colors.stampOk,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignSelf: "stretch",
+  },
+  confirmBtnText: { color: "#fff", fontWeight: "800", textAlign: "center" },
   card: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, padding: 12, marginBottom: 10 },
   title: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4, fontSize: 13 },

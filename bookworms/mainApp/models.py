@@ -237,6 +237,15 @@ class PrivateMessage(models.Model):
         related_name="private_messages",
         verbose_name="Зв’язаний запит",
     )
+    # Для сповіщень про повернення — рядок полиці позичальника (confirm_borrow_return).
+    related_shelf = models.ForeignKey(
+        "Shelf",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="related_private_messages",
+        verbose_name="Пов’язана полиця",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     read_at = models.DateTimeField(null=True, blank=True, verbose_name="Прочитано")
     # True = системне сповіщення (notify_*); False = звичайний чат.

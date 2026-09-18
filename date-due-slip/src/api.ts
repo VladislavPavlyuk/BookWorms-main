@@ -233,6 +233,8 @@ export type AppNotification = {
   chat_partner_id: number;
   chat_partner_username: string;
   exchange_request_id: number | null;
+  /** Рядок полиці позичальника — кнопка «Підтвердити» для власника. */
+  confirm_return_shelf_id?: number | null;
   sender?: User;
 };
 

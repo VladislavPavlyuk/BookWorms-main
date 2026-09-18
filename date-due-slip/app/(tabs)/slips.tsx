@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { ApiError, SlipApi } from "../../src/api";
+import { ApiError, ShelfApi, SlipApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
 import type { Shelf } from "../../src/types";
@@ -18,14 +18,16 @@ function Slip({
   s,
   role,
   onChat,
+  onConfirm,
 }: {
   s: Shelf;
   role: "borrowed" | "lent";
   onChat?: () => void;
+  onConfirm?: () => void;
 }) {
   const overdue = s.is_overdue;
   return (
-    <View style={[styles.slip, overdue && styles.overdue]}>
+    <View style={[styles.slip, overdue && styles.overdue, s.return_pending && role === "lent" && styles.pending]}>
       <Text style={styles.library}>DATE DUE SLIP</Text>
       <Text style={styles.title}>{s.book.title}</Text>
       <Text style={styles.meta}>{s.book.authors || "—"}</Text>
@@ -45,8 +47,17 @@ function Slip({
         {role === "borrowed"
           ? `Позичено у ${s.borrowed_from?.username}`
           : `У ${s.user.username}`}
-        {s.return_pending ? " · повернення надіслано" : ""}
+        {s.return_pending
+          ? role === "lent"
+            ? " · чекає вашого підтвердження"
+            : " · повернення надіслано"
+          : ""}
       </Text>
+      {role === "lent" && s.return_pending && onConfirm ? (
+        <Pressable style={styles.confirmBtn} onPress={onConfirm}>
+          <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
+        </Pressable>
+      ) : null}
       {onChat && (
         <Pressable onPress={onChat}>
           <Text style={styles.chat}>
@@ -80,6 +91,16 @@ export default function Slips() {
       );
     }, [])
   );
+
+  const confirmReturn = async (s: Shelf) => {
+    try {
+      await ShelfApi.confirmReturn(s.id);
+      Alert.alert("Повернення", "Підтверджено.");
+      await load();
+    } catch (e) {
+      Alert.alert("Повернення", e instanceof ApiError ? e.message : String(e));
+    }
+  };
 
   return (
     <ScrollView
@@ -125,6 +146,7 @@ export default function Slips() {
             key={s.id}
             s={s}
             role="lent"
+            onConfirm={s.return_pending ? () => confirmReturn(s) : undefined}
             onChat={
               s.user.id !== user?.id
                 ? () => router.push(`/chat/${s.user.id}`)
@@ -156,6 +178,7 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
   },
   overdue: { borderColor: colors.stamp, backgroundColor: "#FBE9E5" },
+  pending: { borderColor: colors.stampOk, backgroundColor: "#E8F5E9", borderStyle: "solid" },
   library: { color: colors.stamp, fontWeight: "800", letterSpacing: 2, fontSize: 12 },
   title: { color: colors.ink, fontSize: 18, fontWeight: "700", marginTop: 6 },
   meta: { color: colors.muted, marginTop: 2 },
@@ -170,5 +193,11 @@ const styles = StyleSheet.create({
     borderTopColor: colors.line,
     paddingTop: 8,
   },
+  confirmBtn: {
+    marginTop: 12,
+    backgroundColor: colors.stampOk,
+    paddingVertical: 12,
+  },
+  confirmBtnText: { color: "#fff", fontWeight: "800", textAlign: "center" },
   chat: { color: colors.stamp, fontWeight: "800", marginTop: 10 },
 });

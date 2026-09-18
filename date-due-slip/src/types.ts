@@ -29,6 +29,9 @@ export type Shelf = {
   due_date: string | null;
   is_overdue: boolean;
   days_left: number | null;
+  is_lent_out?: boolean;
+  /** Id рядка позичальника з return_pending — для кнопки підтвердження у власника. */
+  pending_return_shelf_id?: number | null;
   added_at: string;
 };
 

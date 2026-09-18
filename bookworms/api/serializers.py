@@ -139,6 +139,8 @@ class ShelfSerializer(serializers.ModelSerializer):
     borrowed_from = UserPublicSerializer(read_only=True)
     is_overdue = serializers.SerializerMethodField()
     days_left = serializers.SerializerMethodField()
+    is_lent_out = serializers.SerializerMethodField()
+    pending_return_shelf_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Shelf
@@ -151,6 +153,8 @@ class ShelfSerializer(serializers.ModelSerializer):
             "due_date",
             "is_overdue",
             "days_left",
+            "is_lent_out",
+            "pending_return_shelf_id",
             "added_at",
         )
 
@@ -163,6 +167,20 @@ class ShelfSerializer(serializers.ModelSerializer):
         if not obj.due_date or not obj.borrowed_from_id:
             return None
         return (obj.due_date - timezone.now().date()).days
+
+    def get_is_lent_out(self, obj):
+        if getattr(obj, "is_lent_out", None) is not None:
+            return bool(obj.is_lent_out)
+        if obj.borrowed_from_id:
+            return False
+        from mainApp.exchange_service import is_book_lent_out
+
+        return is_book_lent_out(obj.user_id, obj.book_id)
+
+    def get_pending_return_shelf_id(self, obj):
+        if getattr(obj, "pending_return_shelf_id", None) is not None:
+            return obj.pending_return_shelf_id
+        return None
 
 
 class AddIsbnSerializer(serializers.Serializer):

@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { ApiError, NotifApi, type AppNotification } from "../src/api";
+import { ApiError, NotifApi, ShelfApi, type AppNotification } from "../src/api";
 import { formatMsgTime } from "../src/chat";
 import { colors } from "../src/theme";
 import { useUnread } from "../src/unread";
@@ -78,6 +78,25 @@ export default function NotificationsScreen() {
     }
   };
 
+  const confirmReturn = async (n: AppNotification) => {
+    const shelfId = n.confirm_return_shelf_id;
+    if (!shelfId) return;
+    try {
+      await ShelfApi.confirmReturn(shelfId);
+      try {
+        const r = await NotifApi.markRead([n.id]);
+        setUnread(r.unread_count);
+      } catch {
+        /* ok */
+      }
+      Alert.alert("Повернення", "Підтверджено.");
+      await load();
+      await refreshBadge();
+    } catch (e) {
+      Alert.alert("Повернення", e instanceof ApiError ? e.message : String(e));
+    }
+  };
+
   const markAll = async () => {
     try {
       const r = await NotifApi.markRead();
@@ -137,9 +156,15 @@ export default function NotificationsScreen() {
               {formatMsgTime(n.created_at)}
               {n.is_unread ? " · нове" : ""}
               {n.kind === "exchange" ? " · запит" : ""}
+              {n.kind === "return" ? " · повернення" : ""}
             </Text>
             <Text style={styles.body}>{n.body}</Text>
             <View style={styles.row}>
+              {n.kind === "return" && n.confirm_return_shelf_id != null ? (
+                <Pressable style={styles.confirmBtn} onPress={() => confirmReturn(n)}>
+                  <Text style={styles.confirmBtnText}>Підтвердити</Text>
+                </Pressable>
+              ) : null}
               {n.exchange_request_id != null ? (
                 <Pressable onPress={() => openExchanges(n)}>
                   <Text style={styles.chat}>До обмінів</Text>
@@ -200,7 +225,13 @@ const styles = StyleSheet.create({
   unread: { borderColor: colors.stamp, backgroundColor: "#FBE9E5" },
   meta: { color: colors.muted, fontSize: 12, marginBottom: 6 },
   body: { color: colors.ink, lineHeight: 20 },
-  row: { flexDirection: "row", gap: 16, marginTop: 10 },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 10, alignItems: "center" },
+  confirmBtn: {
+    backgroundColor: colors.stampOk,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  confirmBtnText: { color: "#fff", fontWeight: "800" },
   chat: { color: colors.ink, fontWeight: "800" },
   ex: { color: colors.stampOk, fontWeight: "800" },
 });

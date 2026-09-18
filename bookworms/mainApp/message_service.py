@@ -19,6 +19,7 @@ def _create_message(
     exchange_request: BookExchangeRequest | None = None,
     *,
     is_system: bool = False,
+    related_shelf: Shelf | None = None,
 ) -> PrivateMessage:
     return PrivateMessage.objects.create(
         sender=sender,
@@ -26,6 +27,7 @@ def _create_message(
         body=body,
         exchange_request=exchange_request,
         is_system=is_system,
+        related_shelf=related_shelf,
     )
 
 
@@ -113,9 +115,11 @@ def notify_borrow_return_requested(shelf: Shelf) -> PrivateMessage:
         raise ValueError("notify_borrow_return_requested: очікується позичена книга (borrowed_from).")
     body = (
         f'{shelf.user.username} ініціював повернення книги "{shelf.book.title}". '
-        f'Підтвердіть на "Моя полиця", коли фізично отримаєте книгу.'
+        f'Натисніть «Підтвердити», коли фізично отримаєте книгу.'
     )
-    return _create_message(shelf.user, lender, body, is_system=True)
+    return _create_message(
+        shelf.user, lender, body, is_system=True, related_shelf=shelf
+    )
 
 
 def notify_borrow_return_confirmed(
