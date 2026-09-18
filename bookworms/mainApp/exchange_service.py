@@ -330,6 +330,15 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
     book_id = shelf.book_id
     borrower = shelf.user
     book_title = shelf.book.title
+    shelf_pk = shelf.pk
+
+    # Сповіщення про це повернення → прочитані (полиця / slips / inbox — один шлях).
+    message_service.mark_return_notifications_read(
+        lender,
+        shelf_id=shelf_pk,
+        borrower_id=borrower.id,
+        book_title=book_title,
+    )
 
     # Власник має зберегти/відновити свій рядок (не позичений).
     owner_row = (

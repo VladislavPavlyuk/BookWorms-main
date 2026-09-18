@@ -171,6 +171,23 @@ def mark_messages_read_for_user(user: CustomUser, message_ids: list[int] | None 
     return qs.update(read_at=now)
 
 
+def mark_return_notifications_read(lender: CustomUser, *, shelf_id: int, borrower_id: int, book_title: str) -> int:
+    """
+    Після «Підтвердити повернення» — відповідні сповіщення у власника стають прочитаними.
+    """
+    now = timezone.now()
+    legacy = (
+        Q(sender_id=borrower_id)
+        & Q(is_system=True)
+        & Q(body__icontains="ініціював повернення")
+        & Q(body__icontains=book_title)
+    )
+    qs = PrivateMessage.objects.filter(recipient=lender, read_at__isnull=True).filter(
+        Q(related_shelf_id=shelf_id) | legacy
+    )
+    return qs.update(read_at=now)
+
+
 def mark_thread_read(user: CustomUser, partner_id: int) -> int:
     """
     Прочитані лише звичайні листи в діалозі (не системні сповіщення).
