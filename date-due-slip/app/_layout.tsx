@@ -39,7 +39,7 @@ export default function Root() {
             <Stack.Screen name="(auth)" />
             <Stack.Screen
               name="exchanges"
-              options={{ headerShown: true, title: "Обміни", headerRight: () => <NotifBell /> }}
+              options={{ headerShown: true, title: "Запити на обмін", headerRight: () => <NotifBell /> }}
             />
             <Stack.Screen name="notifications" options={{ headerShown: true, title: "Сповіщення" }} />
             <Stack.Screen

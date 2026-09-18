@@ -55,6 +55,29 @@ export default function NotificationsScreen() {
     router.push(`/chat/${n.chat_partner_id}`);
   };
 
+  const openExchanges = async (n?: AppNotification) => {
+    if (n?.is_unread) {
+      try {
+        const r = await NotifApi.markRead([n.id]);
+        setUnread(r.unread_count);
+        setItems((prev) =>
+          prev.map((x) =>
+            x.id === n.id
+              ? { ...x, is_unread: false, read_at: new Date().toISOString() }
+              : x
+          )
+        );
+      } catch {
+        /* все одно йдемо на обміни */
+      }
+    }
+    if (n?.exchange_request_id != null) {
+      router.push(`/exchanges?id=${n.exchange_request_id}`);
+    } else {
+      router.push("/exchanges");
+    }
+  };
+
   const markAll = async () => {
     try {
       const r = await NotifApi.markRead();
@@ -85,12 +108,12 @@ export default function NotificationsScreen() {
     >
       <Text style={styles.h}>Сповіщення</Text>
       <Text style={styles.hint}>
-        Запити на позику/обмін. Звідси — одразу в чат зі співрозмовником.
+        Запит на книгу → «Обміни»: умови (позика/обмін), чат за потреби, прийняти або відхилити.
         {unread ? ` Непрочитаних: ${unread}.` : ""}
       </Text>
 
       <View style={styles.actions}>
-        <Pressable onPress={() => router.push("/exchanges")}>
+        <Pressable onPress={() => openExchanges()}>
           <Text style={styles.link}>Обміни</Text>
         </Pressable>
         {unread > 0 && (
@@ -117,14 +140,14 @@ export default function NotificationsScreen() {
             </Text>
             <Text style={styles.body}>{n.body}</Text>
             <View style={styles.row}>
-              <Pressable onPress={() => openChat(n)}>
-                <Text style={styles.chat}>Відкрити чат</Text>
-              </Pressable>
-              {n.exchange_request_id != null && (
-                <Pressable onPress={() => router.push("/exchanges")}>
-                  <Text style={styles.ex}>До обмінів</Text>
+              {n.exchange_request_id != null ? (
+                <Pressable onPress={() => openExchanges(n)}>
+                  <Text style={styles.chat}>До обмінів</Text>
                 </Pressable>
-              )}
+              ) : null}
+              <Pressable onPress={() => openChat(n)}>
+                <Text style={styles.ex}>Чат</Text>
+              </Pressable>
               {n.is_unread && (
                 <Pressable
                   onPress={async () => {
