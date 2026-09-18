@@ -17,12 +17,15 @@ def _create_message(
     recipient: CustomUser,
     body: str,
     exchange_request: BookExchangeRequest | None = None,
+    *,
+    is_system: bool = False,
 ) -> PrivateMessage:
     return PrivateMessage.objects.create(
         sender=sender,
         recipient=recipient,
         body=body,
         exchange_request=exchange_request,
+        is_system=is_system,
     )
 
 
@@ -36,7 +39,7 @@ def send_user_message(
     body = (body or "").strip()
     if not body or sender.pk == recipient.pk:
         return None
-    return _create_message(sender, recipient, body, exchange_request=exchange_request)
+    return _create_message(sender, recipient, body, exchange_request=exchange_request, is_system=False)
 
 
 def notify_exchange_request_created(req: BookExchangeRequest) -> PrivateMessage:
@@ -67,6 +70,7 @@ def notify_exchange_request_created(req: BookExchangeRequest) -> PrivateMessage:
         req.shelf_owner,
         body,
         exchange_request=req,
+        is_system=True,
     )
 
 
@@ -86,7 +90,9 @@ def notify_exchange_request_accepted(req: BookExchangeRequest) -> PrivateMessage
             f'Ваш запит на позику прийнято ({req.shelf_owner.username}). '
             f'Книга "{book_title}" на вашій полиці. Можете написати в чат.'
         )
-    return _create_message(req.shelf_owner, req.requester, body, exchange_request=req)
+    return _create_message(
+        req.shelf_owner, req.requester, body, exchange_request=req, is_system=True
+    )
 
 
 def notify_exchange_request_rejected(req: BookExchangeRequest) -> PrivateMessage:
@@ -95,7 +101,9 @@ def notify_exchange_request_rejected(req: BookExchangeRequest) -> PrivateMessage
         pk=req.pk
     )
     body = f'Запит щодо книги "{req.target_shelf.book.title}" відхилено.'
-    return _create_message(req.shelf_owner, req.requester, body, exchange_request=req)
+    return _create_message(
+        req.shelf_owner, req.requester, body, exchange_request=req, is_system=True
+    )
 
 
 def notify_borrow_return_requested(shelf: Shelf) -> PrivateMessage:
@@ -107,7 +115,7 @@ def notify_borrow_return_requested(shelf: Shelf) -> PrivateMessage:
         f'{shelf.user.username} ініціював повернення книги "{shelf.book.title}". '
         f'Підтвердіть на "Моя полиця", коли фізично отримаєте книгу.'
     )
-    return _create_message(shelf.user, lender, body)
+    return _create_message(shelf.user, lender, body, is_system=True)
 
 
 def notify_borrow_return_confirmed(
@@ -118,7 +126,7 @@ def notify_borrow_return_confirmed(
         f'{lender.username} підтвердив отримання книги "{book_title}". '
         f'Вона знята з вашої полиці.'
     )
-    return _create_message(lender, borrower, body)
+    return _create_message(lender, borrower, body, is_system=True)
 
 
 def notify_exchange_request_cancelled(req: BookExchangeRequest) -> PrivateMessage:
@@ -130,7 +138,9 @@ def notify_exchange_request_cancelled(req: BookExchangeRequest) -> PrivateMessag
         f"Користувач {req.requester.username} скасував запит щодо вашої книги "
         f'"{req.target_shelf.book.title}".'
     )
-    return _create_message(req.requester, req.shelf_owner, body, exchange_request=req)
+    return _create_message(
+        req.requester, req.shelf_owner, body, exchange_request=req, is_system=True
+    )
 
 
 def get_exchange_message_partners(user: CustomUser):
@@ -158,10 +168,14 @@ def mark_messages_read_for_user(user: CustomUser, message_ids: list[int] | None 
 
 
 def mark_thread_read(user: CustomUser, partner_id: int) -> int:
-    """Прочитані лише листи в цьому діалозі (від partner до user)."""
+    """
+    Прочитані лише звичайні листи в діалозі (не системні сповіщення).
+    Інакше відкриття чату по одному notify з’їдає всі інші unread від того ж юзера.
+    """
     now = timezone.now()
     return PrivateMessage.objects.filter(
         recipient=user,
         sender_id=partner_id,
         read_at__isnull=True,
+        is_system=False,
     ).update(read_at=now)

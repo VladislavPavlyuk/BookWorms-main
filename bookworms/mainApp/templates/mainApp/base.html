@@ -39,14 +39,14 @@
                     <a class="nav-link" href="{% url 'exchange_requests' %}">Обміни</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link position-relative" href="{% url 'notifications_inbox' %}">
+                    <a class="nav-link position-relative" href="{% url 'notifications_inbox' %}" id="nav-notif-link">
                         Сповіщення
-                        {% if unread_notifications_count %}
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-                              style="font-size: 0.65rem;">
-                            {{ unread_notifications_count }}
+                        <span id="nav-notif-badge"
+                              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger{% if not unread_notifications_count %} d-none{% endif %}"
+                              style="font-size: 0.65rem;"
+                              data-count-url="{% url 'notifications_unread_count' %}">
+                            {{ unread_notifications_count|default:"" }}
                         </span>
-                        {% endif %}
                     </a>
                 </li>
                 {% endif %}

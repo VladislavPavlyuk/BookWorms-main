@@ -41,8 +41,10 @@
                     <div>{{ n.body|linebreaksbr }}</div>
                 </div>
                 <div class="d-flex flex-column gap-1 align-items-stretch">
-                    <a class="btn btn-sm btn-dark"
-                       href="{% url 'message_thread' n.chat_partner_id %}">Відкрити чат</a>
+                    <form method="post" action="{% url 'notification_open_chat' n.id %}" class="m-0">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-dark w-100">Відкрити чат</button>
+                    </form>
                     {% if n.exchange_request_id %}
                     <a class="btn btn-sm btn-outline-primary"
                        href="{% url 'exchange_requests' %}">До обмінів</a>

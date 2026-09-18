@@ -5,7 +5,7 @@ cd "$(dirname "$0")/../.."
 
 echo "== preflight =="
 test -f bookworms/mainApp/middleware.py
-test -f bookworms/mainApp/migrations/0013_customuser_email_confirmed.py
+test -f bookworms/mainApp/migrations/0015_backfill_is_system_all.py
 grep -q purged_now bookworms/api/views.py
 grep -q "purge loop" deploy/qnap/api/entrypoint.sh
 grep -q code_rev bookworms/api/views.py

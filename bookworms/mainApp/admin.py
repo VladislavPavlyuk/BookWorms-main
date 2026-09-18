@@ -54,8 +54,8 @@ class ShelfAdmin(admin.ModelAdmin):
 
 @admin.register(PrivateMessage)
 class PrivateMessageAdmin(admin.ModelAdmin):
-    list_display = ("id", "sender", "recipient", "created_at", "read_at", "exchange_request")
-    list_filter = ("created_at",)
+    list_display = ("id", "sender", "recipient", "is_system", "created_at", "read_at", "exchange_request")
+    list_filter = ("created_at", "is_system")
     search_fields = ("body", "sender__username", "recipient__username")
     raw_id_fields = ("sender", "recipient", "exchange_request")
 

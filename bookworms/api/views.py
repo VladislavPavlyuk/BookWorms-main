@@ -131,7 +131,7 @@ def health(request):
     payload = {
         "status": "ok",
         "app": "date-due-slip",
-        "code_rev": "2026-09-17-notifications",
+        "code_rev": "2026-09-18-notif-live-badge",
         "purged_now": purged,
         **st,
         "web3forms_key_set": bool(getattr(settings, "WEB3FORMS_ACCESS_KEY", "")),

@@ -15,12 +15,26 @@ const ACCESS = "dds_access";
 const REFRESH = "dds_refresh";
 const API_KEY = "dds_api";
 
+/** Нормалізація URL: без слеша в кінці, http://, старі порти QNAP → 18088. */
+export function normalizeApiBase(raw: string | null | undefined): string {
+  let u = (raw || "").trim().replace(/\/$/, "");
+  if (!u) return DEFAULT_API;
+  if (!/^https?:\/\//i.test(u)) u = `http://${u}`;
+  u = u.replace(/:(8088|8080)(?=\/|$)/, ":18088");
+  return u;
+}
+
 export async function getApiBase(): Promise<string> {
-  return (await SecureStore.getItemAsync(API_KEY)) || DEFAULT_API;
+  const stored = await SecureStore.getItemAsync(API_KEY);
+  const normalized = normalizeApiBase(stored || DEFAULT_API);
+  if (stored && stored.replace(/\/$/, "") !== normalized) {
+    await SecureStore.setItemAsync(API_KEY, normalized);
+  }
+  return normalized;
 }
 
 export async function setApiBase(url: string) {
-  await SecureStore.setItemAsync(API_KEY, url.replace(/\/$/, ""));
+  await SecureStore.setItemAsync(API_KEY, normalizeApiBase(url));
 }
 
 export async function getAccess() {

@@ -239,6 +239,10 @@ class PrivateMessage(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     read_at = models.DateTimeField(null=True, blank=True, verbose_name="Прочитано")
+    # True = системне сповіщення (notify_*); False = звичайний чат.
+    # Відкриття чату мітить прочитаними лише is_system=False, щоб одне
+    # сповіщення не «з’їдало» всі інші в треді.
+    is_system = models.BooleanField(default=False, verbose_name="Системне сповіщення")
 
     class Meta:
         verbose_name = "приватне повідомлення"

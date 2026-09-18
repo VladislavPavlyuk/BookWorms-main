@@ -1,18 +1,19 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { useRouter, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import { useAuth } from "../../src/auth";
-import { ApiError, AuthApi, NotifApi, getApiBase, setApiBase } from "../../src/api";
+import { ApiError, AuthApi, getApiBase, setApiBase } from "../../src/api";
 import { colors } from "../../src/theme";
+import { useUnread } from "../../src/unread";
 
 export default function More() {
   const { user, logout, reload } = useAuth();
+  const { unread, pollError, refresh } = useUnread();
   const router = useRouter();
   const [api, setApi] = useState("");
   const [username, setUsername] = useState(user?.username || "");
   const [biography, setBiography] = useState(user?.biography || "");
   const [editing, setEditing] = useState(false);
-  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
     getApiBase().then(setApi);
@@ -23,24 +24,12 @@ export default function More() {
     setBiography(user?.biography || "");
   }, [user]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!user) return;
-      NotifApi.unreadCount()
-        .then((r) => setUnread(r.unread_count))
-        .catch(() => undefined);
-      const t = setInterval(() => {
-        NotifApi.unreadCount()
-          .then((r) => setUnread(r.unread_count))
-          .catch(() => undefined);
-      }, 15000);
-      return () => clearInterval(t);
-    }, [user])
-  );
-
   const saveApi = async () => {
     await setApiBase(api.trim());
-    Alert.alert("API", "Збережено. Перелогінься якщо токен від іншого хоста.");
+    const next = await getApiBase();
+    setApi(next);
+    await refresh();
+    Alert.alert("API", `Збережено:\n${next}\nПерелогінься якщо токен від іншого хоста.`);
   };
 
   const saveProfile = async () => {
@@ -99,9 +88,14 @@ export default function More() {
         </Pressable>
       )}
       <Pressable style={styles.row} onPress={() => router.push("/notifications")}>
-        <Text style={styles.rowText}>
-          Сповіщення{unread > 0 ? ` (${unread})` : ""}
-        </Text>
+        <View style={styles.rowInner}>
+          <Text style={styles.rowText}>Сповіщення</Text>
+          {unread > 0 ? (
+            <View style={styles.rowBadge}>
+              <Text style={styles.rowBadgeText}>{unread > 99 ? "99+" : unread}</Text>
+            </View>
+          ) : null}
+        </View>
       </Pressable>
       <Pressable style={styles.row} onPress={() => router.push("/exchanges")}>
         <Text style={styles.rowText}>Обміни / позики / чати</Text>
@@ -116,7 +110,12 @@ export default function More() {
         value={api}
         onChangeText={setApi}
         autoCapitalize="none"
+        autoCorrect={false}
       />
+      <Text style={styles.hint}>
+        Має бути http://192.168.0.213:18088 (та сама Wi‑Fi, що NAS). Unread: {unread}
+        {pollError ? `\nБейдж: помилка — ${pollError}` : " · poll ok"}
+      </Text>
       <Pressable style={styles.btn} onPress={saveApi}>
         <Text style={styles.btnText}>Зберегти URL</Text>
       </Pressable>
@@ -135,8 +134,20 @@ const styles = StyleSheet.create({
   bio: { color: colors.muted, marginTop: 4 },
   email: { color: colors.muted, fontSize: 12, marginBottom: 16, marginTop: 2 },
   row: { borderBottomWidth: 1, borderColor: colors.line, paddingVertical: 14 },
+  rowInner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   rowText: { color: colors.ink, fontSize: 16, fontWeight: "600" },
+  rowBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#E53935",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  rowBadgeText: { color: "#fff", fontSize: 12, fontWeight: "800" },
   label: { marginTop: 20, color: colors.muted, fontSize: 12 },
+  hint: { color: colors.muted, fontSize: 11, marginTop: 6, lineHeight: 15 },
   input: {
     borderBottomWidth: 1,
     borderColor: colors.line,

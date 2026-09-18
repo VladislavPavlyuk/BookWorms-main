@@ -244,10 +244,12 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
     """
     Позичальник повідомляє, що повертає книгу. Рядок лишається на його полиці до підтвердження позикодавцем.
     """
+    # of=("self",): Postgres забороняє FOR UPDATE на nullable side outer join
+    # (select_related borrowed_from → LEFT JOIN). Без of= — 500 на «Повернути власнику».
     shelf = (
-        Shelf.objects.select_for_update()
+        Shelf.objects.select_related("borrowed_from", "book")
+        .select_for_update(of=("self",))
         .filter(pk=shelf_id, user=borrower)
-        .select_related("borrowed_from", "book")
         .first()
     )
     if not shelf:
@@ -269,13 +271,13 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
     Позикодавець підтверджує отримання: рядок Shelf переходить на його полицю, зникає з полиці позичальника.
     """
     shelf = (
-        Shelf.objects.select_for_update()
+        Shelf.objects.select_related("book", "user")
+        .select_for_update(of=("self",))
         .filter(
             pk=shelf_id,
             borrowed_from=lender,
             return_pending=True,
         )
-        .select_related("book")
         .first()
     )
     if not shelf:

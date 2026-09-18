@@ -124,4 +124,52 @@
     } else {
         initReaderAgeForms();
     }
+
+    /** Живий бейдж сповіщень у навбарі (кожні 3 с). */
+    function initNotifBadgePoll() {
+        var badge = document.getElementById("nav-notif-badge");
+        if (!badge) return;
+        var url = badge.getAttribute("data-count-url");
+        if (!url) return;
+
+        function render(n) {
+            n = parseInt(n, 10) || 0;
+            if (n > 0) {
+                badge.textContent = n > 99 ? "99+" : String(n);
+                badge.classList.remove("d-none");
+            } else {
+                badge.textContent = "";
+                badge.classList.add("d-none");
+            }
+        }
+
+        function tick() {
+            fetch(url, {
+                credentials: "same-origin",
+                headers: { Accept: "application/json" },
+            })
+                .then(function (r) {
+                    if (!r.ok) throw new Error("count " + r.status);
+                    return r.json();
+                })
+                .then(function (data) {
+                    render(data.unread_count);
+                })
+                .catch(function () {
+                    /* ignore transient */
+                });
+        }
+
+        tick();
+        setInterval(tick, 3000);
+        document.addEventListener("visibilitychange", function () {
+            if (document.visibilityState === "visible") tick();
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initNotifBadgePoll);
+    } else {
+        initNotifBadgePoll();
+    }
 })();

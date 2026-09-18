@@ -12,11 +12,12 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, NotifApi, type AppNotification } from "../src/api";
 import { formatMsgTime } from "../src/chat";
 import { colors } from "../src/theme";
+import { useUnread } from "../src/unread";
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { unread, setUnread, refresh: refreshBadge } = useUnread();
   const [items, setItems] = useState<AppNotification[]>([]);
-  const [unread, setUnread] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
@@ -27,11 +28,32 @@ export default function NotificationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load().catch((e) =>
-        Alert.alert("Сповіщення", e instanceof ApiError ? e.message : String(e))
-      );
-    }, [])
+      load()
+        .then(() => refreshBadge())
+        .catch((e) =>
+          Alert.alert("Сповіщення", e instanceof ApiError ? e.message : String(e))
+        );
+    }, [refreshBadge, setUnread])
   );
+
+  const openChat = async (n: AppNotification) => {
+    if (n.is_unread) {
+      try {
+        const r = await NotifApi.markRead([n.id]);
+        setUnread(r.unread_count);
+        setItems((prev) =>
+          prev.map((x) =>
+            x.id === n.id
+              ? { ...x, is_unread: false, read_at: new Date().toISOString() }
+              : x
+          )
+        );
+      } catch {
+        /* чат все одно відкриємо */
+      }
+    }
+    router.push(`/chat/${n.chat_partner_id}`);
+  };
 
   const markAll = async () => {
     try {
@@ -95,14 +117,40 @@ export default function NotificationsScreen() {
             </Text>
             <Text style={styles.body}>{n.body}</Text>
             <View style={styles.row}>
-              <Pressable
-                onPress={() => router.push(`/chat/${n.chat_partner_id}`)}
-              >
+              <Pressable onPress={() => openChat(n)}>
                 <Text style={styles.chat}>Відкрити чат</Text>
               </Pressable>
               {n.exchange_request_id != null && (
                 <Pressable onPress={() => router.push("/exchanges")}>
                   <Text style={styles.ex}>До обмінів</Text>
+                </Pressable>
+              )}
+              {n.is_unread && (
+                <Pressable
+                  onPress={async () => {
+                    try {
+                      const r = await NotifApi.markRead([n.id]);
+                      setUnread(r.unread_count);
+                      setItems((prev) =>
+                        prev.map((x) =>
+                          x.id === n.id
+                            ? {
+                                ...x,
+                                is_unread: false,
+                                read_at: new Date().toISOString(),
+                              }
+                            : x
+                        )
+                      );
+                    } catch (e) {
+                      Alert.alert(
+                        "Сповіщення",
+                        e instanceof ApiError ? e.message : String(e)
+                      );
+                    }
+                  }}
+                >
+                  <Text style={styles.ex}>Прочитано</Text>
                 </Pressable>
               )}
             </View>

@@ -3,8 +3,9 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.db import IntegrityError
 from django.db.models import Prefetch, Q
+from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.core.paginator import Paginator
@@ -810,6 +811,13 @@ def exchange_cancel(request, request_id):
 
 
 @login_required
+@require_GET
+def notifications_unread_count_view(request):
+    """JSON для живого бейджа в навбарі (polling без перезавантаження сторінки)."""
+    return JsonResponse({"unread_count": unread_count(request.user)})
+
+
+@login_required
 def notifications_inbox(request):
     """
     Скринька сповіщень (запити на книги тощо) з переходом у чат.
@@ -835,6 +843,16 @@ def notifications_inbox(request):
             "unread_count": unread_count(request.user),
         },
     )
+
+
+@login_required
+@require_POST
+def notification_open_chat(request, message_id: int):
+    """Позначити одне сповіщення прочитаним і відкрити чат з відправником."""
+    msg = get_object_or_404(PrivateMessage, pk=message_id, recipient=request.user)
+    if msg.read_at is None:
+        mark_messages_read_for_user(request.user, [msg.pk])
+    return redirect("message_thread", partner_id=msg.sender_id)
 
 
 @login_required
