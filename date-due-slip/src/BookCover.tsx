@@ -11,9 +11,9 @@ import { colors } from "./theme";
 
 type Props = {
   uri?: string | null;
-  /** full = screen-edge width; sm/md/lg = fixed thumbs */
+  /** full = responsive cover; sm/md/lg = fixed thumbs */
   size?: "sm" | "md" | "lg" | "full";
-  /** Horizontal padding of parent to cancel (pull image to screen edges). */
+  /** Horizontal padding of parent to cancel (portrait edge bleed). */
   bleed?: number;
   style?: StyleProp<ViewStyle>;
 };
@@ -24,39 +24,52 @@ const SIZES = {
   lg: { w: 88, h: 132 },
 };
 
-/** Full-bleed cover: left↔right screen edges, image fills width (cover crop). */
+const BOOK_RATIO = 2 / 3; // width / height (portrait book)
+
+/**
+ * Portrait: width = screen, height from ratio.
+ * Landscape: height capped (~58% viewport), width from ratio.
+ */
 export function BookCover({ uri, size = "full", bleed = 0, style }: Props) {
-  const { width: winW } = useWindowDimensions();
+  const { width: winW, height: winH } = useWindowDimensions();
   const src = (uri || "").trim();
   const full = size === "full";
   const dim = full ? null : SIZES[size];
-  const fullW = winW;
-  const fullH = Math.round(winW * 1.25);
+  const landscape = winW > winH;
+
+  let boxStyle: object;
+  if (full) {
+    if (landscape) {
+      const h = Math.round(Math.min(winH * 0.58, winH - 140));
+      const w = Math.round(h * BOOK_RATIO);
+      boxStyle = {
+        width: w,
+        height: h,
+        alignSelf: "center",
+        borderWidth: 0,
+        borderRadius: 0,
+      };
+    } else {
+      const w = winW;
+      const h = Math.round(w / BOOK_RATIO);
+      boxStyle = {
+        width: w,
+        height: h,
+        marginLeft: -bleed,
+        marginRight: -bleed,
+        alignSelf: "flex-start",
+        borderWidth: 0,
+        borderRadius: 0,
+      };
+    }
+  } else {
+    boxStyle = { width: dim!.w, height: dim!.h };
+  }
 
   return (
-    <View
-      style={[
-        styles.box,
-        full
-          ? {
-              width: fullW,
-              height: fullH,
-              marginLeft: -bleed,
-              marginRight: -bleed,
-              alignSelf: "flex-start",
-              borderWidth: 0,
-              borderRadius: 0,
-            }
-          : { width: dim!.w, height: dim!.h },
-        style,
-      ]}
-    >
+    <View style={[styles.box, boxStyle, style]}>
       {src ? (
-        <Image
-          source={{ uri: src }}
-          style={styles.img}
-          resizeMode={full ? "cover" : "cover"}
-        />
+        <Image source={{ uri: src }} style={styles.img} resizeMode="cover" />
       ) : (
         <Text style={styles.ph}>?</Text>
       )}

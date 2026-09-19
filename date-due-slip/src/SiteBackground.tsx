@@ -1,12 +1,27 @@
-import { ImageBackground, StyleSheet, View, type ReactNode } from "react-native";
+import { type ReactNode } from "react";
+import {
+  ImageBackground,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
-const BG = require("../assets/bg-portrait.jpg");
+const BG_VERTICAL = require("../assets/bg-landscape.jpg");
+const BG_HORIZONTAL = require("../assets/bg-portrait.jpg");
 
-/** Fixed date-due-slip photo behind every screen. */
+/** Fixed date-due-slip photo behind every screen; swaps with orientation. */
 export function SiteBackground({ children }: { children: ReactNode }) {
+  const { width, height } = useWindowDimensions();
+  const horizontal = width > height;
+
   return (
     <View style={styles.root}>
-      <ImageBackground source={BG} style={styles.bg} resizeMode="cover">
+      <ImageBackground
+        key={horizontal ? "h" : "v"}
+        source={horizontal ? BG_HORIZONTAL : BG_VERTICAL}
+        style={styles.bg}
+        resizeMode="cover"
+      >
         <View style={styles.veil} />
       </ImageBackground>
       <View style={styles.foreground}>{children}</View>

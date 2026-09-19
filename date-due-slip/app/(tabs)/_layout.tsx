@@ -33,7 +33,10 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.muted,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Стрічка", tabBarLabel: "Стрічка" }} />
+      <Tabs.Screen
+        name="index"
+        options={{ title: "Стрічка", tabBarLabel: "Стрічка", headerShown: false }}
+      />
       <Tabs.Screen name="shelf" options={{ title: "Полиця", tabBarLabel: "Полиця" }} />
       <Tabs.Screen name="slips" options={{ title: "Date Due Slip", tabBarLabel: "Терміни" }} />
       <Tabs.Screen name="browse" options={{ title: "Чужі полиці", tabBarLabel: "Каталог" }} />

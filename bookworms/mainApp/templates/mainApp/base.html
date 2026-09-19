@@ -15,8 +15,10 @@
 
 <div class="site-bg" aria-hidden="true">
     <picture>
-        <source media="(max-width: 767.98px)"
+        <source media="(orientation: portrait)"
                 srcset="{% static 'img/hero-portrait.jpg' %}">
+        <source media="(orientation: landscape)"
+                srcset="{% static 'img/hero-landscape.jpg' %}">
         <img class="site-bg__img"
              src="{% static 'img/hero-landscape.jpg' %}"
              alt=""

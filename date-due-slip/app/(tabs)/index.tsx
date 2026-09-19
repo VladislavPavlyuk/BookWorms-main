@@ -9,11 +9,14 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError, BooksApi, FeedApi, type FeedSearch } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
+import { NotifBell } from "../../src/NotifBell";
 import { colors } from "../../src/theme";
 import type { Book, Post } from "../../src/types";
 
@@ -32,6 +35,12 @@ function hasSearch(s: FeedSearch) {
 
 export default function Feed() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width: winW, height: winH } = useWindowDimensions();
+  const landscape = winW > winH;
+  // chrome ≈ safe top + search + buttons row
+  const chromeH = insets.top + (landscape ? 96 : 108);
+  const pageH = Math.max(200, winH - chromeH);
   const [posts, setPosts] = useState<Post[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [page, setPage] = useState(1);
@@ -114,7 +123,7 @@ export default function Feed() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.screen }}>
-      <View style={styles.stickyChrome}>
+      <View style={[styles.stickyChrome, { paddingTop: insets.top }]}>
         <View style={styles.searchRow}>
           <TextInput
             style={styles.searchInput}
@@ -128,6 +137,7 @@ export default function Feed() {
           <Pressable style={styles.searchBtn} onPress={runSearch}>
             <Text style={styles.searchBtnText}>Знайти</Text>
           </Pressable>
+          <NotifBell />
         </View>
         <View style={styles.advRow}>
           <Pressable style={styles.advBtn} onPress={() => setAdvOpen(true)}>
@@ -138,30 +148,33 @@ export default function Feed() {
               <Text style={styles.clear}>Скинути</Text>
             </Pressable>
           )}
+          {!searching && (
+            <>
+              <View style={styles.filters}>
+                <Pressable onPress={() => setFilter("all")}>
+                  <Text style={[styles.chip, filter === "all" && styles.chipOn]}>Усі</Text>
+                </Pressable>
+                <Pressable onPress={() => setFilter("my")}>
+                  <Text style={[styles.chip, filter === "my" && styles.chipOn]}>Мої</Text>
+                </Pressable>
+              </View>
+              <Pressable style={styles.newBtn} onPress={() => router.push("/post/new")}>
+                <Text style={styles.newBtnText}>+ Пост</Text>
+              </Pressable>
+            </>
+          )}
         </View>
       </View>
 
-      {!searching && (
-        <View style={styles.top}>
-          <View style={styles.filters}>
-            <Pressable onPress={() => setFilter("all")}>
-              <Text style={[styles.chip, filter === "all" && styles.chipOn]}>Усі</Text>
-            </Pressable>
-            <Pressable onPress={() => setFilter("my")}>
-              <Text style={[styles.chip, filter === "my" && styles.chipOn]}>Мої</Text>
-            </Pressable>
-          </View>
-          <Pressable style={styles.newBtn} onPress={() => router.push("/post/new")}>
-            <Text style={styles.newBtnText}>+ Пост</Text>
-          </Pressable>
-        </View>
-      )}
-
       {searching ? (
         <FlatList
+          key={`books-${landscape ? "h" : "v"}`}
           style={{ flex: 1 }}
           data={books}
           keyExtractor={(b) => String(b.id)}
+          horizontal={landscape}
+          pagingEnabled={landscape}
+          showsHorizontalScrollIndicator={landscape}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -181,18 +194,30 @@ export default function Feed() {
               setLoadingMore(false);
             }
           }}
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={
+            landscape
+              ? { paddingVertical: 8 }
+              : { paddingBottom: 40 }
+          }
           ListHeaderComponent={
-            <Text style={[styles.section, { paddingHorizontal: 16, paddingTop: 12 }]}>
-              Книги · {books.length}{booksHasMore ? "+" : ""}
-            </Text>
+            landscape ? null : (
+              <Text style={[styles.section, { paddingHorizontal: 16, paddingTop: 12 }]}>
+                Книги · {books.length}
+                {booksHasMore ? "+" : ""}
+              </Text>
+            )
           }
           ListEmptyComponent={<Text style={styles.empty}>Книг не знайдено.</Text>}
           renderItem={({ item }) => (
-            <Pressable style={styles.card} onPress={() => router.push(`/book/${item.id}`)}>
-              <BookCover uri={item.cover_url} size="full" bleed={0} style={styles.coverFull} />
+            <Pressable
+              style={[styles.card, landscape && { width: winW, height: pageH }]}
+              onPress={() => router.push(`/book/${item.id}`)}
+            >
+              <BookCover uri={item.cover_url} size="full" bleed={0} />
               <View style={styles.cardPad}>
-                <Text style={styles.title}>{item.title}</Text>
+                <Text style={styles.title} numberOfLines={landscape ? 2 : undefined}>
+                  {item.title}
+                </Text>
                 {!!item.authors && <Text style={styles.meta}>{item.authors}</Text>}
                 <Text style={styles.meta}>ISBN {item.isbn}</Text>
                 {(item.publisher || item.publish_date) && (
@@ -207,9 +232,13 @@ export default function Feed() {
         />
       ) : (
         <FlatList
+          key={`posts-${landscape ? "h" : "v"}`}
           style={{ flex: 1 }}
           data={posts}
           keyExtractor={(p) => String(p.id)}
+          horizontal={landscape}
+          pagingEnabled={landscape}
+          showsHorizontalScrollIndicator={landscape}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -229,32 +258,43 @@ export default function Feed() {
               setLoadingMore(false);
             }
           }}
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={
+            landscape ? { paddingVertical: 8 } : { paddingBottom: 40 }
+          }
           ListEmptyComponent={<Text style={styles.empty}>Стрічка порожня.</Text>}
           renderItem={({ item }) => (
-            <Pressable style={styles.card} onPress={() => router.push(`/post/${item.id}`)}>
-              <View style={styles.cardPad}>
-                <Pressable onPress={() => router.push(`/user/${item.author.id}`)}>
-                  <Text style={styles.meta}>{item.author.username}</Text>
-                </Pressable>
-              </View>
-              {item.book ? (
-                <Pressable onPress={() => router.push(`/book/${item.book!.id}`)}>
-                  <BookCover uri={item.book.cover_url} size="full" bleed={0} style={styles.coverFull} />
-                  <Text style={[styles.bookLink, styles.cardPad]}>{item.book.title}</Text>
-                </Pressable>
-              ) : null}
-              <View style={styles.cardPad}>
-                <Text style={styles.title}>{item.title}</Text>
-                <Text style={styles.body} numberOfLines={4}>
-                  {item.text}
-                </Text>
-                <Pressable onPress={() => like(item.id)}>
-                  <Text style={[styles.like, item.liked_by_me && { color: colors.stamp }]}>
-                    ♥ {item.likes_count} · коментарі {item.comments_count}
+            <Pressable
+              style={[styles.card, landscape && styles.cardLandscape, landscape && { width: winW, height: pageH }]}
+              onPress={() => router.push(`/post/${item.id}`)}
+            >
+              <ScrollView
+                style={landscape ? { flex: 1 } : undefined}
+                contentContainerStyle={landscape ? styles.cardLandscapeInner : undefined}
+                nestedScrollEnabled
+              >
+                <View style={styles.cardPad}>
+                  <Pressable onPress={() => router.push(`/user/${item.author.id}`)}>
+                    <Text style={styles.meta}>{item.author.username}</Text>
+                  </Pressable>
+                </View>
+                {item.book ? (
+                  <Pressable onPress={() => router.push(`/book/${item.book!.id}`)}>
+                    <BookCover uri={item.book.cover_url} size="full" bleed={0} />
+                    <Text style={[styles.bookLink, styles.cardPad]}>{item.book.title}</Text>
+                  </Pressable>
+                ) : null}
+                <View style={styles.cardPad}>
+                  <Text style={styles.title}>{item.title}</Text>
+                  <Text style={styles.body} numberOfLines={landscape ? 6 : 4}>
+                    {item.text}
                   </Text>
-                </Pressable>
-              </View>
+                  <Pressable onPress={() => like(item.id)}>
+                    <Text style={[styles.like, item.liked_by_me && { color: colors.stamp }]}>
+                      ♥ {item.likes_count} · коментарі {item.comments_count}
+                    </Text>
+                  </Pressable>
+                </View>
+              </ScrollView>
             </Pressable>
           )}
         />
@@ -311,19 +351,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paperDark,
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
-    paddingBottom: 8,
-    zIndex: 10,
-    elevation: 4,
+    paddingBottom: 10,
+    zIndex: 20,
+    elevation: 6,
     shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
   },
   searchRow: {
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: 12,
-    paddingTop: 10,
+    paddingTop: 8,
     alignItems: "center",
   },
   searchInput: {
@@ -341,29 +381,23 @@ const styles = StyleSheet.create({
   advRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    flexWrap: "wrap",
+    gap: 10,
     paddingHorizontal: 12,
     paddingTop: 8,
   },
   advBtn: {
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: colors.paperDark,
+    backgroundColor: colors.white,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   advBtnText: { color: colors.ink, fontWeight: "700", fontSize: 13 },
   clear: { color: colors.stamp, fontWeight: "700" },
-  top: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingTop: 10,
-  },
-  filters: { flexDirection: "row", gap: 8 },
+  filters: { flexDirection: "row", gap: 6, marginLeft: "auto" },
   chip: { color: colors.muted, fontWeight: "700", paddingHorizontal: 10, paddingVertical: 6 },
-  chipOn: { color: colors.ink, backgroundColor: colors.paperDark },
+  chipOn: { color: colors.ink, backgroundColor: colors.white },
   newBtn: { backgroundColor: colors.ink, paddingHorizontal: 14, paddingVertical: 8 },
   newBtnText: { color: colors.white, fontWeight: "700" },
   section: { color: colors.ink, fontWeight: "800", marginBottom: 10, fontSize: 16 },
@@ -376,7 +410,16 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     overflow: "hidden",
   },
-  coverFull: { maxHeight: undefined },
+  cardLandscape: {
+    borderBottomWidth: 0,
+    borderRightWidth: 1,
+    height: "100%",
+  },
+  cardLandscapeInner: {
+    paddingBottom: 16,
+    flexGrow: 1,
+  },
+  coverFull: {},
   cardPad: { paddingHorizontal: 16, paddingBottom: 14 },
   bookLink: {
     color: colors.stamp,
