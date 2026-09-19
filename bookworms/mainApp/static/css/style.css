@@ -223,3 +223,144 @@
     max-width: 28rem;
     line-height: 1.35;
 }
+
+/* —— Adaptive / mobile web —— */
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+.site-main {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+}
+
+.site-content {
+    margin-top: 1rem;
+}
+
+/* Nested .container inside site-content (login/register/confirm pages) */
+.site-content > .container {
+    width: 100%;
+    max-width: none;
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+.site-content img,
+.site-content video,
+.site-content iframe {
+    max-width: 100%;
+    height: auto;
+}
+
+.site-content .table-responsive {
+    margin-left: -0.25rem;
+    margin-right: -0.25rem;
+}
+
+/* Touch-friendlier controls */
+@media (max-width: 991.98px) {
+    .site-navbar .nav-link,
+    .site-navbar .btn.nav-link {
+        padding-top: 0.65rem;
+        padding-bottom: 0.65rem;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    .site-navbar .navbar-collapse {
+        padding-bottom: 0.75rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        margin-top: 0.5rem;
+    }
+
+    .site-main {
+        padding-top: 3.75rem;
+    }
+
+    .site-content {
+        margin-top: 0.75rem;
+        padding: 1rem 0.9rem 1.35rem;
+        border-radius: 0;
+        box-shadow: none;
+        background: rgba(247, 241, 230, 0.92);
+    }
+
+    .site-bg__img {
+        object-position: center 30%;
+    }
+
+    .home-intro__brand {
+        font-size: clamp(1.45rem, 7vw, 1.85rem);
+    }
+
+    .home-intro__tag {
+        font-size: 0.95rem;
+    }
+
+    /* Forms / buttons stack cleanly */
+    .site-content .btn {
+        min-height: 42px;
+    }
+
+    .site-content .form-control,
+    .site-content .form-select,
+    .site-content input[type="text"],
+    .site-content input[type="password"],
+    .site-content input[type="email"],
+    .site-content textarea {
+        font-size: 16px; /* avoid iOS zoom on focus */
+    }
+
+    .site-content .card .card-body {
+        padding: 1rem;
+    }
+
+    .site-content .row > [class*="col-"] {
+        margin-bottom: 0.25rem;
+    }
+
+    /* Post book cards: cover + text wrap */
+    .post-book-card__cover,
+    .post-book-card__placeholder {
+        width: 72px;
+        height: 106px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .site-content {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    .site-content h1,
+    .site-content h2 {
+        font-size: 1.35rem;
+    }
+
+    .site-content h3,
+    .site-content h4 {
+        font-size: 1.15rem;
+    }
+
+    .site-content .btn-group {
+        flex-wrap: wrap;
+    }
+
+    .site-content .d-flex.justify-content-between {
+        gap: 0.5rem;
+    }
+}
+
+/* Prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .avatar-item img:hover {
+        transform: none;
+    }
+}
