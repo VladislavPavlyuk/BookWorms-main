@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F3E6C9"
+      "backgroundColor": "#F4F0E6"
     },
     "plugins": [
       "expo-router",
@@ -24,7 +24,7 @@
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F3E6C9"
+        "backgroundColor": "#F4F0E6"
       }
     },
     "ios": {
