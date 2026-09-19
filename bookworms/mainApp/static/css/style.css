@@ -137,3 +137,89 @@
 .library-book-title-link:hover {
     text-decoration: underline !important;
 }
+/* Navbar brand logo */
+.navbar-logo {
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+/* Fixed photo behind every page */
+.site-body {
+    min-height: 100vh;
+    background: #1a2433;
+}
+
+.site-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.site-bg__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center;
+}
+
+.site-bg__veil {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        180deg,
+        rgba(12, 18, 28, 0.55) 0%,
+        rgba(12, 18, 28, 0.35) 40%,
+        rgba(12, 18, 28, 0.55) 100%
+    );
+}
+
+.site-navbar {
+    z-index: 1030;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+.site-main {
+    position: relative;
+    z-index: 1;
+    padding-top: 3.5rem; /* room for fixed navbar */
+    padding-bottom: 2.5rem;
+}
+
+.site-content {
+    background: rgba(247, 241, 230, 0.88);
+    border-radius: 4px;
+    padding: 1.25rem 1.35rem 1.75rem;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+
+.home-intro {
+    margin: 0 0 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.home-intro__brand {
+    font-size: clamp(1.6rem, 3.5vw, 2.15rem);
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+    color: #1a2433;
+}
+
+.home-intro__tag {
+    font-size: 1rem;
+    color: #3a4555;
+    max-width: 28rem;
+    line-height: 1.35;
+}

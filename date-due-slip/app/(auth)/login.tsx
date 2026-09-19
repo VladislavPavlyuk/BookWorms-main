@@ -65,7 +65,7 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.paper, padding: 28, justifyContent: "center" },
+  wrap: { flex: 1, backgroundColor: colors.screen, padding: 28, justifyContent: "center" },
   stamp: {
     color: colors.stamp,
     fontSize: 28,

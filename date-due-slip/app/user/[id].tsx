@@ -53,7 +53,7 @@ export default function UserShelf() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.paper }}
+      style={{ flex: 1, backgroundColor: colors.screen }}
       contentContainerStyle={{ padding: 16 }}
     >
       <Text style={styles.h}>{owner?.username}</Text>

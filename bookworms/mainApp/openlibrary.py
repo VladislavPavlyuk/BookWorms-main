@@ -86,7 +86,9 @@ def _preferred_isbn(norm: str, found: str) -> str:
     return norm
 
 
-def _http_get_json(url: str, retries: int = 2) -> tuple[Any | None, str | None]:
+def _http_get_json(
+    url: str, retries: int = 2, timeout: float = 20
+) -> tuple[Any | None, str | None]:
     """
     Повертає (data, None) | (None, None) якщо 404/порожньо |
     (None, err) при мережевій/серверній помилці.
@@ -102,7 +104,7 @@ def _http_get_json(url: str, retries: int = 2) -> tuple[Any | None, str | None]:
             },
         )
         try:
-            with urlopen(req, timeout=20) as resp:
+            with urlopen(req, timeout=timeout) as resp:
                 raw = resp.read().decode("utf-8")
             if not raw:
                 return None, None
@@ -251,8 +253,10 @@ def fetch_book_by_isbn(isbn: str) -> tuple[dict[str, Any] | None, str | None]:
 
 
 def openlibrary_ping() -> dict[str, Any]:
-    """Для /api/health/ — чи контейнер взагалі дістає OL."""
-    data, err = _http_get_json(f"{OL_HOST}/isbn/9780140328721.json", retries=1)
+    """Для /api/health/?deep=1 — короткий timeout, щоб не вішати worker."""
+    data, err = _http_get_json(
+        f"{OL_HOST}/isbn/9780140328721.json", retries=0, timeout=3
+    )
     ok = isinstance(data, dict) and bool(data.get("title"))
     return {
         "openlibrary_client": CLIENT_REV,

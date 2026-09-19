@@ -45,7 +45,7 @@ export default function More() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.paper }}
+      style={{ flex: 1, backgroundColor: colors.screen }}
       contentContainerStyle={{ padding: 20 }}
     >
       {editing ? (

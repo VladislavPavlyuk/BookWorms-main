@@ -51,7 +51,7 @@ export default function Feed() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.paper }}>
+    <View style={{ flex: 1, backgroundColor: colors.screen }}>
       <View style={styles.top}>
         <View style={styles.filters}>
           <Pressable onPress={() => setFilter("all")}>

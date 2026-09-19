@@ -27,6 +27,7 @@ export default function TabsLayout() {
           overflow: "visible",
         },
         headerRight: () => <NotifBell />,
+        sceneContainerStyle: { backgroundColor: "transparent" },
         tabBarStyle: { backgroundColor: colors.paperDark, borderTopColor: colors.line },
         tabBarActiveTintColor: colors.stamp,
         tabBarInactiveTintColor: colors.muted,

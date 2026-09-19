@@ -123,25 +123,40 @@ def _posts_same_book(book):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health(request):
-    from mainApp.registration_service import purge_expired_unactivated_users, purge_status
-    from mainApp.web3forms_mail import Web3FormsError, send_web3forms
-
-    purged = purge_expired_unactivated_users()
-    st = purge_status()
-    from mainApp.openlibrary import openlibrary_ping
+    """
+    Cheap by default — docker/nginx probe every ~15s must not block gthread workers.
+    ?deep=1 → purge status + Open Library ping (short timeout).
+    ?test_mail=1 → Web3Forms probe.
+    """
+    from django.db import connection
 
     payload = {
         "status": "ok",
         "app": "date-due-slip",
-        "code_rev": "2026-09-18-confirm-marks-notif-read",
-        "purged_now": purged,
-        **st,
-        "web3forms_key_set": bool(getattr(settings, "WEB3FORMS_ACCESS_KEY", "")),
-        "web3forms_key_suffix": (getattr(settings, "WEB3FORMS_ACCESS_KEY", "") or "")[-6:],
-        "public_base_url": getattr(settings, "PUBLIC_BASE_URL", "") or None,
-        **openlibrary_ping(),
+        "code_rev": "2026-09-19-health-cheap",
     }
+    try:
+        connection.ensure_connection()
+        payload["db"] = "ok"
+    except Exception as e:
+        payload["status"] = "degraded"
+        payload["db"] = f"fail: {e}"
+
+    if request.GET.get("deep") == "1":
+        from mainApp.openlibrary import openlibrary_ping
+        from mainApp.registration_service import purge_status
+
+        payload.update(purge_status())
+        payload.update(openlibrary_ping())
+
     if request.GET.get("test_mail") == "1":
+        from mainApp.web3forms_mail import Web3FormsError, send_web3forms
+
+        payload["web3forms_key_set"] = bool(getattr(settings, "WEB3FORMS_ACCESS_KEY", ""))
+        payload["web3forms_key_suffix"] = (
+            getattr(settings, "WEB3FORMS_ACCESS_KEY", "") or ""
+        )[-6:]
+        payload["public_base_url"] = getattr(settings, "PUBLIC_BASE_URL", "") or None
         try:
             send_web3forms(
                 {

@@ -34,7 +34,7 @@ export default function Browse() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.paper }}>
+    <View style={{ flex: 1, backgroundColor: colors.screen }}>
       <FlatList
         data={others}
         keyExtractor={(s) => String(s.id)}

@@ -43,25 +43,14 @@ else:
 PY
 fi
 
-PURGE_INTERVAL="${PURGE_UNACTIVATED_INTERVAL:-30}"
-if [ "${PURGE_UNACTIVATED:-1}" = "1" ] || [ "${PURGE_UNACTIVATED:-1}" = "true" ]; then
-  # nohup + background: переживає exec gunicorn (shell → gunicorn same PID)
-  nohup sh -c "
-    echo entrypoint: purge loop every ${PURGE_INTERVAL}s >&2
-    while true; do
-      python manage.py purge_unactivated || echo purge_cmd_failed >&2
-      sleep ${PURGE_INTERVAL}
-    done
-  " >/proc/1/fd/1 2>/proc/1/fd/2 &
-  echo "entrypoint: purge spawned pid $!" >&2
-fi
-
+# Purge крутить лише gunicorn worker thread (post_worker_init) —
+# окремий manage.py loop їв DB + друкував «thread started» кожні 30s.
 echo "entrypoint: starting gunicorn..." >&2
 exec gunicorn bookworms.wsgi:application \
   --config bookworms/gunicorn.conf.py \
   --bind 0.0.0.0:8000 \
   --workers "${GUNICORN_WORKERS:-1}" \
-  --threads "${GUNICORN_THREADS:-2}" \
+  --threads "${GUNICORN_THREADS:-4}" \
   --timeout 60 \
   --access-logfile - \
   --error-logfile -

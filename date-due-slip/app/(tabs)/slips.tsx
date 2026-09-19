@@ -104,7 +104,7 @@ export default function Slips() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.paper }}
+      style={{ flex: 1, backgroundColor: colors.screen }}
       contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       refreshControl={
         <RefreshControl

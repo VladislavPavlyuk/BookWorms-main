@@ -34,7 +34,7 @@ export default function BookScreen() {
   const onMyShelf = holders.some((h) => h.user.id === user?.id);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.paper }} contentContainerStyle={{ padding: 16 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ padding: 16 }}>
       {!!book.cover_url && (
         <Image source={{ uri: book.cover_url }} style={styles.cover} resizeMode="contain" />
       )}

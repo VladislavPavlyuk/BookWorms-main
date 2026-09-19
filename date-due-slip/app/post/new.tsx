@@ -55,7 +55,7 @@ export default function NewPost() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.paper }} contentContainerStyle={{ padding: 20 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ padding: 20 }}>
       <TextInput
         placeholder="Заголовок"
         placeholderTextColor={colors.muted}

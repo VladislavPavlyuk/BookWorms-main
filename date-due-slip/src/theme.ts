@@ -1,6 +1,8 @@
 export const colors = {
   paper: "#F3E6C9",
   paperDark: "#E8D5A8",
+  /** Screen root — translucent so site bg photo shows through */
+  screen: "rgba(243, 230, 201, 0.78)",
   ink: "#2A1F14",
   muted: "#6B5344",
   stamp: "#C23B22",

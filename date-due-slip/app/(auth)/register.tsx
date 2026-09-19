@@ -99,7 +99,7 @@ export default function Register() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={{ flex: 1, backgroundColor: colors.paper }}
+      style={{ flex: 1, backgroundColor: colors.screen }}
     >
       <ScrollView contentContainerStyle={styles.wrap}>
         <Text style={styles.title}>Новий квиток</Text>

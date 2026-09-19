@@ -117,7 +117,7 @@ export default function ShelfScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.paper }}>
+    <View style={{ flex: 1, backgroundColor: colors.screen }}>
       <View style={styles.row}>
         <TextInput
           placeholder="ISBN 10/13"
@@ -220,7 +220,7 @@ export default function ShelfScreen() {
       />
 
       <Modal visible={manualOpen} animationType="slide" onRequestClose={() => setManualOpen(false)}>
-        <ScrollView style={{ flex: 1, backgroundColor: colors.paper }} contentContainerStyle={{ padding: 20, paddingTop: 56 }}>
+        <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ padding: 20, paddingTop: 56 }}>
           <Text style={styles.modalH}>Книга вручну</Text>
           {(["isbn", "title", "authors", "publisher", "publish_date"] as const).map((k) => (
             <TextInput

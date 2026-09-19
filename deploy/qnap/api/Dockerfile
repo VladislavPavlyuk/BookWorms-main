@@ -23,8 +23,10 @@ RUN chmod +x /entrypoint.sh \
     && mkdir -p /app/media /app/staticfiles \
     && test -f /app/mainApp/middleware.py \
     && test -f /app/mainApp/migrations/0013_customuser_email_confirmed.py \
-    && grep -q purged_now /app/api/views.py \
-    && grep -q "purge loop" /entrypoint.sh \
+    && test -f /app/mainApp/migrations/0017_privatemessage_related_shelf.py \
+    && grep -q health-cheap /app/api/views.py \
+    && grep -q post_worker_init /app/bookworms/gunicorn.conf.py \
+    && ! grep -q 'purge loop every' /entrypoint.sh \
     && grep -q 'OL_HOST' /app/mainApp/openlibrary.py \
     && ! grep -q 'openlibrary.org/api/books' /app/mainApp/openlibrary.py
 

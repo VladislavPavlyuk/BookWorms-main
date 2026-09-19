@@ -164,7 +164,7 @@ export default function Exchanges() {
   return (
     <ScrollView
       ref={scrollRef}
-      style={{ flex: 1, backgroundColor: colors.paper }}
+      style={{ flex: 1, backgroundColor: colors.screen }}
       contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
     >
       <Text style={styles.lead}>

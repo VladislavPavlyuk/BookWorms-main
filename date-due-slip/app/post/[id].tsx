@@ -88,7 +88,7 @@ export default function PostDetail() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.paper }} contentContainerStyle={{ padding: 16 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ padding: 16 }}>
       <Pressable onPress={() => router.push(`/user/${post.author.id}`)}>
         <Text style={styles.meta}>{post.author.username}</Text>
       </Pressable>
