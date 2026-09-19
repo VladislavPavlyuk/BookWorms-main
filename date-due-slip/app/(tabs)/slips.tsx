@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, ShelfApi, SlipApi } from "../../src/api";
+import { BookCover } from "../../src/BookCover";
 import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
 import type { Shelf } from "../../src/types";
@@ -29,6 +30,7 @@ function Slip({
   return (
     <View style={[styles.slip, overdue && styles.overdue, s.return_pending && role === "lent" && styles.pending]}>
       <Text style={styles.library}>DATE DUE SLIP</Text>
+      <BookCover uri={s.book.cover_url} size="full" bleed={0} />
       <Text style={styles.title}>{s.book.title}</Text>
       <Text style={styles.meta}>{s.book.authors || "—"}</Text>
       <View style={styles.stampBox}>
@@ -105,7 +107,7 @@ export default function Slips() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.screen }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+      contentContainerStyle={{ paddingBottom: 40 }}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -160,44 +162,57 @@ export default function Slips() {
 }
 
 const styles = StyleSheet.create({
-  hint: { color: colors.muted, marginBottom: 16, fontSize: 13 },
+  hint: { color: colors.muted, marginBottom: 16, fontSize: 13, paddingHorizontal: 16, paddingTop: 12 },
   sec: {
     color: colors.ink,
     fontWeight: "800",
     letterSpacing: 1,
     marginBottom: 8,
     marginTop: 8,
+    paddingHorizontal: 16,
   },
-  empty: { color: colors.muted, marginBottom: 16 },
+  empty: { color: colors.muted, marginBottom: 16, paddingHorizontal: 16 },
   slip: {
-    borderWidth: 2,
+    borderWidth: 0,
+    borderBottomWidth: 2,
     borderColor: colors.ink,
     backgroundColor: colors.white,
-    padding: 16,
-    marginBottom: 12,
-    borderStyle: "dashed",
+    padding: 0,
+    paddingBottom: 16,
+    marginBottom: 0,
+    borderStyle: "solid",
+    overflow: "hidden",
   },
   overdue: { borderColor: colors.stamp, backgroundColor: "#FBE9E5" },
-  pending: { borderColor: colors.stampOk, backgroundColor: "#E8F5E9", borderStyle: "solid" },
-  library: { color: colors.stamp, fontWeight: "800", letterSpacing: 2, fontSize: 12 },
-  title: { color: colors.ink, fontSize: 18, fontWeight: "700", marginTop: 6 },
-  meta: { color: colors.muted, marginTop: 2 },
-  stampBox: { marginTop: 12, alignItems: "flex-end" },
-  stamp: { color: colors.stampOk, fontWeight: "900", fontSize: 18, letterSpacing: 1 },
+  pending: { borderColor: colors.stampOk, backgroundColor: "#E8F5E9" },
+  library: {
+    color: colors.stamp,
+    fontWeight: "800",
+    letterSpacing: 2,
+    fontSize: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  title: { color: colors.ink, fontSize: 16, fontWeight: "700", marginTop: 8, paddingHorizontal: 16 },
+  meta: { color: colors.muted, marginTop: 2, paddingHorizontal: 16 },
+  stampBox: { marginTop: 12, alignItems: "flex-end", paddingHorizontal: 16 },
   days: { color: colors.muted, fontSize: 12, marginTop: 2 },
   footer: {
     color: colors.ink,
     marginTop: 12,
     fontSize: 12,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: colors.line,
     paddingTop: 8,
   },
+  stamp: { color: colors.stampOk, fontWeight: "900", fontSize: 18, letterSpacing: 1 },
   confirmBtn: {
     marginTop: 12,
+    marginHorizontal: 16,
     backgroundColor: colors.stampOk,
     paddingVertical: 12,
   },
   confirmBtnText: { color: "#fff", fontWeight: "800", textAlign: "center" },
-  chat: { color: colors.stamp, fontWeight: "800", marginTop: 10 },
+  chat: { color: colors.stamp, fontWeight: "800", marginTop: 10, paddingHorizontal: 16 },
 });

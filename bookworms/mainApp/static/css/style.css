@@ -224,6 +224,62 @@
     line-height: 1.35;
 }
 
+.home-search__bar .form-control {
+    border-color: #c9b48a;
+}
+
+/* Stick under fixed navbar — posts scroll underneath */
+.home-search {
+    position: sticky;
+    top: 3.5rem;
+    z-index: 1020;
+    margin: -0.35rem -0.5rem 1rem;
+    padding: 0.65rem 0.5rem 0.75rem;
+    background: rgba(247, 241, 230, 0.96);
+    border-bottom: 1px solid rgba(201, 180, 138, 0.45);
+    box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.home-search__advanced {
+    background: rgba(255, 251, 243, 0.92);
+    border: 1px solid rgba(201, 180, 138, 0.55);
+    border-radius: 4px;
+    max-height: min(55vh, 28rem);
+    overflow-y: auto;
+}
+
+@media (max-width: 991.98px) {
+    .home-search {
+        top: 3.55rem;
+        margin-left: -0.9rem;
+        margin-right: -0.9rem;
+        padding-left: 0.9rem;
+        padding-right: 0.9rem;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .home-search {
+        margin-left: -0.75rem;
+        margin-right: -0.75rem;
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    .home-search__bar {
+        flex-wrap: wrap;
+    }
+    .home-search__bar .form-control {
+        flex: 1 1 100%;
+        width: 100%;
+        border-radius: 0.375rem 0.375rem 0 0 !important;
+    }
+    .home-search__bar .btn {
+        flex: 1 1 auto;
+    }
+}
+
 /* —— Adaptive / mobile web —— */
 html {
     -webkit-text-size-adjust: 100%;

@@ -10,6 +10,7 @@ urlpatterns = [
     path("auth/refresh/", TokenRefreshView.as_view()),
     path("auth/me/", views.me),
     path("posts/", views.post_list),
+    path("books/", views.book_search),
     path("posts/create/", views.post_create),
     path("posts/<int:post_id>/", views.post_detail),
     path("posts/<int:post_id>/like/", views.post_like),

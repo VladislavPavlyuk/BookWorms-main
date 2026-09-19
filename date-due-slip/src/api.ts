@@ -158,6 +158,28 @@ export const AuthApi = {
     api<User>("/api/auth/me/", { method: "PATCH", body }),
 };
 
+export type FeedSearch = {
+  q?: string;
+  isbn?: string;
+  authors?: string;
+  publisher?: string;
+  publish_date?: string;
+  age_min?: string;
+  age_max?: string;
+};
+
+function bookQuery(page: number, search?: FeedSearch) {
+  const p = new URLSearchParams();
+  p.set("page", String(page));
+  if (search) {
+    (Object.keys(search) as (keyof FeedSearch)[]).forEach((k) => {
+      const v = (search[k] || "").trim();
+      if (v) p.set(k, v);
+    });
+  }
+  return p.toString();
+}
+
 export const FeedApi = {
   list: (page = 1, filter?: "my") =>
     api<Paginated<Post>>(`/api/posts/?page=${page}${filter === "my" ? "&filter=my" : ""}`),
@@ -170,6 +192,11 @@ export const FeedApi = {
   like: (id: number) => api<{ liked: boolean; likes_count: number }>(`/api/posts/${id}/like/`, { method: "POST" }),
   comment: (id: number, text: string) =>
     api<Comment>(`/api/posts/${id}/comments/`, { method: "POST", body: { text } }),
+};
+
+export const BooksApi = {
+  search: (page = 1, search?: FeedSearch) =>
+    api<Paginated<Book>>(`/api/books/?${bookQuery(page, search)}`),
 };
 
 export const ShelfApi = {

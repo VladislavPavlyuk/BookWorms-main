@@ -75,21 +75,66 @@ def _activation_minutes() -> int:
 
 
 def home(request):
-    filter_type = request.GET.get('filter')
+    filter_type = request.GET.get("filter")
 
+    from .feed_search import (
+        advanced_active,
+        apply_book_search,
+        search_active,
+    )
+
+    searching = search_active(request.GET)
+    books_page = None
+    if searching:
+        books_qs = apply_book_search(Book.objects.all(), request.GET)
+        book_paginator = Paginator(books_qs, 12)
+        books_page = book_paginator.get_page(request.GET.get("bpage") or request.GET.get("page"))
+
+    # Стрічка постів — окремо, без книжкового пошуку
     posts_list = Post.objects.select_related("author", "book").order_by("-created_ad")
-
-    if filter_type == 'my' and request.user.is_authenticated:
+    if filter_type == "my" and request.user.is_authenticated:
         posts_list = posts_list.filter(author=request.user)
 
+    post_params = request.GET.copy()
+    # pagination for posts uses `page` only when not in book-search mode
+    if searching:
+        post_params.pop("page", None)
     paginator = Paginator(posts_list, 5)
-    page_number = request.GET.get('page')
-    posts = paginator.get_page(page_number)
+    page_number = None if searching else request.GET.get("page")
+    posts = paginator.get_page(page_number or 1)
 
-    return render(request, "mainApp/index.html", {
-        "posts": posts,
-        "filter_type": filter_type,
-    })
+    qs_params = request.GET.copy()
+    qs_params.pop("page", None)
+    qs_params.pop("bpage", None)
+    search_qs = qs_params.urlencode()
+    qs_core = request.GET.copy()
+    qs_core.pop("page", None)
+    qs_core.pop("bpage", None)
+    qs_core.pop("filter", None)
+    search_core = qs_core.urlencode()
+
+    return render(
+        request,
+        "mainApp/index.html",
+        {
+            "posts": posts,
+            "books": books_page,
+            "searching": searching,
+            "filter_type": filter_type,
+            "search_qs": search_qs,
+            "search_core": search_core,
+            "search_active": searching,
+            "advanced_open": advanced_active(request.GET),
+            "q": (request.GET.get("q") or "").strip(),
+            "title": (request.GET.get("title") or "").strip(),
+            "isbn": (request.GET.get("isbn") or "").strip(),
+            "authors": (request.GET.get("authors") or "").strip(),
+            "publisher": (request.GET.get("publisher") or "").strip(),
+            "publish_date": (request.GET.get("publish_date") or "").strip(),
+            "age_min": (request.GET.get("age_min") or "").strip(),
+            "age_max": (request.GET.get("age_max") or "").strip(),
+        },
+    )
 
 
 @login_required

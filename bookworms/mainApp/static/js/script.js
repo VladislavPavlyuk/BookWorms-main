@@ -125,12 +125,71 @@
         initReaderAgeForms();
     }
 
-    /** Живий бейдж сповіщень у навбарі (кожні 3 с). */
+    /** Живий бейдж сповіщень у навбарі (кожні 3 с) + звук при зростанні unread. */
     function initNotifBadgePoll() {
         var badge = document.getElementById("nav-notif-badge");
         if (!badge) return;
         var url = badge.getAttribute("data-count-url");
         if (!url) return;
+
+        var lastCount = null; // null = ще не отримали baseline
+        var soundUnlocked = false;
+        var audio = null;
+
+        function soundUrl() {
+            var css = document.querySelector('link[href*="style.css"]');
+            if (css && css.href) {
+                return css.href.replace(/css\/style\.css.*$/, "sounds/notify.wav");
+            }
+            return "/static/sounds/notify.wav";
+        }
+
+        function ensureAudio() {
+            if (!audio) {
+                audio = new Audio(soundUrl());
+                audio.preload = "auto";
+                audio.volume = 0.7;
+            }
+            return audio;
+        }
+
+        function unlockSound() {
+            if (soundUnlocked) return;
+            soundUnlocked = true;
+            try {
+                var a = ensureAudio();
+                a.muted = true;
+                var p = a.play();
+                if (p && typeof p.then === "function") {
+                    p.then(function () {
+                        a.pause();
+                        a.currentTime = 0;
+                        a.muted = false;
+                    }).catch(function () {
+                        a.muted = false;
+                    });
+                } else {
+                    a.muted = false;
+                }
+            } catch (e) {
+                /* ignore */
+            }
+        }
+
+        ["pointerdown", "keydown", "touchstart"].forEach(function (ev) {
+            document.addEventListener(ev, unlockSound, { once: true, passive: true });
+        });
+
+        function playNotify() {
+            try {
+                var a = ensureAudio();
+                a.currentTime = 0;
+                var p = a.play();
+                if (p && typeof p.catch === "function") p.catch(function () {});
+            } catch (e) {
+                /* ignore */
+            }
+        }
 
         function render(n) {
             n = parseInt(n, 10) || 0;
@@ -141,6 +200,10 @@
                 badge.textContent = "";
                 badge.classList.add("d-none");
             }
+            if (lastCount !== null && n > lastCount) {
+                playNotify();
+            }
+            lastCount = n;
         }
 
         function tick() {

@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, ShelfApi } from "../../src/api";
+import { BookCover } from "../../src/BookCover";
 import { colors } from "../../src/theme";
 import type { Shelf } from "../../src/types";
 
@@ -156,31 +157,37 @@ export default function ShelfScreen() {
               </Text>
               {pending.map((s) => (
                 <View key={s.id} style={[styles.card, styles.pendingCard]}>
-                  <Text style={styles.title}>{s.book.title}</Text>
-                  <Text style={styles.meta}>від {s.user.username}</Text>
-                  <Pressable style={styles.confirmBtn} onPress={() => confirm(s)}>
-                    <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
-                  </Pressable>
+                  <BookCover uri={s.book.cover_url} size="full" bleed={0} />
+                  <View style={styles.cardBody}>
+                    <Text style={styles.title}>{s.book.title}</Text>
+                    <Text style={styles.meta}>від {s.user.username}</Text>
+                    <Pressable style={styles.confirmBtn} onPress={() => confirm(s)}>
+                      <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
+                    </Pressable>
+                  </View>
                 </View>
               ))}
             </View>
           ) : null
         }
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={{ paddingBottom: 24 }}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Pressable onPress={() => router.push(`/book/${item.book.id}`)}>
-              <Text style={styles.title}>{item.book.title}</Text>
-              <Text style={styles.meta}>
-                {item.book.authors}
-                {item.borrowed_from ? ` · позичено у ${item.borrowed_from.username}` : ""}
-                {item.is_lent_out && !item.borrowed_from ? " · зараз у позиці" : ""}
-                {item.due_date ? ` · до ${item.due_date}` : ""}
-                {item.return_pending ? " · очікує підтвердження" : ""}
-                {` · ${item.book.reader_age_summary}`}
-              </Text>
+              <BookCover uri={item.book.cover_url} size="full" bleed={0} />
+              <View style={styles.cardBody}>
+                <Text style={styles.title}>{item.book.title}</Text>
+                <Text style={styles.meta}>
+                  {item.book.authors}
+                  {item.borrowed_from ? ` · позичено у ${item.borrowed_from.username}` : ""}
+                  {item.is_lent_out && !item.borrowed_from ? " · зараз у позиці" : ""}
+                  {item.due_date ? ` · до ${item.due_date}` : ""}
+                  {item.return_pending ? " · очікує підтвердження" : ""}
+                  {` · ${item.book.reader_age_summary}`}
+                </Text>
+              </View>
             </Pressable>
-            <View style={styles.actions}>
+            <View style={[styles.actions, styles.cardBody]}>
               {item.borrowed_from && (
                 <Pressable onPress={() => router.push(`/chat/${item.borrowed_from!.id}`)}>
                   <Text style={styles.link}>Чат з власником</Text>
@@ -284,7 +291,17 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   confirmBtnText: { color: "#fff", fontWeight: "800", textAlign: "center" },
-  card: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, padding: 12, marginBottom: 10 },
+  card: {
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    padding: 0,
+    marginBottom: 0,
+    overflow: "hidden",
+  },
+  coverFull: { borderWidth: 0 },
+  cardBody: { paddingHorizontal: 16, paddingVertical: 10 },
   title: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4, fontSize: 13 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 14, marginTop: 10 },

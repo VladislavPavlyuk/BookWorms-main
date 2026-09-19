@@ -272,6 +272,22 @@ def post_list(request):
     return paginator.get_paginated_response(ser.data)
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def book_search(request):
+    """Пошук по довіднику Book (не по постах)."""
+    from mainApp.feed_search import apply_book_search, search_active
+
+    if not search_active(request.GET) and not any(request.GET.keys()):
+        qs = Book.objects.all().order_by("title")
+    else:
+        qs = apply_book_search(Book.objects.all(), request.GET)
+    paginator = PostPagination()
+    page = paginator.paginate_queryset(qs, request)
+    ser = BookSerializer(page, many=True, context={"request": request})
+    return paginator.get_paginated_response(ser.data)
+
+
 @api_view(["POST"])
 def post_create(request):
     ser = PostWriteSerializer(data=request.data)

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, BrowseApi } from "../../src/api";
+import { BookCover } from "../../src/BookCover";
 import { RequestModal } from "../../src/RequestModal";
 import { colors } from "../../src/theme";
 import type { Shelf } from "../../src/types";
@@ -48,7 +49,7 @@ export default function Browse() {
             }}
           />
         }
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={{ paddingBottom: 24 }}
         ListEmptyComponent={<Text style={styles.empty}>Немає чужих книг</Text>}
         renderItem={({ item }) => (
           <View style={styles.card}>
@@ -56,12 +57,15 @@ export default function Browse() {
               <Text style={styles.owner}>{item.user.username}</Text>
             </Pressable>
             <Pressable onPress={() => router.push(`/book/${item.book.id}`)}>
-              <Text style={styles.title}>{item.book.title}</Text>
-              <Text style={styles.meta}>
-                {item.book.authors} · {item.book.reader_age_summary}
-              </Text>
+              <BookCover uri={item.book.cover_url} size="full" bleed={0} />
+              <View style={styles.cardBody}>
+                <Text style={styles.title}>{item.book.title}</Text>
+                <Text style={styles.meta}>
+                  {item.book.authors} · {item.book.reader_age_summary}
+                </Text>
+              </View>
             </Pressable>
-            <Pressable style={styles.btn} onPress={() => setTarget(item)}>
+            <Pressable style={[styles.btn, styles.cardBody]} onPress={() => setTarget(item)}>
               <Text style={styles.btnText}>Позичити / обмін</Text>
             </Pressable>
           </View>
@@ -79,8 +83,18 @@ export default function Browse() {
 
 const styles = StyleSheet.create({
   empty: { color: colors.muted, textAlign: "center", marginTop: 40 },
-  card: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, padding: 12, marginBottom: 10 },
-  owner: { color: colors.stamp, fontWeight: "700", marginBottom: 4 },
+  card: {
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    padding: 0,
+    marginBottom: 0,
+    overflow: "hidden",
+  },
+  coverFull: { borderWidth: 0 },
+  cardBody: { paddingHorizontal: 16, paddingBottom: 12 },
+  owner: { color: colors.stamp, fontWeight: "700", marginBottom: 0, paddingHorizontal: 16, paddingTop: 12 },
   title: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4 },
   btn: { marginTop: 10, alignSelf: "flex-start", backgroundColor: colors.ink, paddingHorizontal: 12, paddingVertical: 6 },

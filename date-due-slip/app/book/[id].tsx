@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, BrowseApi } from "../../src/api";
+import { BookCover } from "../../src/BookCover";
 import { RequestModal } from "../../src/RequestModal";
 import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
@@ -34,10 +35,9 @@ export default function BookScreen() {
   const onMyShelf = holders.some((h) => h.user.id === user?.id);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ padding: 16 }}>
-      {!!book.cover_url && (
-        <Image source={{ uri: book.cover_url }} style={styles.cover} resizeMode="contain" />
-      )}
+    <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ paddingBottom: 24 }}>
+      <BookCover uri={book.cover_url} size="full" bleed={0} />
+      <View style={styles.body}>
       <Text style={styles.title}>{book.title}</Text>
       <Text style={styles.meta}>{book.authors || "—"}</Text>
       <Text style={styles.meta}>ISBN {book.isbn}</Text>
@@ -93,13 +93,14 @@ export default function BookScreen() {
         </Pressable>
       ))}
 
+      </View>
       <RequestModal target={target} myOwned={myOwned} onClose={() => setTarget(null)} onDone={load} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  cover: { width: "100%", height: 200, marginBottom: 12, backgroundColor: colors.paperDark },
+  body: { paddingHorizontal: 16, paddingTop: 12 },
   title: { fontSize: 22, fontWeight: "800", color: colors.ink },
   meta: { color: colors.muted, marginTop: 4 },
   link: { color: colors.stamp, fontWeight: "700", marginTop: 8 },

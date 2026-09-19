@@ -3,11 +3,13 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { AppState } from "react-native";
 import { NotifApi, getApiBase } from "./api";
 import { useAuth } from "./auth";
+import { playNotifySound } from "./notifySound";
 
 type Ctx = {
   unread: number;
@@ -25,16 +27,23 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
   const [unread, setUnread] = useState(0);
   const [pollError, setPollError] = useState<string | null>(null);
+  const lastCount = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
     if (!user) {
       setUnread(0);
+      lastCount.current = 0;
       setPollError(null);
       return;
     }
     try {
       const r = await NotifApi.unreadCount();
-      setUnread(typeof r.unread_count === "number" ? r.unread_count : 0);
+      const n = typeof r.unread_count === "number" ? r.unread_count : 0;
+      if (lastCount.current !== null && n > lastCount.current) {
+        playNotifySound();
+      }
+      lastCount.current = n;
+      setUnread(n);
       setPollError(null);
     } catch (e) {
       const base = await getApiBase().catch(() => "?");
@@ -48,9 +57,11 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
     if (!ready) return;
     if (!user) {
       setUnread(0);
+      lastCount.current = 0;
       setPollError(null);
       return;
     }
+    lastCount.current = null; // baseline після логіну — без звуку
     refresh();
     const interval = setInterval(refresh, POLL_MS);
     const sub = AppState.addEventListener("change", (s) => {

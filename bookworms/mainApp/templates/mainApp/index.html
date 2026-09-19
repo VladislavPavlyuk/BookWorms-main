@@ -5,9 +5,104 @@
 
 {% block content %}
 
-<h1 class="text-center">Bookworms</h1>
+<form class="home-search mb-3" method="get" action="/" role="search">
+    <div class="home-search__bar input-group">
+        <input type="search"
+               name="q"
+               class="form-control form-control-lg"
+               placeholder="Пошук книги за назвою…"
+               value="{{ q }}"
+               autocomplete="off"
+               aria-label="Пошук книги за назвою">
+        <button type="submit" class="btn btn-dark">Знайти</button>
+        <button type="button"
+                class="btn btn-outline-secondary"
+                data-bs-toggle="collapse"
+                data-bs-target="#advancedSearch"
+                aria-expanded="{% if advanced_open %}true{% else %}false{% endif %}"
+                aria-controls="advancedSearch">
+            Advanced search
+        </button>
+    </div>
 
-<hr>
+    <div class="collapse{% if advanced_open %} show{% endif %} mt-3" id="advancedSearch">
+        <div class="home-search__advanced p-3">
+            <p class="small text-muted mb-3 mb-md-2">Фільтри по полях довідника книг (усі книги в базі).</p>
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <label class="form-label small mb-0" for="adv-isbn">ISBN</label>
+                    <input id="adv-isbn" class="form-control" name="isbn" value="{{ isbn }}" placeholder="978…">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-0" for="adv-authors">Автори</label>
+                    <input id="adv-authors" class="form-control" name="authors" value="{{ authors }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-0" for="adv-publisher">Видавець</label>
+                    <input id="adv-publisher" class="form-control" name="publisher" value="{{ publisher }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-0" for="adv-publish-date">Дата видання</label>
+                    <input id="adv-publish-date" class="form-control" name="publish_date" value="{{ publish_date }}" placeholder="1980">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small mb-0" for="adv-age-min">Вік від</label>
+                    <input id="adv-age-min" class="form-control" type="number" min="0" max="18" name="age_min" value="{{ age_min }}">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small mb-0" for="adv-age-max">Вік до</label>
+                    <input id="adv-age-max" class="form-control" type="number" min="0" max="18" name="age_max" value="{{ age_max }}">
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <button type="submit" class="btn btn-dark btn-sm">Застосувати фільтри</button>
+                <a href="/" class="btn btn-outline-secondary btn-sm">Скинути</a>
+            </div>
+        </div>
+    </div>
+</form>
+
+{% if searching %}
+<section class="book-search-results mb-4">
+    <h3 class="h5 mb-3">Книги · {{ books.paginator.count }}</h3>
+    {% if books %}
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
+        {% for book in books %}
+        <div class="col">
+            <div class="card h-100 book-search-card">
+                {% if book.cover_url %}
+                <a href="{% url 'book_history' book.id %}" class="text-center pt-3 text-decoration-none library-book-cover-link">
+                    <img src="{{ book.cover_url }}" alt="" class="card-img-top mx-auto" style="max-height: 160px; width: auto; object-fit: contain;">
+                </a>
+                {% endif %}
+                <div class="card-body">
+                    <h5 class="card-title h6 mb-1">
+                        <a href="{% url 'book_history' book.id %}" class="link-dark text-decoration-none">{{ book.title }}</a>
+                    </h5>
+                    {% if book.authors %}<p class="card-text small mb-1">{{ book.authors }}</p>{% endif %}
+                    <p class="card-text small text-muted mb-0">ISBN: {{ book.isbn }}</p>
+                    {% if book.publisher %}<p class="card-text small text-muted mb-0">{{ book.publisher }}{% if book.publish_date %}, {{ book.publish_date }}{% endif %}</p>{% endif %}
+                    <p class="card-text small text-muted mb-0">Вік: {{ book.reader_age_summary }}</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="mt-3">
+        {% if books.has_previous %}
+            <a href="?{% if search_qs %}{{ search_qs }}&{% endif %}bpage={{ books.previous_page_number }}">Назад</a>
+        {% endif %}
+        <span class="mx-2">Стор. {{ books.number }} / {{ books.paginator.num_pages }}</span>
+        {% if books.has_next %}
+            <a href="?{% if search_qs %}{{ search_qs }}&{% endif %}bpage={{ books.next_page_number }}">Вперед</a>
+        {% endif %}
+    </div>
+    {% else %}
+    <p class="text-muted">Книг за цими умовами немає.</p>
+    {% endif %}
+</section>
+<hr class="mb-4">
+{% endif %}
 
 {% if user.is_authenticated %}
     <a href="{% url 'create_post' %}" class="btn btn-success mb-3">Створити пост</a>
@@ -100,16 +195,18 @@
     <p class="text-center">Постів поки немає. Будьте першим!</p>
 {% endfor %}
 
+{% if not searching %}
 <div class="mt-3">
     {% if posts.has_previous %}
-        <a href="?page={{ posts.previous_page_number }}">Назад</a>
+        <a href="?{% if filter_type %}filter={{ filter_type }}&{% endif %}page={{ posts.previous_page_number }}">Назад</a>
     {% endif %}
 
     <span>Страница {{ posts.number }} из {{ posts.paginator.num_pages }}</span>
 
     {% if posts.has_next %}
-        <a href="?page={{ posts.next_page_number }}">Вперед</a>
+        <a href="?{% if filter_type %}filter={{ filter_type }}&{% endif %}page={{ posts.next_page_number }}">Вперед</a>
     {% endif %}
 </div>
+{% endif %}
 
 {% endblock %}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, BrowseApi, MsgApi } from "../../src/api";
+import { BookCover } from "../../src/BookCover";
 import { RequestModal } from "../../src/RequestModal";
 import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
@@ -54,7 +55,7 @@ export default function UserShelf() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.screen }}
-      contentContainerStyle={{ padding: 16 }}
+      contentContainerStyle={{ paddingBottom: 24 }}
     >
       <Text style={styles.h}>{owner?.username}</Text>
       <Text style={styles.bio}>{owner?.biography || "—"}</Text>
@@ -68,13 +69,17 @@ export default function UserShelf() {
       {shelves.map((s) => (
         <View key={s.id} style={styles.card}>
           <Pressable onPress={() => router.push(`/book/${s.book.id}`)}>
-            <Text style={styles.title}>{s.book.title}</Text>
+            <BookCover uri={s.book.cover_url} size="full" bleed={0} />
+            <View style={styles.cardBody}>
+              <Text style={styles.title}>{s.book.title}</Text>
+              <Text style={styles.meta}>
+                {s.borrowed_from ? `позичено у ${s.borrowed_from.username}` : "власна"}
+                {s.due_date ? ` · до ${s.due_date}` : ""}
+                {` · ${s.book.reader_age_summary}`}
+              </Text>
+            </View>
           </Pressable>
-          <Text style={styles.meta}>
-            {s.borrowed_from ? `позичено у ${s.borrowed_from.username}` : "власна"}
-            {s.due_date ? ` · до ${s.due_date}` : ""}
-            {` · ${s.book.reader_age_summary}`}
-          </Text>
+          <View style={styles.cardBody}>
           {!isOwn && !s.borrowed_from && user && (
             <Pressable onPress={() => setTarget(s)}>
               <Text style={styles.act}>Позичити / обмін</Text>
@@ -94,6 +99,7 @@ export default function UserShelf() {
               </Text>
             </Pressable>
           )}
+          </View>
         </View>
       ))}
       <RequestModal
@@ -107,24 +113,28 @@ export default function UserShelf() {
 }
 
 const styles = StyleSheet.create({
-  h: { fontSize: 22, fontWeight: "800", color: colors.ink },
-  bio: { color: colors.muted, marginBottom: 12 },
+  h: { fontSize: 22, fontWeight: "800", color: colors.ink, paddingHorizontal: 16, paddingTop: 12 },
+  bio: { color: colors.muted, marginBottom: 12, paddingHorizontal: 16 },
   chatBtn: {
     borderWidth: 1,
     borderColor: colors.stamp,
     paddingVertical: 10,
     paddingHorizontal: 12,
     marginBottom: 16,
+    marginHorizontal: 16,
     alignSelf: "flex-start",
   },
   chatBtnText: { color: colors.stamp, fontWeight: "800" },
   card: {
-    borderWidth: 1,
+    borderWidth: 0,
+    borderBottomWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
-    padding: 12,
-    marginBottom: 8,
+    padding: 0,
+    marginBottom: 0,
+    overflow: "hidden",
   },
+  cardBody: { paddingHorizontal: 16, paddingBottom: 12, paddingTop: 10 },
   title: { fontWeight: "700", color: colors.ink },
   meta: { color: colors.muted, marginTop: 4 },
   act: { color: colors.stamp, fontWeight: "800", marginTop: 8 },
