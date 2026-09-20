@@ -6,13 +6,14 @@ import { BookCover } from "../../src/BookCover";
 import { RequestModal } from "../../src/RequestModal";
 import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
-import type { Book, Post, Shelf } from "../../src/types";
+import type { Book, Post, Shelf, User } from "../../src/types";
 
 export default function BookScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
   const [book, setBook] = useState<Book | null>(null);
+  const [owners, setOwners] = useState<User[]>([]);
   const [holders, setHolders] = useState<Shelf[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [myOwned, setMyOwned] = useState<Shelf[]>([]);
@@ -21,6 +22,7 @@ export default function BookScreen() {
   const load = async () => {
     const [d, browse] = await Promise.all([BrowseApi.book(Number(id)), BrowseApi.list()]);
     setBook(d.book);
+    setOwners(d.owners ?? []);
     setHolders(d.holders);
     setPosts(d.posts);
     setMyOwned(browse.my_owned);
@@ -46,6 +48,19 @@ export default function BookScreen() {
         {book.publish_date ? ` · ${book.publish_date}` : ""}
       </Text>
       <Text style={styles.meta}>Вік: {book.reader_age_summary}</Text>
+      {owners.length > 0 && (
+        <View style={styles.ownersRow}>
+          <Text style={styles.meta}>Власники: </Text>
+          {owners.map((o, i) => (
+            <Pressable key={o.id} onPress={() => router.push(`/user/${o.id}`)}>
+              <Text style={styles.ownerLink}>
+                {i > 0 ? " · " : ""}
+                {o.username}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       {!!book.info_url && (
         <Pressable onPress={() => Linking.openURL(book.info_url)}>
           <Text style={styles.link}>Open Library</Text>
@@ -61,7 +76,7 @@ export default function BookScreen() {
         </Pressable>
       )}
 
-      <Text style={styles.h}>На полицях</Text>
+      <Text style={styles.h}>Примірники на полицях</Text>
       {holders.map((s) => (
         <View key={s.id} style={styles.card}>
           <Pressable onPress={() => router.push(`/user/${s.user.id}`)}>
@@ -79,7 +94,7 @@ export default function BookScreen() {
         </View>
       ))}
 
-      <Text style={styles.h}>Пости</Text>
+      <Text style={styles.h}>Пости (лайки й коментарі — до ISBN)</Text>
       {posts.length === 0 ? <Text style={styles.meta}>немає</Text> : null}
       {posts.map((p) => (
         <Pressable key={p.id} style={styles.card} onPress={() => router.push(`/post/${p.id}`)}>
@@ -103,6 +118,8 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: 16, paddingTop: 12 },
   title: { fontSize: 22, fontWeight: "800", color: colors.ink },
   meta: { color: colors.muted, marginTop: 4 },
+  ownersRow: { flexDirection: "row", flexWrap: "wrap", marginTop: 8, alignItems: "center" },
+  ownerLink: { color: colors.stamp, fontWeight: "700" },
   link: { color: colors.stamp, fontWeight: "700", marginTop: 8 },
   btn: { backgroundColor: colors.ink, padding: 12, marginTop: 16 },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },

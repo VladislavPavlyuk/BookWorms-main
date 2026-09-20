@@ -1,7 +1,6 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
-from django.db import IntegrityError
 from django.db.models import Prefetch, Q
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -44,13 +43,16 @@ from .message_service import (
 from .notification_service import list_notifications, notification_payload, unread_count
 from .exchange_service import (
     accept_exchange_request,
+    add_owned_copy,
     available_owned_shelves_qs,
     cancel_exchange_request,
     confirm_borrow_return,
     create_many_exchange_requests,
     get_or_create_book_from_payload,
-    is_book_lent_out,
+    group_shelves_by_book,
+    is_copy_lent_out,
     reject_exchange_request,
+    remove_owned_shelf,
     request_borrow_return,
 )
 from .web3forms_mail import (
@@ -428,13 +430,9 @@ def my_library(request):
                 messages.error(request, err)
             else:
                 book, _ = get_or_create_book_from_payload(payload)
-                try:
-                    Shelf.objects.create(user=request.user, book=book)
-                    messages.success(request, f"Додано: {book.title}")
-                    return redirect("my_library")
-                except IntegrityError:
-                    messages.warning(request, "Ця книга вже є на вашій полиці.")
-                    form = AddIsbnForm()
+                add_owned_copy(request.user, book)
+                messages.success(request, f"Додано: {book.title}")
+                return redirect("my_library")
 
     elif request.method == "POST" and "add_manual" in request.POST:
         manual_form = AddBookManualForm(request.POST)
@@ -450,30 +448,26 @@ def my_library(request):
                 "info_url": (d.get("info_url") or "").strip(),
             }
             book, _ = get_or_create_book_from_payload(payload)
-            try:
-                Shelf.objects.create(user=request.user, book=book)
-                messages.success(request, f"Додано вручну: {book.title}")
-                return redirect("my_library")
-            except IntegrityError:
-                messages.warning(request, "Ця книга вже є на вашій полиці.")
-                manual_form = AddBookManualForm(request.POST)
+            add_owned_copy(request.user, book)
+            messages.success(request, f"Додано вручну: {book.title}")
+            return redirect("my_library")
 
     # borrowed_from підтягуємо одним запитом - щоб у шаблоні знати, позичена книга чи власна.
     shelves = list(
-        request.user.shelf_entries.select_related("book", "borrowed_from").all()
+        request.user.shelf_entries.select_related("book", "borrowed_from", "copy").all()
     )
     pending_returns_to_confirm = list(
         Shelf.objects.filter(borrowed_from=request.user, return_pending=True)
-        .select_related("user", "book")
+        .select_related("user", "book", "copy")
         .order_by("-added_at")
     )
-    lent_book_ids = set(
-        Shelf.objects.filter(borrowed_from=request.user).values_list("book_id", flat=True)
+    lent_copy_ids = set(
+        Shelf.objects.filter(borrowed_from=request.user).values_list("copy_id", flat=True)
     )
-    pending_by_book = {row.book_id: row for row in pending_returns_to_confirm}
+    pending_by_copy = {row.copy_id: row for row in pending_returns_to_confirm}
     for s in shelves:
-        s.is_lent_out = (not s.borrowed_from_id) and (s.book_id in lent_book_ids)
-        s.pending_return_row = None if s.borrowed_from_id else pending_by_book.get(s.book_id)
+        s.is_lent_out = (not s.borrowed_from_id) and (s.copy_id in lent_copy_ids)
+        s.pending_return_row = None if s.borrowed_from_id else pending_by_copy.get(s.copy_id)
     locked_raw = request.session.get("reader_age_locked_shelf_ids", [])
     if not isinstance(locked_raw, list):
         locked_raw = []
@@ -563,13 +557,13 @@ def remove_shelf_entry(request, shelf_id):
             "Позичену книгу не можна видалити з полиці - лише повернути власнику.",
         )
         return redirect("my_library")
-    if is_book_lent_out(shelf.user_id, shelf.book_id):
+    if is_copy_lent_out(shelf.copy_id):
         messages.error(
             request,
-            "Книга зараз у позиці — спочатку дочекайтесь повернення.",
+            "Примірник зараз у позиці — спочатку дочекайтесь повернення.",
         )
         return redirect("my_library")
-    shelf.delete()
+    remove_owned_shelf(shelf)
     messages.success(request, "Книгу видалено з полиці.")
     return redirect("my_library")
 
@@ -608,21 +602,25 @@ def confirm_return_borrowed_shelf_book(request, shelf_id):
 @login_required
 def browse_shelves(request):
     """
-    Каталог чужих книг, доступних для запиту: не показуємо позичені у когось записи
-    і даємо випадати лише власні (не позичені) книги для поля "обмін".
+    Каталог чужих книг: одна картка на ISBN (обкладинка + власники в рядок).
+    Запит позики/обміну — по конкретному примірнику (чекбокс біля власника).
     """
-    others = (
+    others_qs = list(
         available_owned_shelves_qs(exclude_user_id=request.user.id)
         .select_related("user", "book")
         .order_by("-added_at")
     )
+    others_grouped = group_shelves_by_book(others_qs)
     my_owned_shelves = available_owned_shelves_qs().filter(user=request.user).select_related(
         "book"
     )
     return render(
         request,
         "mainApp/browse_shelves.html",
-        {"others": others, "my_owned_shelves": my_owned_shelves},
+        {
+            "others_grouped": others_grouped,
+            "my_owned_shelves": my_owned_shelves,
+        },
     )
 
 
@@ -654,6 +652,14 @@ def book_history(request, book_id):
         .select_related("user", "borrowed_from")
         .order_by("added_at")
     )
+    # Unique legal owners of copies (owned rows + lenders of borrowed rows)
+    owner_names = []
+    seen_owners: set[int] = set()
+    for row in shelf_entries:
+        oid = row.borrowed_from_id or row.user_id
+        if oid not in seen_owners:
+            seen_owners.add(oid)
+            owner_names.append(row.borrowed_from if row.borrowed_from_id else row.user)
     shelf_events = []
     history_model = getattr(book, "shelf_events", None)
     if history_model is not None:
@@ -681,6 +687,7 @@ def book_history(request, book_id):
         {
             "book": book,
             "shelf_entries": shelf_entries,
+            "owner_names": owner_names,
             "shelf_events": shelf_events,
             "posts": posts,
         },

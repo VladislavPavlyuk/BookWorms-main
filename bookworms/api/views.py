@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import IntegrityError
 from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, parser_classes
@@ -15,13 +14,17 @@ import logging
 
 from mainApp.exchange_service import (
     accept_exchange_request,
+    add_owned_copy,
     available_owned_shelves_qs,
     cancel_exchange_request,
     confirm_borrow_return,
     create_exchange_request,
+    ensure_shelves_have_copies,
     get_or_create_book_from_payload,
-    is_book_lent_out,
+    group_shelves_by_book,
+    is_copy_lent_out,
     reject_exchange_request,
+    remove_owned_shelf,
     request_borrow_return,
 )
 from mainApp.message_service import (
@@ -58,6 +61,7 @@ from mainApp.registration_service import (
 from .serializers import (
     AddBookManualSerializer,
     AddIsbnSerializer,
+    BookBrowseGroupSerializer,
     BookSerializer,
     CommentSerializer,
     CreateExchangeSerializer,
@@ -133,7 +137,7 @@ def health(request):
     payload = {
         "status": "ok",
         "app": "date-due-slip",
-        "code_rev": "2026-09-19-health-cheap",
+        "code_rev": "2026-09-20-bookcopy-shelf",
     }
     try:
         connection.ensure_connection()
@@ -388,21 +392,28 @@ def post_comment(request, post_id):
 @api_view(["GET"])
 def my_shelf(request):
     shelves = list(
-        request.user.shelf_entries.select_related("book", "borrowed_from", "user")
-    )
-    pending = list(
-        Shelf.objects.filter(borrowed_from=request.user, return_pending=True)
-        .select_related("user", "book", "borrowed_from")
+        request.user.shelf_entries.select_related("book", "borrowed_from", "user", "copy")
         .order_by("-added_at")
     )
-    lent_book_ids = set(
-        Shelf.objects.filter(borrowed_from=request.user).values_list("book_id", flat=True)
+    shelves = ensure_shelves_have_copies(shelves)
+    pending = list(
+        Shelf.objects.filter(borrowed_from=request.user, return_pending=True)
+        .select_related("user", "book", "borrowed_from", "copy")
+        .order_by("-added_at")
     )
-    pending_by_book = {p.book_id: p.id for p in pending}
+    pending = ensure_shelves_have_copies(pending)
+    lent_copy_ids = {
+        cid
+        for cid in Shelf.objects.filter(borrowed_from=request.user).values_list(
+            "copy_id", flat=True
+        )
+        if cid
+    }
+    pending_by_copy = {p.copy_id: p.id for p in pending if p.copy_id}
     for s in shelves:
-        s.is_lent_out = (not s.borrowed_from_id) and (s.book_id in lent_book_ids)
+        s.is_lent_out = (not s.borrowed_from_id) and (s.copy_id in lent_copy_ids)
         s.pending_return_shelf_id = (
-            None if s.borrowed_from_id else pending_by_book.get(s.book_id)
+            None if s.borrowed_from_id else pending_by_copy.get(s.copy_id)
         )
     return Response(
         {
@@ -444,11 +455,10 @@ def shelf_add_isbn(request):
     if err:
         return _error(err)
     book, _ = get_or_create_book_from_payload(payload)
-    try:
-        shelf = Shelf.objects.create(user=request.user, book=book)
-    except IntegrityError:
-        return _error("Ця книга вже є на вашій полиці.", 409)
-    shelf = Shelf.objects.select_related("book", "borrowed_from", "user").get(pk=shelf.pk)
+    shelf = add_owned_copy(request.user, book)
+    shelf = Shelf.objects.select_related("book", "borrowed_from", "user", "copy").get(
+        pk=shelf.pk
+    )
     return Response(ShelfSerializer(shelf, context={"request": request}).data, status=201)
 
 
@@ -470,24 +480,23 @@ def shelf_add_manual(request):
         "info_url": (d.get("info_url") or "").strip(),
     }
     book, _ = get_or_create_book_from_payload(payload)
-    try:
-        shelf = Shelf.objects.create(user=request.user, book=book)
-    except IntegrityError:
-        return _error("Ця книга вже є на вашій полиці.", 409)
-    shelf = Shelf.objects.select_related("book", "borrowed_from", "user").get(pk=shelf.pk)
+    shelf = add_owned_copy(request.user, book)
+    shelf = Shelf.objects.select_related("book", "borrowed_from", "user", "copy").get(
+        pk=shelf.pk
+    )
     return Response(ShelfSerializer(shelf, context={"request": request}).data, status=201)
 
 
 @api_view(["DELETE"])
 def shelf_remove(request, shelf_id):
-    shelf = Shelf.objects.filter(pk=shelf_id, user=request.user).first()
+    shelf = Shelf.objects.filter(pk=shelf_id, user=request.user).select_related("copy").first()
     if not shelf:
         return _error("Запис не знайдено.", 404)
     if shelf.borrowed_from_id:
         return _error("Позичену книгу не можна видалити — лише повернути власнику.")
-    if is_book_lent_out(shelf.user_id, shelf.book_id):
-        return _error("Книга зараз у позиці — спочатку дочекайтесь повернення.")
-    shelf.delete()
+    if is_copy_lent_out(shelf.copy_id):
+        return _error("Примірник зараз у позиці — спочатку дочекайтесь повернення.")
+    remove_owned_shelf(shelf)
     return Response(status=204)
 
 
@@ -527,20 +536,31 @@ def shelf_confirm_return(request, shelf_id):
 
 @api_view(["GET"])
 def browse_shelves(request):
-    others = (
-        available_owned_shelves_qs(exclude_user_id=request.user.id)
-        .select_related("user", "book", "borrowed_from")
-        .order_by("-added_at")
+    others_qs = ensure_shelves_have_copies(
+        list(
+            available_owned_shelves_qs(exclude_user_id=request.user.id)
+            .select_related("user", "book", "borrowed_from", "copy")
+            .order_by("-added_at")
+        )
     )
-    mine = (
-        available_owned_shelves_qs()
-        .filter(user=request.user)
-        .select_related("book", "user", "borrowed_from")
+    mine = ensure_shelves_have_copies(
+        list(
+            available_owned_shelves_qs()
+            .filter(user=request.user)
+            .select_related("book", "user", "borrowed_from", "copy")
+        )
     )
+    grouped = group_shelves_by_book(others_qs)
+    ctx = {"request": request}
     return Response(
         {
-            "others": ShelfSerializer(others, many=True, context={"request": request}).data,
-            "my_owned": ShelfSerializer(mine, many=True, context={"request": request}).data,
+            # Flat list kept for RequestModal / legacy clients
+            "others": ShelfSerializer(others_qs, many=True, context=ctx).data,
+            # One cover per ISBN + owners inline
+            "others_grouped": BookBrowseGroupSerializer(
+                grouped, many=True, context=ctx
+            ).data,
+            "my_owned": ShelfSerializer(mine, many=True, context=ctx).data,
         }
     )
 
@@ -567,7 +587,19 @@ def book_detail(request, book_id):
     book = Book.objects.filter(pk=book_id).first()
     if not book:
         return _error("Книгу не знайдено.", 404)
-    holders = Shelf.objects.filter(book=book).select_related("user", "borrowed_from", "book")
+    holders = (
+        Shelf.objects.filter(book=book)
+        .select_related("user", "borrowed_from", "book", "copy")
+        .order_by("added_at")
+    )
+    owners = []
+    seen = set()
+    for h in holders:
+        oid = h.borrowed_from_id or h.user_id
+        u = h.borrowed_from if h.borrowed_from_id else h.user
+        if oid not in seen:
+            seen.add(oid)
+            owners.append(u)
     comments_qs = Comment.objects.select_related("author").order_by("created_at")
     posts = (
         _annotate_posts(Post.objects.filter(book=book), request.user)
@@ -575,11 +607,13 @@ def book_detail(request, book_id):
         .prefetch_related(Prefetch("comments", queryset=comments_qs))
         .order_by("-created_ad")
     )
+    ctx = {"request": request}
     return Response(
         {
             "book": BookSerializer(book).data,
-            "holders": ShelfSerializer(holders, many=True, context={"request": request}).data,
-            "posts": PostSerializer(posts, many=True, context={"request": request}).data,
+            "owners": UserPublicSerializer(owners, many=True, context=ctx).data,
+            "holders": ShelfSerializer(holders, many=True, context=ctx).data,
+            "posts": PostSerializer(posts, many=True, context=ctx).data,
         }
     )
 

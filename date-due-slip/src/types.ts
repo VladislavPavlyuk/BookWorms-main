@@ -24,6 +24,8 @@ export type Shelf = {
   id: number;
   user: User;
   book: Book;
+  /** Physical copy id — same ISBN can have many copies. */
+  copy_id?: number | null;
   borrowed_from: User | null;
   return_pending: boolean;
   due_date: string | null;
@@ -33,6 +35,13 @@ export type Shelf = {
   /** Id рядка позичальника з return_pending — для кнопки підтвердження у власника. */
   pending_return_shelf_id?: number | null;
   added_at: string;
+};
+
+/** Browse card: one cover per ISBN, owners listed inline. */
+export type BookBrowseGroup = {
+  book: Book;
+  owners: User[];
+  copies: Shelf[];
 };
 
 export type Comment = {

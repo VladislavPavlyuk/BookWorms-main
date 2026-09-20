@@ -148,6 +148,7 @@ class ShelfSerializer(serializers.ModelSerializer):
             "id",
             "user",
             "book",
+            "copy_id",
             "borrowed_from",
             "return_pending",
             "due_date",
@@ -173,9 +174,9 @@ class ShelfSerializer(serializers.ModelSerializer):
             return bool(obj.is_lent_out)
         if obj.borrowed_from_id:
             return False
-        from mainApp.exchange_service import is_book_lent_out
+        from mainApp.exchange_service import is_copy_lent_out
 
-        return is_book_lent_out(obj.user_id, obj.book_id)
+        return is_copy_lent_out(getattr(obj, "copy_id", None))
 
     def get_pending_return_shelf_id(self, obj):
         if getattr(obj, "pending_return_shelf_id", None) is not None:
@@ -236,6 +237,27 @@ class ExchangeRequestSerializer(serializers.ModelSerializer):
 class CreateExchangeSerializer(serializers.Serializer):
     target_shelf_id = serializers.IntegerField()
     offer_shelf_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class BookBrowseGroupSerializer(serializers.Serializer):
+    """Один ISBN: обкладинка + список власників + примірники для запиту."""
+
+    book = BookSerializer()
+    owners = UserPublicSerializer(many=True)
+    copies = ShelfSerializer(many=True)
+
+    def to_representation(self, instance):
+        # instance: {book, owners, shelves}
+        ctx = self.context
+        return {
+            "book": BookSerializer(instance["book"], context=ctx).data,
+            "owners": UserPublicSerializer(
+                instance["owners"], many=True, context=ctx
+            ).data,
+            "copies": ShelfSerializer(
+                instance["shelves"], many=True, context=ctx
+            ).data,
+        }
 
 
 class MessageSerializer(serializers.ModelSerializer):

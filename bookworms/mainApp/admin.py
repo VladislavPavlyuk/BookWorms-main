@@ -1,7 +1,15 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Book, BookExchangeRequest, CustomUser, Post, PrivateMessage, Shelf
-from .models import AvatarCollection
+from .models import (
+    AvatarCollection,
+    Book,
+    BookCopy,
+    BookExchangeRequest,
+    CustomUser,
+    Post,
+    PrivateMessage,
+    Shelf,
+)
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
@@ -45,11 +53,20 @@ class BookAdmin(admin.ModelAdmin):
     search_fields = ("title", "isbn", "authors")
 
 
+@admin.register(BookCopy)
+class BookCopyAdmin(admin.ModelAdmin):
+    list_display = ("id", "book", "owner", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("book__title", "book__isbn", "owner__username")
+    raw_id_fields = ("book", "owner")
+
+
 @admin.register(Shelf)
 class ShelfAdmin(admin.ModelAdmin):
-    list_display = ("user", "book", "borrowed_from", "return_pending", "due_date", "added_at")
+    list_display = ("user", "book", "copy", "borrowed_from", "return_pending", "due_date", "added_at")
     list_filter = ("added_at", "return_pending", "due_date")
     search_fields = ("user__username", "book__title", "book__isbn")
+    raw_id_fields = ("user", "book", "copy", "borrowed_from")
 
 
 @admin.register(PrivateMessage)

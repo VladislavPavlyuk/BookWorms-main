@@ -4,12 +4,12 @@
 {% block title %}Полиці інших користувачів{% endblock %}
 
 {% block content %}
-{# Дані з view browse_shelves: others - чужі "власні" книги; my_owned_shelves - ваші для обміну. #}
+{# others_grouped: [{book, owners, shelves}] — одна обкладинка на ISBN #}
 
 <h2 class="mb-3">Книги на полицях інших</h2>
 <p class="text-muted">
-    Позначте <strong>одну або кілька</strong> книг. У кожному рядку можна обрати свою книгу для <strong>обміну</strong>
-    або залишити "позика" - тоді після згоди це позика лише для цього рядка.
+    Одна обкладинка на ISBN. Власники різних примірників — в одному рядку.
+    Позначте конкретного власника для <strong>позики</strong> або оберіть свою книгу для <strong>обміну</strong>.
 </p>
 
 {% if messages %}
@@ -25,52 +25,75 @@
     <div class="alert alert-info">Щоб у рядку обрати обмін двома книгами, потрібна хоча б одна <em>ваша</em> книга на полиці (не позичена). <a href="{% url 'my_library' %}">Моя полиця</a>.</div>
 {% endif %}
 
-{% if others %}
+{% if others_grouped %}
     <form method="post" action="{% url 'create_exchange' %}" id="batch-exchange-form">
         {% csrf_token %}
-        <div class="table-responsive">
-            <table class="table table-sm align-middle">
-                <thead>
-                    <tr>
-                        <th class="text-center" style="width: 2.5rem;" title="Обрати для запиту">
-                            <span class="visually-hidden">Обрати</span>
-                        </th>
-                        <th>Книга</th>
-                        <th>ISBN</th>
-                        <th>Власник</th>
-                        <th>Ваша книга в обмін (або позика)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for s in others %}
-                        <tr>
-                            <td class="text-center">
-                                <input type="checkbox" name="target_shelf_ids" value="{{ s.id }}" class="form-check-input js-shelf-pick" aria-label="Обрати {{ s.book.title|truncatechars:40 }}">
-                            </td>
-                            <td>
-                                <strong><a href="{% url 'book_history' s.book.id %}" class="link-dark">{{ s.book.title }}</a></strong><br><span class="small text-muted">{{ s.book.authors }}</span>
-                                <div class="mt-1 small text-muted">Вік: <span class="text-dark">{{ s.book.reader_age_summary }}</span></div>
-                            </td>
-                            <td class="text-nowrap">{{ s.book.isbn }}</td>
-                            <td>{% shelf_user_link s.user %}</td>
-                            <td>
-                                <select name="offer_shelf_id_{{ s.id }}" class="form-select form-select-sm" style="max-width: 280px;">
-                                    <option value="">- позика (без вашої книги) -</option>
-                                    {% for ms in my_owned_shelves %}
-                                        {% if ms.book_id != s.book_id %}
-                                            <option value="{{ ms.id }}">{{ ms.book.title|truncatechars:40 }}</option>
-                                        {% endif %}
-                                    {% endfor %}
-                                </select>
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="vstack gap-4 mb-4">
+            {% for g in others_grouped %}
+                {% with book=g.book %}
+                <article class="border rounded p-3 bg-white">
+                    <div class="d-flex flex-wrap gap-3 align-items-start">
+                        {% if book.cover_url %}
+                            <a href="{% url 'book_history' book.id %}" class="flex-shrink-0 text-decoration-none">
+                                <img src="{{ book.cover_url }}" alt="" class="rounded"
+                                     style="width: 88px; height: 132px; object-fit: cover;">
+                            </a>
+                        {% endif %}
+                        <div class="min-w-0 flex-grow-1">
+                            <h3 class="h5 mb-1">
+                                <a href="{% url 'book_history' book.id %}" class="link-dark text-decoration-none">{{ book.title }}</a>
+                            </h3>
+                            {% if book.authors %}<p class="small text-muted mb-1">{{ book.authors }}</p>{% endif %}
+                            <p class="small text-muted mb-2">ISBN {{ book.isbn }} · вік {{ book.reader_age_summary }}</p>
+                            <p class="small mb-2">
+                                <span class="text-muted">Власники:</span>
+                                {% for o in g.owners %}
+                                    {% if not forloop.first %}<span class="text-muted"> · </span>{% endif %}
+                                    {% shelf_user_link o %}
+                                {% endfor %}
+                            </p>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-center" style="width: 2.5rem;"></th>
+                                            <th>Примірник у</th>
+                                            <th>Ваша книга в обмін (або позика)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for s in g.shelves %}
+                                            <tr>
+                                                <td class="text-center">
+                                                    <input type="checkbox" name="target_shelf_ids" value="{{ s.id }}"
+                                                           class="form-check-input js-shelf-pick"
+                                                           aria-label="Обрати примірник {{ s.user.username }}">
+                                                </td>
+                                                <td>{% shelf_user_link s.user %}</td>
+                                                <td>
+                                                    <select name="offer_shelf_id_{{ s.id }}" class="form-select form-select-sm" style="max-width: 280px;">
+                                                        <option value="">— позика (без вашої книги) —</option>
+                                                        {% for ms in my_owned_shelves %}
+                                                            {% if ms.book_id != s.book_id %}
+                                                                <option value="{{ ms.id }}">{{ ms.book.title|truncatechars:40 }}</option>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+                {% endwith %}
+            {% endfor %}
         </div>
         <div class="d-flex flex-wrap align-items-center gap-3 mt-2 mb-4">
             <button type="submit" class="btn btn-primary">Надіслати запити для обраних</button>
-            <span class="text-muted small">Кожен обраний рядок = окремий запит власнику цієї книги.</span>
+            <span class="text-muted small">Кожен обраний власник = окремий запит на його примірник.</span>
         </div>
     </form>
 {% else %}
@@ -87,7 +110,7 @@
         var any = form.querySelectorAll(".js-shelf-pick:checked").length > 0;
         if (!any) {
             ev.preventDefault();
-            alert("Позначте хоча б одну книгу чекбоксом.");
+            alert("Позначте хоча б одного власника чекбоксом.");
         }
     });
 })();

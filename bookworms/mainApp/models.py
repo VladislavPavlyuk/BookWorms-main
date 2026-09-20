@@ -33,6 +33,10 @@ class CustomUser(AbstractUser):
         return self.username
 
 class Post(models.Model):
+    """
+    Соц. контент прив’язаний до ISBN (Book), не до BookCopy.
+    Like і Comment живуть на Post → агрегація по книзі = filter(book=…).
+    """
     author = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='posts')
     book = models.ForeignKey(
         "Book",
@@ -41,7 +45,7 @@ class Post(models.Model):
         blank=True,
         related_name="posts",
         verbose_name="Книга у пості",
-        help_text="Якщо пост про прочитану книгу з полиці.",
+        help_text="ISBN-каталог (Book), не примірник. Лайки/коментарі — до поста цієї книги.",
     )
     title = models.CharField(max_length=200, verbose_name="Заголовок")
     text = models.TextField(verbose_name="Текст")
@@ -53,9 +57,9 @@ class Post(models.Model):
 
 class Book(models.Model):
     """
-    Книга як "довідник": один ISBN = один запис у всій базі.
-    Навіщо окремо від Shelf: щоб не дублювати назву/авторів для кожного користувача -
-    усі читають ті самі поля з Open Library, а полиця лише посилається на цей запис.
+    Книга як каталог: один ISBN = один запис у всій базі.
+    Фізичні томи — окремі BookCopy (багато примірників на один ISBN).
+    Shelf посилається на BookCopy (+ денормалізовано на Book).
     """
 
     isbn = models.CharField(max_length=13, unique=True, db_index=True, verbose_name="ISBN")
@@ -109,13 +113,53 @@ class Book(models.Model):
         return f"{lo}–{hi} років"
 
 
+class BookCopy(models.Model):
+    """
+    Фізичний примірник книги (екземпляр).
+
+    Book = каталог (один ISBN на всю базу).
+    BookCopy = конкретний том у власності user'а.
+    Один власник може мати багато примірників з тим самим ISBN;
+    різні власники — теж. Позика/обмін йде по конкретному BookCopy.
+    """
+
+    book = models.ForeignKey(
+        Book,
+        on_delete=models.CASCADE,
+        related_name="copies",
+        verbose_name="Книга (ISBN)",
+    )
+    owner = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="owned_copies",
+        verbose_name="Власник",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "примірник книги"
+        verbose_name_plural = "примірники книг"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"#{self.pk} {self.book.title} → {self.owner.username}"
+
+
 class Shelf(models.Model):
     """
-    Запис "ця книга (Book) зараз лежить на полиці цього користувача (user)".
-    Унікальність user+book: одна й та сама книга не може бути двічі на одній полиці.
+    Запис "цей примірник (BookCopy) зараз на полиці цього користувача (user)".
+    Власник і позичальник можуть мати окремі рядки на той самий copy.
+    Один user не тримає той самий copy двічі (unique user+copy).
     """
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="shelf_entries")
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="shelf_entries")
+    copy = models.ForeignKey(
+        BookCopy,
+        on_delete=models.CASCADE,
+        related_name="shelf_entries",
+        verbose_name="Примірник",
+    )
     # Якщо заповнено - user не власник, а позичальник, повернути можна лише власнику (логіка в views / exchange_service).
     borrowed_from = models.ForeignKey(
         CustomUser,
@@ -141,13 +185,12 @@ class Shelf(models.Model):
         verbose_name = "полиця"
         verbose_name_plural = "полиці"
         constraints = [
-            # Заборона дублікатів: один користувач - один рядок на одну книгу.
-            models.UniqueConstraint(fields=["user", "book"], name="unique_shelf_user_book"),
+            models.UniqueConstraint(fields=["user", "copy"], name="unique_shelf_user_copy"),
         ]
         ordering = ["-added_at"]
 
     def __str__(self):
-        return f"{self.user.username} -{self.book.title}"
+        return f"{self.user.username} -{self.book.title} (#{self.copy_id})"
 
 
 class BookExchangeRequest(models.Model):
@@ -261,6 +304,7 @@ class PrivateMessage(models.Model):
     def __str__(self):
         return f"{self.sender} → {self.recipient}: {self.body[:40]}"
 class Comment(models.Model):
+    """Коментар до поста (пост → Book/ISBN). Не залежить від BookCopy."""
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
     author = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     text = models.TextField()
@@ -271,6 +315,7 @@ class Comment(models.Model):
 
 
 class Like(models.Model):
+    """Лайк поста (пост → Book/ISBN). Не залежить від BookCopy."""
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='likes')
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
 

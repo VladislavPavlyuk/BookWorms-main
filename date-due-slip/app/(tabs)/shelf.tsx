@@ -37,8 +37,8 @@ export default function ShelfScreen() {
 
   const load = async () => {
     const data = await ShelfApi.mine();
-    setShelves(data.shelves);
-    setPending(data.pending_returns);
+    setShelves(Array.isArray(data?.shelves) ? data.shelves : []);
+    setPending(Array.isArray(data?.pending_returns) ? data.pending_returns : []);
   };
 
   useFocusEffect(
@@ -171,6 +171,9 @@ export default function ShelfScreen() {
           ) : null
         }
         contentContainerStyle={{ paddingBottom: 24 }}
+        ListEmptyComponent={
+          <Text style={styles.empty}>На полиці ще немає примірників. Додайте ISBN вище.</Text>
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Pressable onPress={() => router.push(`/book/${item.book.id}`)}>
@@ -178,6 +181,7 @@ export default function ShelfScreen() {
               <View style={styles.cardBody}>
                 <Text style={styles.title}>{item.book.title}</Text>
                 <Text style={styles.meta}>
+                  {item.copy_id ? `Примірник #${item.copy_id} · ` : ""}
                   {item.book.authors}
                   {item.borrowed_from ? ` · позичено у ${item.borrowed_from.username}` : ""}
                   {item.is_lent_out && !item.borrowed_from ? " · зараз у позиці" : ""}
@@ -275,6 +279,7 @@ export default function ShelfScreen() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", padding: 12, gap: 8 },
+  empty: { color: colors.muted, textAlign: "center", marginTop: 40, paddingHorizontal: 24 },
   input: { flex: 1, borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 8 },
   inputFull: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 10, marginBottom: 12 },
   add: { backgroundColor: colors.ink, paddingHorizontal: 12, justifyContent: "center" },

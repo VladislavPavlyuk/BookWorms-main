@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { DEFAULT_API } from "./theme";
 import type {
   Book,
+  BookBrowseGroup,
   Comment,
   Exchange,
   Message,
@@ -223,11 +224,16 @@ export const SlipApi = {
 };
 
 export const BrowseApi = {
-  list: () => api<{ others: Shelf[]; my_owned: Shelf[] }>("/api/browse/"),
+  list: () =>
+    api<{ others: Shelf[]; others_grouped: BookBrowseGroup[]; my_owned: Shelf[] }>(
+      "/api/browse/"
+    ),
   user: (id: number) =>
     api<{ user: User; is_own: boolean; shelves: Shelf[] }>(`/api/users/${id}/shelf/`),
   book: (id: number) =>
-    api<{ book: Book; holders: Shelf[]; posts: Post[] }>(`/api/books/${id}/`),
+    api<{ book: Book; owners: User[]; holders: Shelf[]; posts: Post[] }>(
+      `/api/books/${id}/`
+    ),
 };
 
 export const ExchangeApi = {

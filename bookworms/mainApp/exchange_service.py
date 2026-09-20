@@ -14,7 +14,7 @@ from django.db.models import Exists, OuterRef, QuerySet
 from django.utils import timezone
 
 from . import message_service
-from .models import Book, BookExchangeRequest, CustomUser, Shelf
+from .models import Book, BookCopy, BookExchangeRequest, CustomUser, Shelf
 
 
 def _loan_due_date():
@@ -22,8 +22,54 @@ def _loan_due_date():
     return timezone.now().date() + timedelta(days=days)
 
 
+def add_owned_copy(user: CustomUser, book: Book) -> Shelf:
+    """
+    Новий фізичний примірник на полиці власника.
+    Той самий ISBN можна додавати багато разів (окремі BookCopy).
+    """
+    copy = BookCopy.objects.create(book=book, owner=user)
+    return Shelf.objects.create(user=user, book=book, copy=copy)
+
+
+def remove_owned_shelf(shelf: Shelf) -> None:
+    """Прибрати власний рядок; якщо примірник більше ніде не лежить — видалити BookCopy."""
+    copy = shelf.copy
+    shelf.delete()
+    if copy is not None and not Shelf.objects.filter(copy_id=copy.pk).exists():
+        BookCopy.objects.filter(pk=copy.pk).delete()
+
+
+def ensure_shelf_copy(shelf: Shelf) -> Shelf:
+    """Якщо рядок полиці без BookCopy (старі дані) — створити примірник і прив’язати."""
+    if shelf.copy_id:
+        return shelf
+    owner_id = shelf.borrowed_from_id or shelf.user_id
+    copy = BookCopy.objects.create(book_id=shelf.book_id, owner_id=owner_id)
+    Shelf.objects.filter(pk=shelf.pk).update(copy_id=copy.pk)
+    shelf.copy_id = copy.pk
+    shelf.copy = copy
+    return shelf
+
+
+def ensure_shelves_have_copies(shelves: list[Shelf]) -> list[Shelf]:
+    return [ensure_shelf_copy(s) for s in shelves]
+
+
+def is_copy_lent_out(copy_id: int | None) -> bool:
+    """Чи є активна позика цього примірника."""
+    if not copy_id:
+        return False
+    return Shelf.objects.filter(
+        copy_id=copy_id,
+        borrowed_from__isnull=False,
+    ).exists()
+
+
 def is_book_lent_out(owner_id: int, book_id: int) -> bool:
-    """Чи є активна позика цієї книги від власника (окремий рядок у позичальника)."""
+    """
+    Legacy: чи є активна позика будь-якого примірника цієї ISBN від власника.
+    Для UI «книга у від'їзді» на рівні ISBN; для блокування дій — краще is_copy_lent_out.
+    """
     return Shelf.objects.filter(
         borrowed_from_id=owner_id,
         book_id=book_id,
@@ -32,16 +78,51 @@ def is_book_lent_out(owner_id: int, book_id: int) -> bool:
 
 def available_owned_shelves_qs(exclude_user_id: int | None = None) -> QuerySet[Shelf]:
     """
-    Полиці, доступні для запиту: власні (не borrowed), і книга зараз не «у від'їзді» (немає позики).
+    Полиці, доступні для запиту: власні (не borrowed), і цей примірник зараз не в позиці.
     """
     active_loan = Shelf.objects.filter(
-        borrowed_from_id=OuterRef("user_id"),
-        book_id=OuterRef("book_id"),
-    )
+        copy_id=OuterRef("copy_id"),
+        borrowed_from__isnull=False,
+    ).exclude(copy_id__isnull=True)
     qs = Shelf.objects.filter(borrowed_from__isnull=True).exclude(Exists(active_loan))
     if exclude_user_id is not None:
         qs = qs.exclude(user_id=exclude_user_id)
     return qs
+
+
+def group_shelves_by_book(shelves) -> list[dict]:
+    """
+    Один ISBN → одна картка: book + унікальні owners + усі доступні shelf-рядки (примірники).
+    Порядок = перша поява книги в queryset.
+    """
+    groups: dict[int, dict] = {}
+    order: list[int] = []
+    for s in shelves:
+        bid = s.book_id
+        if bid not in groups:
+            groups[bid] = {
+                "book": s.book,
+                "shelves": [],
+                "owners": [],
+                "_owner_ids": set(),
+            }
+            order.append(bid)
+        g = groups[bid]
+        g["shelves"].append(s)
+        if s.user_id not in g["_owner_ids"]:
+            g["_owner_ids"].add(s.user_id)
+            g["owners"].append(s.user)
+    out = []
+    for bid in order:
+        g = groups[bid]
+        out.append(
+            {
+                "book": g["book"],
+                "shelves": g["shelves"],
+                "owners": g["owners"],
+            }
+        )
+    return out
 
 
 def get_or_create_book_from_payload(payload: dict) -> tuple[Book, bool]:
@@ -71,30 +152,28 @@ def create_exchange_request(
     """
     Створює запит. Помилка - (None, текст).
     Без offer_shelf: після прийняття - позика (borrowed_from = власник).
-    З offer_shelf: обмін двома книгами (повна передача, без позики).
+    З offer_shelf: обмін двома примірниками (повна передача, без позики).
     """
     if target_shelf.user_id == requester.id:
         return None, "Не можна запитувати власну книгу."
 
-    # Не пропонуємо "віджати" книгу, яку хтось тримає як позичену (вона не його власність для обміну).
     if target_shelf.borrowed_from_id:
         return None, "Неможливо запитувати позичену в іншого користувача книгу."
 
-    if is_book_lent_out(target_shelf.user_id, target_shelf.book_id):
-        return None, "Ця книга зараз у когось у позиці - запит недоступний."
+    if is_copy_lent_out(target_shelf.copy_id):
+        return None, "Цей примірник зараз у когось у позиці - запит недоступний."
 
     if offer_shelf is not None:
         if offer_shelf.user_id != requester.id:
             return None, "Запропонована книга має бути з вашої полиці."
         if offer_shelf.borrowed_from_id:
             return None, "Неможна віддавати в обмін позичену книгу - спочатку поверніть її власнику."
-        if is_book_lent_out(offer_shelf.user_id, offer_shelf.book_id):
+        if is_copy_lent_out(offer_shelf.copy_id):
             return None, "Неможна віддавати в обмін книгу, яка зараз у когось у позиці."
-        if offer_shelf.book_id == target_shelf.book_id:
-            return None, "Немає сенсу обмінювати книгу на ту саму."
+        if offer_shelf.copy_id == target_shelf.copy_id:
+            return None, "Немає сенсу обмінювати той самий примірник."
 
     pending = BookExchangeRequest.Status.PENDING
-    # Один активний запит від того самого користувача на той самий рядок полиці - щоб не спамити.
     if BookExchangeRequest.objects.filter(
         target_shelf=target_shelf,
         requester=requester,
@@ -102,8 +181,9 @@ def create_exchange_request(
     ).exists():
         return None, "Ви вже маєте активний запит щодо цієї книги."
 
-    if Shelf.objects.filter(user=requester, book=target_shelf.book).exists():
-        return None, "Ця книга вже є у вас на полиці."
+    # Той самий примірник уже на полиці (не блокуємо інший ISBN-клон).
+    if Shelf.objects.filter(user=requester, copy_id=target_shelf.copy_id).exists():
+        return None, "Цей примірник вже є у вас на полиці."
 
     req = BookExchangeRequest.objects.create(
         target_shelf=target_shelf,
@@ -112,7 +192,6 @@ def create_exchange_request(
         offer_shelf=offer_shelf,
         status=pending,
     )
-    # Сповіщення власнику книги в скриньку "Повідомлення" (сервіс обміну повідомленнями).
     message_service.notify_exchange_request_created(req)
     return req, None
 
@@ -158,9 +237,9 @@ def create_many_exchange_requests(
 def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[bool, str | None]:
     """
     Власник погоджується.
-    Позика: власник ЗБЕРІГАЄ свій рядок Shelf; позичальнику створюється ОКмий рядок
-    з borrowed_from (раніше рядок «переїжджав» — книга зникала з полиці власника).
-    Обмін: обидва рядки міняють user_id (повна передача).
+    Позика: власник ЗБЕРІГАЄ свій рядок Shelf; позичальнику створюється окремий рядок
+    з borrowed_from на той самий BookCopy.
+    Обмін: обидва рядки міняють user_id і owner на BookCopy (повна передача).
     """
     try:
         req = BookExchangeRequest.objects.select_for_update().get(
@@ -179,40 +258,41 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
             pk=req.target_shelf_id,
             user_id=req.shelf_owner_id,
         )
-        .select_related("book")
+        .select_related("book", "copy")
         .first()
     )
     if not target:
         return False, "Книги вже немає на вашій полиці."
     if target.borrowed_from_id:
         return False, "Не можна віддати позичену книгу."
-    if is_book_lent_out(target.user_id, target.book_id):
-        return False, "Книга вже видана в позику."
+    if is_copy_lent_out(target.copy_id):
+        return False, "Примірник вже виданий в позику."
 
     requester = CustomUser.objects.select_for_update().get(pk=req.requester_id)
-    book_to_transfer = target.book
 
     offer = None
     if req.offer_shelf_id:
         offer = (
             Shelf.objects.select_for_update(of=("self",))
             .filter(pk=req.offer_shelf_id, user=requester)
-            .select_related("book")
+            .select_related("book", "copy")
             .first()
         )
         if not offer:
             return False, "Запропонована книга більше не на полиці відправника."
-        if offer.borrowed_from_id or is_book_lent_out(offer.user_id, offer.book_id):
+        if offer.borrowed_from_id or is_copy_lent_out(offer.copy_id):
             return False, "Запропонована книга недоступна для обміну (позика)."
 
-    if Shelf.objects.filter(user=requester, book=book_to_transfer).exists():
-        return False, "У користувача вже є ця книга - неможливо завершити обмін."
+    if Shelf.objects.filter(user=requester, copy_id=target.copy_id).exists():
+        return False, "У користувача вже є цей примірник - неможливо завершити обмін."
 
     if offer:
-        # Обмін: обидві книги переходять у власність без статусу позики
-        offer_book = offer.book
-        if Shelf.objects.filter(user=acting_user, book=offer_book).exclude(pk=offer.pk).exists():
-            return False, "У вас уже є запропонована до обміну книга."
+        if (
+            Shelf.objects.filter(user=acting_user, copy_id=offer.copy_id)
+            .exclude(pk=offer.pk)
+            .exists()
+        ):
+            return False, "У вас уже є запропонований до обміну примірник."
         Shelf.objects.filter(pk=target.pk).update(
             user_id=requester.id,
             borrowed_from_id=None,
@@ -225,11 +305,13 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
             due_date=None,
             return_pending=False,
         )
+        BookCopy.objects.filter(pk=target.copy_id).update(owner_id=requester.id)
+        BookCopy.objects.filter(pk=offer.copy_id).update(owner_id=acting_user.id)
     else:
-        # Позика: власник лишає книгу на своїй полиці; позичальник отримує ОКмий рядок.
         Shelf.objects.create(
             user_id=requester.id,
-            book_id=book_to_transfer.id,
+            book_id=target.book_id,
+            copy_id=target.copy_id,
             borrowed_from_id=acting_user.id,
             due_date=_loan_due_date(),
             return_pending=False,
@@ -286,8 +368,6 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
     """
     Позичальник повідомляє, що повертає книгу. Рядок лишається на його полиці до підтвердження позикодавцем.
     """
-    # of=("self",): Postgres забороняє FOR UPDATE на nullable side outer join
-    # (select_related borrowed_from → LEFT JOIN). Без of= — 500 на «Повернути власнику».
     shelf = (
         Shelf.objects.select_related("borrowed_from", "book")
         .select_for_update(of=("self",))
@@ -314,7 +394,7 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
     Рядок власника вже має бути на його полиці (після фіксу позики); якщо ні — відновлюємо.
     """
     shelf = (
-        Shelf.objects.select_related("book", "user")
+        Shelf.objects.select_related("book", "user", "copy")
         .select_for_update(of=("self",))
         .filter(
             pk=shelf_id,
@@ -327,12 +407,11 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
         return False, "Немає запису з очікуванням вашого підтвердження повернення."
 
     owner_id = lender.id
-    book_id = shelf.book_id
+    copy_id = shelf.copy_id
     borrower = shelf.user
     book_title = shelf.book.title
     shelf_pk = shelf.pk
 
-    # Сповіщення про це повернення → прочитані (полиця / slips / inbox — один шлях).
     message_service.mark_return_notifications_read(
         lender,
         shelf_id=shelf_pk,
@@ -340,22 +419,20 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
         book_title=book_title,
     )
 
-    # Власник має зберегти/відновити свій рядок (не позичений).
     owner_row = (
         Shelf.objects.select_for_update(of=("self",))
-        .filter(user_id=owner_id, book_id=book_id, borrowed_from__isnull=True)
+        .filter(user_id=owner_id, copy_id=copy_id, borrowed_from__isnull=True)
         .first()
     )
     if not owner_row:
-        # Старі дані: рядок «переїхав» до позичальника — повертаємо його власнику.
         Shelf.objects.filter(pk=shelf.pk).update(
             user_id=owner_id,
             borrowed_from_id=None,
             return_pending=False,
             due_date=None,
         )
+        BookCopy.objects.filter(pk=copy_id).update(owner_id=owner_id)
     else:
-        # Нова модель: у власника є свій рядок — прибираємо копію позичальника.
         shelf.delete()
 
     message_service.notify_borrow_return_confirmed(lender, borrower, book_title)
