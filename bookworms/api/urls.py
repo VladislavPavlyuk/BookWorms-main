@@ -26,6 +26,7 @@ urlpatterns = [
     path("browse/", views.browse_shelves),
     path("users/<int:user_id>/shelf/", views.user_shelf),
     path("books/<int:book_id>/", views.book_detail),
+    path("copies/<int:copy_id>/history/", views.copy_history),
     path("exchanges/", views.exchange_list),
     path("exchanges/create/", views.exchange_create),
     path("exchanges/<int:request_id>/accept/", views.exchange_accept_view),

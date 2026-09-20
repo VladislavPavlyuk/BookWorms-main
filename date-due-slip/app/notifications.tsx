@@ -125,7 +125,6 @@ export default function NotificationsScreen() {
         />
       }
     >
-      <Text style={styles.h}>Сповіщення</Text>
       <Text style={styles.hint}>
         Запит на книгу → «Обміни»: умови (позика/обмін), чат за потреби, прийняти або відхилити.
         {unread ? ` Непрочитаних: ${unread}.` : ""}

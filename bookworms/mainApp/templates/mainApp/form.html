@@ -4,8 +4,6 @@
 
 {% block content %}
 
-<h2>{% if post %}Редагувати пост{% else %}Створити пост{% endif %}</h2>
-
 <form method="post">
     {% csrf_token %}
 

@@ -6,8 +6,7 @@
 {% block content %}
 {# others_grouped: [{book, owners, shelves}] — одна обкладинка на ISBN #}
 
-<h2 class="mb-3">Книги на полицях інших</h2>
-<p class="text-muted">
+<p class="text-muted mb-3">
     Одна обкладинка на ISBN. Власники різних примірників — в одному рядку.
     Позначте конкретного власника для <strong>позики</strong> або оберіть свою книгу для <strong>обміну</strong>.
 </p>
@@ -45,12 +44,8 @@
                             </h3>
                             {% if book.authors %}<p class="small text-muted mb-1">{{ book.authors }}</p>{% endif %}
                             <p class="small text-muted mb-2">ISBN {{ book.isbn }} · вік {{ book.reader_age_summary }}</p>
-                            <p class="small mb-2">
-                                <span class="text-muted">Власники:</span>
-                                {% for o in g.owners %}
-                                    {% if not forloop.first %}<span class="text-muted"> · </span>{% endif %}
-                                    {% shelf_user_link o %}
-                                {% endfor %}
+                            <p class="mb-2">
+                                <a href="{% url 'book_history' book.id %}" class="btn btn-sm btn-outline-secondary">Усі примірники</a>
                             </p>
                             <div class="table-responsive">
                                 <table class="table table-sm align-middle mb-0">
@@ -59,6 +54,7 @@
                                             <th class="text-center" style="width: 2.5rem;"></th>
                                             <th>Примірник у</th>
                                             <th>Ваша книга в обмін (або позика)</th>
+                                            <th></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -69,7 +65,7 @@
                                                            class="form-check-input js-shelf-pick"
                                                            aria-label="Обрати примірник {{ s.user.username }}">
                                                 </td>
-                                                <td>{% shelf_user_link s.user %}</td>
+                                                <td>{% shelf_user_link s.user %}{% if s.copy_id %} <span class="text-muted small">#{{ s.copy_id }}</span>{% endif %}</td>
                                                 <td>
                                                     <select name="offer_shelf_id_{{ s.id }}" class="form-select form-select-sm" style="max-width: 280px;">
                                                         <option value="">— позика (без вашої книги) —</option>
@@ -79,6 +75,11 @@
                                                             {% endif %}
                                                         {% endfor %}
                                                     </select>
+                                                </td>
+                                                <td class="text-nowrap">
+                                                    {% if s.copy_id %}
+                                                    <a href="{% url 'copy_history' s.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія подій</a>
+                                                    {% endif %}
                                                 </td>
                                             </tr>
                                         {% endfor %}

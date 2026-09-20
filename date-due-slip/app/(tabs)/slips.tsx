@@ -11,8 +11,10 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, ShelfApi, SlipApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
+import { HistoryLink } from "../../src/HistoryLink";
 import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
+import { UserNameLink } from "../../src/UserNameLink";
 import type { Shelf } from "../../src/types";
 
 function Slip({
@@ -45,21 +47,34 @@ function Slip({
           </Text>
         )}
       </View>
-      <Text style={styles.footer}>
-        {role === "borrowed"
-          ? `Позичено у ${s.borrowed_from?.username}`
-          : `У ${s.user.username}`}
-        {s.return_pending
-          ? role === "lent"
-            ? " · чекає вашого підтвердження"
-            : " · повернення надіслано"
-          : ""}
-      </Text>
+      <View style={styles.footerRow}>
+        {role === "borrowed" ? (
+          <>
+            <Text style={styles.footer}>Позичено у </Text>
+            <UserNameLink user={s.borrowed_from} style={styles.footer} />
+          </>
+        ) : (
+          <>
+            <Text style={styles.footer}>У </Text>
+            <UserNameLink user={s.user} style={styles.footer} />
+          </>
+        )}
+        <Text style={styles.footer}>
+          {s.return_pending
+            ? role === "lent"
+              ? " · чекає вашого підтвердження"
+              : " · повернення надіслано"
+            : ""}
+        </Text>
+      </View>
       {role === "lent" && s.return_pending && onConfirm ? (
         <Pressable style={styles.confirmBtn} onPress={onConfirm}>
           <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
         </Pressable>
       ) : null}
+      <View style={{ paddingHorizontal: 16, marginTop: 10 }}>
+        <HistoryLink copyId={s.copy_id} />
+      </View>
       {onChat && (
         <Pressable onPress={onChat}>
           <Text style={styles.chat}>
@@ -197,14 +212,19 @@ const styles = StyleSheet.create({
   meta: { color: colors.muted, marginTop: 2, paddingHorizontal: 16 },
   stampBox: { marginTop: 12, alignItems: "flex-end", paddingHorizontal: 16 },
   days: { color: colors.muted, fontSize: 12, marginTop: 2 },
-  footer: {
-    color: colors.ink,
+  footerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
     marginTop: 12,
-    fontSize: 12,
     paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: colors.line,
     paddingTop: 8,
+  },
+  footer: {
+    color: colors.ink,
+    fontSize: 12,
   },
   stamp: { color: colors.stampOk, fontWeight: "900", fontSize: 18, letterSpacing: 1 },
   confirmBtn: {

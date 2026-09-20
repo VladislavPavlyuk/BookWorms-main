@@ -5,6 +5,7 @@ from .models import (
     Book,
     BookCopy,
     BookExchangeRequest,
+    CopyEvent,
     CustomUser,
     Post,
     PrivateMessage,
@@ -63,6 +64,23 @@ class BookCopyAdmin(admin.ModelAdmin):
     list_filter = ("created_at",)
     search_fields = ("book__title", "book__isbn", "owner__username")
     raw_id_fields = ("book", "owner")
+
+
+@admin.register(CopyEvent)
+class CopyEventAdmin(admin.ModelAdmin):
+    list_display = ("id", "copy", "code", "actor", "created_at")
+    list_filter = ("code", "created_at")
+    search_fields = ("copy__book__title", "copy__book__isbn", "actor__username")
+    raw_id_fields = (
+        "copy",
+        "actor",
+        "holder",
+        "legal_owner",
+        "previous_holder",
+        "previous_owner",
+        "counterparty",
+        "exchange_request",
+    )
 
 
 @admin.register(Shelf)

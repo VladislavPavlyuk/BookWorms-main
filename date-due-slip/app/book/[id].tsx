@@ -3,9 +3,11 @@ import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "r
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, BrowseApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
+import { HistoryLink } from "../../src/HistoryLink";
 import { RequestModal } from "../../src/RequestModal";
 import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
+import { UserNameLink } from "../../src/UserNameLink";
 import type { Book, Post, Shelf, User } from "../../src/types";
 
 export default function BookScreen() {
@@ -52,12 +54,10 @@ export default function BookScreen() {
         <View style={styles.ownersRow}>
           <Text style={styles.meta}>Власники: </Text>
           {owners.map((o, i) => (
-            <Pressable key={o.id} onPress={() => router.push(`/user/${o.id}`)}>
-              <Text style={styles.ownerLink}>
-                {i > 0 ? " · " : ""}
-                {o.username}
-              </Text>
-            </Pressable>
+            <View key={o.id} style={{ flexDirection: "row" }}>
+              {i > 0 ? <Text style={styles.meta}> · </Text> : null}
+              <UserNameLink user={o} style={styles.ownerLink} />
+            </View>
           ))}
         </View>
       )}
@@ -79,13 +79,20 @@ export default function BookScreen() {
       <Text style={styles.h}>Примірники на полицях</Text>
       {holders.map((s) => (
         <View key={s.id} style={styles.card}>
-          <Pressable onPress={() => router.push(`/user/${s.user.id}`)}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
+            <UserNameLink user={s.user} style={styles.row} />
             <Text style={styles.row}>
-              {s.user.username}
-              {s.borrowed_from ? ` (позичено у ${s.borrowed_from.username})` : " · власна"}
-              {s.due_date ? ` до ${s.due_date}` : ""}
+              {s.borrowed_from ? ` (позичено у ` : " · власна"}
             </Text>
-          </Pressable>
+            {s.borrowed_from ? (
+              <>
+                <UserNameLink user={s.borrowed_from} style={styles.row} />
+                <Text style={styles.row}>)</Text>
+              </>
+            ) : null}
+            {!!s.due_date && <Text style={styles.row}>{` до ${s.due_date}`}</Text>}
+          </View>
+          <HistoryLink copyId={s.copy_id} style={styles.act} />
           {user && s.user.id !== user.id && !s.borrowed_from && (
             <Pressable onPress={() => setTarget(s)}>
               <Text style={styles.act}>Позичити / обмін</Text>
@@ -99,9 +106,10 @@ export default function BookScreen() {
       {posts.map((p) => (
         <Pressable key={p.id} style={styles.card} onPress={() => router.push(`/post/${p.id}`)}>
           <Text style={styles.ptitle}>{p.title}</Text>
-          <Text style={styles.meta}>
-            {p.author.username} · ♥ {p.likes_count}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+            <UserNameLink user={p.author} style={styles.meta} />
+            <Text style={styles.meta}>· ♥ {p.likes_count}</Text>
+          </View>
           <Text style={{ color: colors.ink, marginTop: 6 }} numberOfLines={3}>
             {p.text}
           </Text>

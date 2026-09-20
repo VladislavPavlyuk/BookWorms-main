@@ -24,7 +24,10 @@ RUN chmod +x /entrypoint.sh \
     && test -f /app/mainApp/middleware.py \
     && test -f /app/mainApp/migrations/0013_customuser_email_confirmed.py \
     && test -f /app/mainApp/migrations/0017_privatemessage_related_shelf.py \
-    && grep -q health-cheap /app/api/views.py \
+    && test -f /app/mainApp/migrations/0018_bookcopy_shelf_copy.py \
+    && test -f /app/mainApp/migrations/0019_copyevent.py \
+    && grep -q 'code_rev' /app/api/views.py \
+    && grep -q 'Cheap by default' /app/api/views.py \
     && grep -q post_worker_init /app/bookworms/gunicorn.conf.py \
     && ! grep -q 'purge loop every' /entrypoint.sh \
     && grep -q 'OL_HOST' /app/mainApp/openlibrary.py \

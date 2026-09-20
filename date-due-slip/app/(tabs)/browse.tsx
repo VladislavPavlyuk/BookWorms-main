@@ -11,8 +11,10 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, BrowseApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
+import { HistoryLink } from "../../src/HistoryLink";
 import { RequestModal } from "../../src/RequestModal";
 import { colors } from "../../src/theme";
+import { UserNameLink } from "../../src/UserNameLink";
 import type { BookBrowseGroup, Shelf } from "../../src/types";
 
 /** Client-side ISBN grouping when API has no others_grouped yet. */
@@ -106,16 +108,27 @@ export default function Browse() {
                 <View style={styles.ownersRow}>
                   <Text style={styles.ownersLabel}>Власники: </Text>
                   {g.owners.map((o, i) => (
-                    <Pressable key={o.id} onPress={() => router.push(`/user/${o.id}`)}>
-                      <Text style={styles.owner}>
-                        {i > 0 ? " · " : ""}
-                        {o.username}
-                      </Text>
-                    </Pressable>
+                    <View key={o.id} style={{ flexDirection: "row" }}>
+                      {i > 0 ? <Text style={styles.ownersLabel}> · </Text> : null}
+                      <UserNameLink user={o} style={styles.owner} />
+                    </View>
                   ))}
                 </View>
               </View>
             </Pressable>
+            <View style={styles.cardBody}>
+              {(g.copies?.length ? g.copies : []).map((c) => (
+                <View key={c.id} style={styles.copyRow}>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", flex: 1 }}>
+                    <UserNameLink user={c.user} style={styles.owner} />
+                    {c.copy_id ? (
+                      <Text style={styles.ownersLabel}>{` · #${c.copy_id}`}</Text>
+                    ) : null}
+                  </View>
+                  <HistoryLink copyId={c.copy_id} />
+                </View>
+              ))}
+            </View>
             <Pressable style={[styles.btn, styles.cardBody]} onPress={() => requestFrom(g)}>
               <Text style={styles.btnText}>Позичити / обмін</Text>
             </Pressable>
@@ -147,6 +160,15 @@ const styles = StyleSheet.create({
   ownersRow: { flexDirection: "row", flexWrap: "wrap", marginTop: 8, alignItems: "center" },
   ownersLabel: { color: colors.muted, fontSize: 13 },
   owner: { color: colors.stamp, fontWeight: "700", fontSize: 13 },
+  copyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+  },
   title: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4 },
   btn: { marginTop: 10, alignSelf: "flex-start", backgroundColor: colors.ink, paddingHorizontal: 12, paddingVertical: 6 },

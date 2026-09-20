@@ -1,68 +1,53 @@
 {% extends "mainApp/base.html" %}
 {% load shelf_tags %}
 
-{% block title %}Історія книги: {{ book.title|truncatechars:40 }}{% endblock %}
+{% block title %}Примірники: {{ book.title|truncatechars:40 }}{% endblock %}
 
 {% block content %}
 
-<nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb mb-0">
-        <li class="breadcrumb-item"><a href="{% url 'home' %}">Головна</a></li>
-        <li class="breadcrumb-item active" aria-current="page">Історія книги</li>
-    </ol>
-</nav>
-
 <div class="d-flex flex-wrap align-items-start gap-3 mb-4">
     {% if book.cover_url %}
-        <a href="{% url 'book_history' book.id %}" class="flex-shrink-0 text-decoration-none library-book-cover-link">
-            <img src="{{ book.cover_url }}" alt="" class="rounded" style="max-width: 120px; max-height: 180px; object-fit: contain;">
-        </a>
+        <img src="{{ book.cover_url }}" alt="" class="rounded" style="max-width: 120px; max-height: 180px; object-fit: contain;">
     {% endif %}
     <div class="min-w-0">
-        <h2 class="h4 mb-1"><a href="{% url 'book_history' book.id %}" class="link-dark text-decoration-none library-book-title-link">{{ book.title }}</a></h2>
+        <h2 class="h4 mb-1">{{ book.title }}</h2>
         {% if book.authors %}<p class="text-muted small mb-1">{{ book.authors }}</p>{% endif %}
-        <p class="text-muted small mb-2">ISBN: {{ book.isbn }}</p>
-        {% if owner_names %}
-        <p class="small mb-0">
-            <span class="text-muted">Власники примірників:</span>
-            {% for o in owner_names %}
-                {% if not forloop.first %}<span class="text-muted"> · </span>{% endif %}
-                {% shelf_user_link o %}
-            {% endfor %}
-        </p>
-        {% endif %}
+        <p class="text-muted small mb-0">ISBN: {{ book.isbn }}</p>
     </div>
 </div>
 
 <p class="text-muted small mb-4">
-    <strong>Архів подій</strong> - усі зафіксовані зміни (додано, знято, обмін, позика та повернення) з моменту увімкнення журналу.
+    Кожен фізичний примірник має власну <strong>історію подій</strong>. Пости й лайки спільні для ISBN.
 </p>
 
-<h3 class="h5 mb-3">Хронологія подій</h3>
-{% if shelf_events %}
+<h3 class="h5 mb-3">Примірники</h3>
+{% if copies %}
 <div class="table-responsive mb-5">
     <table class="table table-sm align-middle">
         <thead>
             <tr>
-                <th>Час</th>
-                <th>Подія</th>
-                <th>Деталі</th>
+                <th>#</th>
+                <th>Власник</th>
+                <th>Зараз на полиці</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
-            {% for ev in shelf_events %}
+            {% for c in copies %}
             <tr>
-                <td class="text-nowrap">{{ ev.created_at|date:"d.m.Y H:i" }}</td>
-                <td>{{ ev.get_code_display }}</td>
+                <td class="text-nowrap">#{{ c.id }}</td>
+                <td>{% shelf_user_link c.owner %}</td>
                 <td class="small">
-                    {% if ev.legal_owner %}Власник: {% shelf_user_link ev.legal_owner %}<br>{% endif %}
-                    {% if ev.previous_holder %}Було на полиці: {% shelf_user_link ev.previous_holder %}<br>{% endif %}
-                    {% if ev.previous_owner %}Було власник: {% shelf_user_link ev.previous_owner %}<br>{% endif %}
-                    {% if ev.counterparty %}Інший учасник: {% shelf_user_link ev.counterparty %}<br>{% endif %}
-                    {% if ev.actor %}Ініціатор: {% shelf_user_link ev.actor %}<br>{% endif %}
-                    {% if ev.exchange_request_id %}
-                        <a href="{% url 'exchange_requests' %}">Запит обміну #{{ ev.exchange_request_id }}</a>
+                    {% if c.holder_rows %}
+                        {% for row in c.holder_rows %}
+                            {% shelf_user_link row.user %}{% if row.borrowed_from_id %} <span class="text-warning">(позика)</span>{% endif %}{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                    {% else %}
+                        —
                     {% endif %}
+                </td>
+                <td class="text-nowrap">
+                    <a href="{% url 'copy_history' c.id %}" class="btn btn-sm btn-outline-secondary">Історія подій</a>
                 </td>
             </tr>
             {% endfor %}
@@ -70,45 +55,7 @@
     </table>
 </div>
 {% else %}
-<p class="text-muted mb-5">Подій у журналі ще немає.</p>
-{% endif %}
-
-<h3 class="h5 mb-3">Поточний стан полиць</h3>
-{% if shelf_entries %}
-<div class="table-responsive mb-5">
-    <table class="table table-sm align-middle">
-        <thead>
-            <tr>
-                <th>Власник примірника</th>
-                <th>Роль</th>
-                <th>Запис на полиці з</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in shelf_entries %}
-            <tr>
-                <td>
-                    {% if row.borrowed_from_id %}
-                        {% shelf_user_link row.borrowed_from %}
-                    {% else %}
-                        {% shelf_user_link row.user %}
-                    {% endif %}
-                </td>
-                <td>
-                    {% if row.borrowed_from_id %}
-                        <span class="text-warning">Читає позичену копію</span>
-                    {% else %}
-                        Власник на своїй полиці
-                    {% endif %}
-                </td>
-                <td class="text-nowrap">{{ row.added_at|date:"d.m.Y H:i" }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% else %}
-<p class="text-muted mb-5">Ніхто з користувачів ще не додав цю книгу на полицю.</p>
+<p class="text-muted mb-5">Примірників ще немає.</p>
 {% endif %}
 
 <h3 class="h5 mb-3">Пости, лайки та коментарі (спільні для ISBN)</h3>

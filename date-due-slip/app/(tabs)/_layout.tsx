@@ -31,11 +31,11 @@ export default function TabsLayout() {
         tabBarShowLabel: false,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Стрічка", headerShown: false }} />
-      <Tabs.Screen name="shelf" options={{ title: "Моя полиця" }} />
-      <Tabs.Screen name="slips" options={{ title: "Реченець" }} />
-      <Tabs.Screen name="browse" options={{ title: "Чужі полиці" }} />
-      <Tabs.Screen name="more" options={{ title: "Ще" }} />
+      <Tabs.Screen name="index" options={{ title: "", headerShown: false }} />
+      <Tabs.Screen name="shelf" options={{ title: "" }} />
+      <Tabs.Screen name="slips" options={{ title: "" }} />
+      <Tabs.Screen name="browse" options={{ title: "" }} />
+      <Tabs.Screen name="more" options={{ title: "" }} />
     </Tabs>
   );
 }

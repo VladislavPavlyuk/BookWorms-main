@@ -10,8 +10,10 @@ from django.utils.http import urlsafe_base64_decode
 from django.core.paginator import Paginator
 from .models import (
     Book,
+    BookCopy,
     BookExchangeRequest,
     Comment,
+    CopyEvent,
     Like,
     Post,
     PrivateMessage,
@@ -31,6 +33,7 @@ from .forms import (
 from django.views.generic import CreateView
 from django.urls import reverse_lazy
 from django.contrib.auth.decorators import login_required
+from django.utils import timezone
 from .openlibrary import fetch_book_by_isbn
 from django.conf import settings
 # Бізнес-правила обміну/позик винесені в exchange_service - тут лише HTTP і шаблони.
@@ -126,7 +129,7 @@ def home(request):
             "search_qs": search_qs,
             "search_core": search_core,
             "search_active": searching,
-            "advanced_open": advanced_active(request.GET),
+            "advanced_open": advanced_active(request.GET) or request.GET.get("adv") == "1",
             "q": (request.GET.get("q") or "").strip(),
             "title": (request.GET.get("title") or "").strip(),
             "isbn": (request.GET.get("isbn") or "").strip(),
@@ -488,6 +491,46 @@ def my_library(request):
     )
 
 
+def _annotate_due_slip(shelf):
+    """is_overdue / days_left — як у API ShelfSerializer (мобільний Реченець)."""
+    today = timezone.now().date()
+    if shelf.due_date and shelf.borrowed_from_id:
+        shelf.days_left = (shelf.due_date - today).days
+        shelf.is_overdue = shelf.days_left < 0
+        shelf.days_overdue = abs(shelf.days_left) if shelf.is_overdue else 0
+    else:
+        shelf.is_overdue = False
+        shelf.days_left = None
+        shelf.days_overdue = 0
+    return shelf
+
+
+@login_required
+def due_slips(request):
+    """Date Due Slip (web): позичені мною + видані мною — аналог mobile /(tabs)/slips."""
+    borrowed = [
+        _annotate_due_slip(s)
+        for s in request.user.shelf_entries.filter(borrowed_from__isnull=False)
+        .select_related("book", "borrowed_from", "user")
+        .order_by("due_date")
+    ]
+    lent = [
+        _annotate_due_slip(s)
+        for s in Shelf.objects.filter(borrowed_from=request.user)
+        .select_related("book", "user", "borrowed_from")
+        .order_by("due_date")
+    ]
+    return render(
+        request,
+        "mainApp/due_slips.html",
+        {
+            "borrowed": borrowed,
+            "lent": lent,
+            "loan_days": int(getattr(settings, "DEFAULT_LOAN_DAYS", 14)),
+        },
+    )
+
+
 @login_required
 def update_shelf_book_reader_age(request, shelf_id):
     """Оновлення min/max рекомендованого віку в спільному Book для рядка полиці."""
@@ -626,11 +669,16 @@ def browse_shelves(request):
 
 @login_required
 def user_public_shelf(request, user_id):
-    """Перегляд списку книг на полиці обраного користувача (без редагування)."""
+    """Список примірників користувача. Власне ім'я з навбару веде в профіль — сюди лише чужі."""
     User = get_user_model()
     shelf_owner = get_object_or_404(User, pk=user_id)
-    shelves = shelf_owner.shelf_entries.select_related("book", "borrowed_from").order_by(
-        "-added_at"
+    if request.user.pk == shelf_owner.pk:
+        return redirect("profile_app:profile")
+    # Лише власні примірники (не позичені в когось)
+    shelves = (
+        shelf_owner.shelf_entries.filter(borrowed_from__isnull=True)
+        .select_related("book", "borrowed_from", "copy")
+        .order_by("-added_at")
     )
     return render(
         request,
@@ -638,42 +686,30 @@ def user_public_shelf(request, user_id):
         {
             "shelf_owner": shelf_owner,
             "shelves": shelves,
-            "is_own": request.user.pk == shelf_owner.pk,
+            "is_own": False,
         },
     )
 
 
 @login_required
 def book_history(request, book_id):
-    """Історія використання книги: журнал подій (якщо є модель), поточні полиці, пости з цією книгою."""
+    """ISBN overview: список примірників (кожен зі своєю історією) + пости."""
     book = get_object_or_404(Book, pk=book_id)
-    shelf_entries = (
+    copies = list(
+        BookCopy.objects.filter(book=book)
+        .select_related("owner", "book")
+        .order_by("-created_at")
+    )
+    shelf_entries = list(
         Shelf.objects.filter(book=book)
-        .select_related("user", "borrowed_from")
+        .select_related("user", "borrowed_from", "copy")
         .order_by("added_at")
     )
-    # Unique legal owners of copies (owned rows + lenders of borrowed rows)
-    owner_names = []
-    seen_owners: set[int] = set()
+    by_copy: dict[int, list] = {}
     for row in shelf_entries:
-        oid = row.borrowed_from_id or row.user_id
-        if oid not in seen_owners:
-            seen_owners.add(oid)
-            owner_names.append(row.borrowed_from if row.borrowed_from_id else row.user)
-    shelf_events = []
-    history_model = getattr(book, "shelf_events", None)
-    if history_model is not None:
-        shelf_events = list(
-            history_model.select_related(
-                "actor",
-                "holder",
-                "legal_owner",
-                "previous_holder",
-                "previous_owner",
-                "counterparty",
-                "exchange_request",
-            ).order_by("-created_at")
-        )
+        by_copy.setdefault(row.copy_id, []).append(row)
+    for c in copies:
+        c.holder_rows = by_copy.get(c.pk, [])
     comments_qs = Comment.objects.select_related("author").order_by("created_at")
     posts = (
         Post.objects.filter(book=book)
@@ -686,10 +722,47 @@ def book_history(request, book_id):
         "mainApp/book_history.html",
         {
             "book": book,
+            "copies": copies,
             "shelf_entries": shelf_entries,
-            "owner_names": owner_names,
-            "shelf_events": shelf_events,
             "posts": posts,
+        },
+    )
+
+
+@login_required
+def copy_history(request, copy_id):
+    """Історія подій одного фізичного примірника (BookCopy)."""
+    copy = get_object_or_404(
+        BookCopy.objects.select_related("book", "owner"),
+        pk=copy_id,
+    )
+    book = copy.book
+    shelf_entries = (
+        Shelf.objects.filter(copy=copy)
+        .select_related("user", "borrowed_from", "copy")
+        .order_by("added_at")
+    )
+    shelf_events = list(
+        CopyEvent.objects.filter(copy=copy)
+        .select_related(
+            "actor",
+            "holder",
+            "legal_owner",
+            "previous_holder",
+            "previous_owner",
+            "counterparty",
+            "exchange_request",
+        )
+        .order_by("-created_at")
+    )
+    return render(
+        request,
+        "mainApp/copy_history.html",
+        {
+            "book": book,
+            "copy": copy,
+            "shelf_entries": shelf_entries,
+            "shelf_events": shelf_events,
         },
     )
 
@@ -794,14 +867,26 @@ def exchange_requests(request):
             status=BookExchangeRequest.Status.PENDING,
             shelf_owner=request.user,
         )
-        .select_related("requester", "target_shelf__book", "offer_shelf__book")
+        .select_related(
+            "requester",
+            "target_shelf__book",
+            "target_shelf__copy",
+            "offer_shelf__book",
+            "offer_shelf__copy",
+        )
     )
     pending_out = (
         BookExchangeRequest.objects.filter(
             status=BookExchangeRequest.Status.PENDING,
             requester=request.user,
         )
-        .select_related("target_shelf__user", "target_shelf__book", "offer_shelf__book")
+        .select_related(
+            "target_shelf__user",
+            "target_shelf__book",
+            "target_shelf__copy",
+            "offer_shelf__book",
+            "offer_shelf__copy",
+        )
     )
     history = (
         BookExchangeRequest.objects.filter(
@@ -816,7 +901,9 @@ def exchange_requests(request):
             "requester",
             "target_shelf__user",
             "target_shelf__book",
+            "target_shelf__copy",
             "offer_shelf__book",
+            "offer_shelf__copy",
         )[:50]
     )
     return render(

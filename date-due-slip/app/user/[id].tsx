@@ -3,9 +3,11 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, BrowseApi, MsgApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
+import { HistoryLink } from "../../src/HistoryLink";
 import { RequestModal } from "../../src/RequestModal";
 import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
+import { UserNameLink } from "../../src/UserNameLink";
 import type { Shelf, User } from "../../src/types";
 
 export default function UserShelf() {
@@ -34,10 +36,15 @@ export default function UserShelf() {
   };
 
   useEffect(() => {
+    const uid = Number(id);
+    if (user && uid === user.id) {
+      router.replace("/(tabs)/more");
+      return;
+    }
     load().catch((e) =>
       Alert.alert("Полиця", e instanceof ApiError ? e.message : String(e))
     );
-  }, [id]);
+  }, [id, user?.id]);
 
   const openChat = () => {
     if (!owner) return;
@@ -72,14 +79,22 @@ export default function UserShelf() {
             <BookCover uri={s.book.cover_url} size="full" bleed={0} />
             <View style={styles.cardBody}>
               <Text style={styles.title}>{s.book.title}</Text>
-              <Text style={styles.meta}>
-                {s.borrowed_from ? `позичено у ${s.borrowed_from.username}` : "власна"}
-                {s.due_date ? ` · до ${s.due_date}` : ""}
-                {` · ${s.book.reader_age_summary}`}
-              </Text>
+              <View style={styles.metaRow}>
+                {s.borrowed_from ? (
+                  <>
+                    <Text style={styles.meta}>позичено у </Text>
+                    <UserNameLink user={s.borrowed_from} style={styles.meta} />
+                  </>
+                ) : (
+                  <Text style={styles.meta}>власна</Text>
+                )}
+                {!!s.due_date && <Text style={styles.meta}>{` · до ${s.due_date}`}</Text>}
+                <Text style={styles.meta}>{` · ${s.book.reader_age_summary}`}</Text>
+              </View>
             </View>
           </Pressable>
           <View style={styles.cardBody}>
+          <HistoryLink copyId={s.copy_id} style={{ marginBottom: 8 }} />
           {!isOwn && !s.borrowed_from && user && (
             <Pressable onPress={() => setTarget(s)}>
               <Text style={styles.act}>Позичити / обмін</Text>
@@ -136,6 +151,7 @@ const styles = StyleSheet.create({
   },
   cardBody: { paddingHorizontal: 16, paddingBottom: 12, paddingTop: 10 },
   title: { fontWeight: "700", color: colors.ink },
-  meta: { color: colors.muted, marginTop: 4 },
+  metaRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", marginTop: 4 },
+  meta: { color: colors.muted },
   act: { color: colors.stamp, fontWeight: "800", marginTop: 8 },
 });

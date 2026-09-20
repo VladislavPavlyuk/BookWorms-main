@@ -40,8 +40,10 @@ from mainApp.notification_service import (
 )
 from mainApp.models import (
     Book,
+    BookCopy,
     BookExchangeRequest,
     Comment,
+    CopyEvent,
     Like,
     Post,
     PrivateMessage,
@@ -62,8 +64,10 @@ from .serializers import (
     AddBookManualSerializer,
     AddIsbnSerializer,
     BookBrowseGroupSerializer,
+    BookCopySerializer,
     BookSerializer,
     CommentSerializer,
+    CopyEventSerializer,
     CreateExchangeSerializer,
     ExchangeRequestSerializer,
     MeSerializer,
@@ -570,8 +574,11 @@ def user_shelf(request, user_id):
     owner = User.objects.filter(pk=user_id).first()
     if not owner:
         return _error("Користувача не знайдено.", 404)
-    shelves = owner.shelf_entries.select_related("book", "borrowed_from", "user").order_by(
-        "-added_at"
+    # Власні примірники (книги, якими володіє / тримає як власник)
+    shelves = (
+        owner.shelf_entries.filter(borrowed_from__isnull=True)
+        .select_related("book", "borrowed_from", "user", "copy")
+        .order_by("-added_at")
     )
     return Response(
         {
@@ -614,6 +621,43 @@ def book_detail(request, book_id):
             "owners": UserPublicSerializer(owners, many=True, context=ctx).data,
             "holders": ShelfSerializer(holders, many=True, context=ctx).data,
             "posts": PostSerializer(posts, many=True, context=ctx).data,
+        }
+    )
+
+
+@api_view(["GET"])
+def copy_history(request, copy_id):
+    """Історія подій одного примірника + поточні полиці."""
+    copy = (
+        BookCopy.objects.filter(pk=copy_id)
+        .select_related("book", "owner")
+        .first()
+    )
+    if not copy:
+        return _error("Примірник не знайдено.", 404)
+    holders = (
+        Shelf.objects.filter(copy=copy)
+        .select_related("user", "borrowed_from", "book", "copy")
+        .order_by("added_at")
+    )
+    events = (
+        CopyEvent.objects.filter(copy=copy)
+        .select_related(
+            "actor",
+            "holder",
+            "legal_owner",
+            "previous_holder",
+            "previous_owner",
+            "counterparty",
+        )
+        .order_by("-created_at")
+    )
+    ctx = {"request": request}
+    return Response(
+        {
+            "copy": BookCopySerializer(copy, context=ctx).data,
+            "holders": ShelfSerializer(holders, many=True, context=ctx).data,
+            "events": CopyEventSerializer(events, many=True, context=ctx).data,
         }
     )
 

@@ -1,0 +1,145 @@
+{% extends "mainApp/base.html" %}
+{% load shelf_tags %}
+
+{% block title %}Реченець{% endblock %}
+
+{% block content %}
+
+<p class="text-muted small mb-4">
+    Стандартний термін позики: <strong>{{ loan_days }}</strong> днів від прийняття запиту.
+</p>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{% if 'error' in message.tags %}danger{% elif 'success' in message.tags %}success{% elif 'warning' in message.tags %}warning{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<h3 class="h5 mb-3">Мої позики</h3>
+{% if borrowed %}
+    <div class="vstack gap-3 mb-5">
+        {% for s in borrowed %}
+        <article class="card border-0 shadow-sm due-slip{% if s.is_overdue %} due-slip--overdue{% endif %}{% if s.return_pending %} due-slip--pending{% endif %}">
+            <div class="card-body">
+                <div class="text-uppercase small fw-bold text-danger mb-2" style="letter-spacing: 0.12em;">Реченець</div>
+                <div class="d-flex flex-wrap gap-3 align-items-start">
+                    {% if s.book.cover_url %}
+                    <a href="{% url 'copy_history' s.copy_id %}" class="flex-shrink-0 text-decoration-none">
+                        <img src="{{ s.book.cover_url }}" alt="" class="rounded"
+                             style="width: 72px; height: 108px; object-fit: cover;">
+                    </a>
+                    {% endif %}
+                    <div class="min-w-0 flex-grow-1">
+                        <h4 class="h6 mb-1">
+                            <a href="{% url 'copy_history' s.copy_id %}" class="link-dark text-decoration-none">{{ s.book.title }}</a>
+                        </h4>
+                        <p class="small text-muted mb-2">{{ s.book.authors|default:"—" }}</p>
+                        <p class="mb-1">
+                            {% if s.is_overdue %}
+                                <span class="badge text-bg-danger">OVERDUE</span>
+                            {% elif s.due_date %}
+                                <span class="badge text-bg-success">DUE {{ s.due_date|date:"Y-m-d" }}</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">NO DATE</span>
+                            {% endif %}
+                            {% if s.days_left != None %}
+                                <span class="small text-muted ms-1">
+                                    {% if s.is_overdue %}
+                                        {{ s.days_overdue }} дн. прострочено
+                                    {% else %}
+                                        {{ s.days_left }} дн. лишилось
+                                    {% endif %}
+                                </span>
+                            {% endif %}
+                        </p>
+                        <p class="small mb-2">
+                            Позичено у {% shelf_user_link s.borrowed_from %}
+                            {% if s.return_pending %} · повернення надіслано{% endif %}
+                        </p>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <a href="{% url 'copy_history' s.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія подій</a>
+                            {% if s.borrowed_from_id %}
+                            <a href="{% url 'message_thread' s.borrowed_from_id %}" class="btn btn-sm btn-outline-secondary">Чат з власником</a>
+                            {% endif %}
+                            {% if not s.return_pending %}
+                            <form method="post" action="{% url 'return_borrowed_shelf_book' s.id %}" class="d-inline m-0">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-success">Повернути власнику</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+{% else %}
+    <p class="text-muted mb-5">Немає позичених книг</p>
+{% endif %}
+
+<h3 class="h5 mb-3">Видано мною</h3>
+{% if lent %}
+    <div class="vstack gap-3 mb-4">
+        {% for s in lent %}
+        <article class="card border-0 shadow-sm due-slip{% if s.is_overdue %} due-slip--overdue{% endif %}{% if s.return_pending %} due-slip--pending{% endif %}">
+            <div class="card-body">
+                <div class="text-uppercase small fw-bold text-danger mb-2" style="letter-spacing: 0.12em;">Реченець</div>
+                <div class="d-flex flex-wrap gap-3 align-items-start">
+                    {% if s.book.cover_url %}
+                    <a href="{% url 'copy_history' s.copy_id %}" class="flex-shrink-0 text-decoration-none">
+                        <img src="{{ s.book.cover_url }}" alt="" class="rounded"
+                             style="width: 72px; height: 108px; object-fit: cover;">
+                    </a>
+                    {% endif %}
+                    <div class="min-w-0 flex-grow-1">
+                        <h4 class="h6 mb-1">
+                            <a href="{% url 'copy_history' s.copy_id %}" class="link-dark text-decoration-none">{{ s.book.title }}</a>
+                        </h4>
+                        <p class="small text-muted mb-2">{{ s.book.authors|default:"—" }}</p>
+                        <p class="mb-1">
+                            {% if s.is_overdue %}
+                                <span class="badge text-bg-danger">OVERDUE</span>
+                            {% elif s.due_date %}
+                                <span class="badge text-bg-success">DUE {{ s.due_date|date:"Y-m-d" }}</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">NO DATE</span>
+                            {% endif %}
+                            {% if s.days_left != None %}
+                                <span class="small text-muted ms-1">
+                                    {% if s.is_overdue %}
+                                        {{ s.days_overdue }} дн. прострочено
+                                    {% else %}
+                                        {{ s.days_left }} дн. лишилось
+                                    {% endif %}
+                                </span>
+                            {% endif %}
+                        </p>
+                        <p class="small mb-2">
+                            У {% shelf_user_link s.user %}
+                            {% if s.return_pending %} · чекає вашого підтвердження{% endif %}
+                        </p>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <a href="{% url 'copy_history' s.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія подій</a>
+                            <a href="{% url 'message_thread' s.user_id %}" class="btn btn-sm btn-outline-secondary">Чат з позичальником</a>
+                            {% if s.return_pending %}
+                            <form method="post" action="{% url 'confirm_return_borrowed_shelf_book' s.id %}" class="d-inline m-0">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-success">Підтвердити повернення</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+{% else %}
+    <p class="text-muted">Ніхто не тримає ваші книги</p>
+{% endif %}
+
+{% endblock %}

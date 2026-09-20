@@ -146,6 +146,91 @@ class BookCopy(models.Model):
         return f"#{self.pk} {self.book.title} → {self.owner.username}"
 
 
+class CopyEvent(models.Model):
+    """Журнал подій одного фізичного примірника (BookCopy), не ISBN."""
+
+    class Code(models.TextChoices):
+        ADDED = "added", "Додано на полицю"
+        REMOVED = "removed", "Знято з полиці"
+        LOANED = "loaned", "Видано в позику"
+        RETURN_REQUESTED = "return_requested", "Ініційовано повернення"
+        RETURNED = "returned", "Повернено власнику"
+        EXCHANGED = "exchanged", "Обмін (передача власності)"
+
+    copy = models.ForeignKey(
+        BookCopy,
+        on_delete=models.CASCADE,
+        related_name="events",
+        verbose_name="Примірник",
+    )
+    code = models.CharField(max_length=32, choices=Code.choices, verbose_name="Подія")
+    actor = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copy_events_acted",
+        verbose_name="Ініціатор",
+    )
+    holder = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copy_events_holder",
+        verbose_name="На полиці",
+    )
+    legal_owner = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copy_events_owner",
+        verbose_name="Власник",
+    )
+    previous_holder = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copy_events_prev_holder",
+        verbose_name="Попередній тримач",
+    )
+    previous_owner = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copy_events_prev_owner",
+        verbose_name="Попередній власник",
+    )
+    counterparty = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copy_events_counterparty",
+        verbose_name="Інший учасник",
+    )
+    exchange_request = models.ForeignKey(
+        "BookExchangeRequest",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copy_events",
+        verbose_name="Запит обміну",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "подія примірника"
+        verbose_name_plural = "події примірників"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"copy#{self.copy_id} {self.code} @ {self.created_at}"
+
+
 class Shelf(models.Model):
     """
     Запис "цей примірник (BookCopy) зараз на полиці цього користувача (user)".

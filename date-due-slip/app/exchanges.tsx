@@ -13,6 +13,7 @@ import { ApiError, ExchangeApi, MsgApi } from "../src/api";
 import { useAuth } from "../src/auth";
 import { exchangeChatPartnerId } from "../src/chat";
 import { colors } from "../src/theme";
+import { UserNameLink } from "../src/UserNameLink";
 import type { Exchange, User } from "../src/types";
 
 function conditionText(e: Exchange, asOwner: boolean): string {
@@ -147,9 +148,11 @@ export default function Exchanges() {
           {e.kind === "borrow" ? "ПОЗИКА" : "ОБМІН"} · {e.status}
         </Text>
         <Text style={styles.title}>{e.target_shelf.book.title}</Text>
-        <Text style={styles.meta}>
-          {e.requester.username} → {e.shelf_owner.username}
-        </Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>
+          <UserNameLink user={e.requester} style={styles.meta} />
+          <Text style={styles.meta}> → </Text>
+          <UserNameLink user={e.shelf_owner} style={styles.meta} />
+        </View>
         <Text style={styles.cond}>{conditionText(e, asOwner)}</Text>
         <View style={styles.row}>
           <Pressable style={styles.btnGhost} onPress={() => openChat(e)}>
@@ -244,7 +247,7 @@ export default function Exchanges() {
             style={styles.card}
             onPress={() => router.push(`/chat/${p.id}`)}
           >
-            <Text style={styles.title}>{p.username}</Text>
+            <UserNameLink user={p} style={styles.title} />
             <Text style={styles.meta}>{p.biography || "відкрити переписку"}</Text>
           </Pressable>
         ))

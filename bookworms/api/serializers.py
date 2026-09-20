@@ -5,8 +5,10 @@ from rest_framework import serializers
 
 from mainApp.models import (
     Book,
+    BookCopy,
     BookExchangeRequest,
     Comment,
+    CopyEvent,
     Like,
     Post,
     PrivateMessage,
@@ -182,6 +184,41 @@ class ShelfSerializer(serializers.ModelSerializer):
         if getattr(obj, "pending_return_shelf_id", None) is not None:
             return obj.pending_return_shelf_id
         return None
+
+
+class CopyEventSerializer(serializers.ModelSerializer):
+    code_display = serializers.CharField(source="get_code_display", read_only=True)
+    actor = UserPublicSerializer(read_only=True)
+    holder = UserPublicSerializer(read_only=True)
+    legal_owner = UserPublicSerializer(read_only=True)
+    previous_holder = UserPublicSerializer(read_only=True)
+    previous_owner = UserPublicSerializer(read_only=True)
+    counterparty = UserPublicSerializer(read_only=True)
+
+    class Meta:
+        model = CopyEvent
+        fields = (
+            "id",
+            "code",
+            "code_display",
+            "actor",
+            "holder",
+            "legal_owner",
+            "previous_holder",
+            "previous_owner",
+            "counterparty",
+            "exchange_request_id",
+            "created_at",
+        )
+
+
+class BookCopySerializer(serializers.ModelSerializer):
+    book = BookSerializer(read_only=True)
+    owner = UserPublicSerializer(read_only=True)
+
+    class Meta:
+        model = BookCopy
+        fields = ("id", "book", "owner", "created_at")
 
 
 class AddIsbnSerializer(serializers.Serializer):

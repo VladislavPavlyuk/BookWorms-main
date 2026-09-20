@@ -6,7 +6,7 @@
 {% block content %}
 
 <form class="home-search mb-3" method="get" action="/" role="search">
-    <div class="home-search__bar input-group">
+    <div class="home-search__bar input-group d-none d-lg-flex">
         <input type="search"
                name="q"
                class="form-control form-control-lg"
@@ -25,7 +25,7 @@
         </button>
     </div>
 
-    <div class="collapse{% if advanced_open %} show{% endif %} mt-3" id="advancedSearch">
+    <div class="collapse{% if advanced_open %} show{% endif %} mt-3 mt-lg-3" id="advancedSearch">
         <div class="home-search__advanced p-3">
             <p class="small text-muted mb-3 mb-md-2">Фільтри по полях довідника книг (усі книги в базі).</p>
             <div class="row g-2">
@@ -83,6 +83,9 @@
                     <p class="card-text small text-muted mb-0">ISBN: {{ book.isbn }}</p>
                     {% if book.publisher %}<p class="card-text small text-muted mb-0">{{ book.publisher }}{% if book.publish_date %}, {{ book.publish_date }}{% endif %}</p>{% endif %}
                     <p class="card-text small text-muted mb-0">Вік: {{ book.reader_age_summary }}</p>
+                    <p class="mt-2 mb-0">
+                        <a href="{% url 'book_history' book.id %}" class="btn btn-sm btn-outline-secondary">Примірники / історія</a>
+                    </p>
                 </div>
             </div>
         </div>
@@ -107,8 +110,6 @@
 {% if user.is_authenticated %}
     <a href="{% url 'create_post' %}" class="btn btn-success mb-3">Створити пост</a>
 {% endif %}
-
-<h3>Пости</h3>
 
 <div class="mb-3">
     <a href="/" class="btn btn-secondary btn-sm">Все посты</a>

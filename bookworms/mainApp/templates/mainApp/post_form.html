@@ -4,16 +4,6 @@
 
 {% block content %}
 
-<h2 class="mb-3">
-    {% if post %}
-        Редагувати пост
-    {% elif book %}
-        Новий пост про прочитану книгу
-    {% else %}
-        Створити пост
-    {% endif %}
-</h2>
-
 {% if book %}
     {% include "mainApp/includes/post_book_card.html" with book=book %}
 {% elif post and post.book %}

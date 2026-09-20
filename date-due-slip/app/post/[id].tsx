@@ -12,6 +12,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { colors } from "../../src/theme";
+import { UserNameLink } from "../../src/UserNameLink";
 import type { Post } from "../../src/types";
 
 export default function PostDetail() {
@@ -89,9 +90,7 @@ export default function PostDetail() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ padding: 16 }}>
-      <Pressable onPress={() => router.push(`/user/${post.author.id}`)}>
-        <Text style={styles.meta}>{post.author.username}</Text>
-      </Pressable>
+      <UserNameLink user={post.author} style={styles.meta} />
       {post.book && (
         <Pressable onPress={() => router.push(`/book/${post.book!.id}`)}>
           <Text style={styles.book}>{post.book.title}</Text>
@@ -136,7 +135,7 @@ export default function PostDetail() {
       <Text style={styles.sec}>Коментарі</Text>
       {(post.comments || []).map((c) => (
         <View key={c.id} style={styles.comment}>
-          <Text style={styles.meta}>{c.author.username}</Text>
+          <UserNameLink user={c.author} style={styles.meta} />
           <Text style={styles.body}>{c.text}</Text>
         </View>
       ))}

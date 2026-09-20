@@ -19,6 +19,7 @@ from .views import (
     delete_post,
     edit_post,
     my_library,
+    due_slips,
     update_shelf_book_reader_age,
     unlock_shelf_reader_age_edit,
     remove_shelf_entry,
@@ -27,6 +28,7 @@ from .views import (
     browse_shelves,
     user_public_shelf,
     book_history,
+    copy_history,
     create_exchange,
     exchange_requests,
     exchange_accept,
@@ -41,6 +43,7 @@ urlpatterns = [
     path('', home, name='home'),
     # --- Бібліотека та обмін книгами ---
     path('library/', my_library, name='my_library'),
+    path('library/slips/', due_slips, name='due_slips'),
     path(
         'library/shelf/<int:shelf_id>/reader-age/',
         update_shelf_book_reader_age,
@@ -61,6 +64,7 @@ urlpatterns = [
     path('library/browse/', browse_shelves, name='browse_shelves'),
     path('library/user/<int:user_id>/', user_public_shelf, name='user_public_shelf'),
     path('library/book/<int:book_id>/history/', book_history, name='book_history'),
+    path('library/copy/<int:copy_id>/history/', copy_history, name='copy_history'),
     path('library/exchange/new/', create_exchange, name='create_exchange'),
     path('library/exchange/', exchange_requests, name='exchange_requests'),
     path('library/exchange/<int:request_id>/accept/', exchange_accept, name='exchange_accept'),

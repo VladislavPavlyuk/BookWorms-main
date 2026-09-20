@@ -14,7 +14,8 @@ from django.db.models import Exists, OuterRef, QuerySet
 from django.utils import timezone
 
 from . import message_service
-from .models import Book, BookCopy, BookExchangeRequest, CustomUser, Shelf
+from .copy_events import log_copy_event
+from .models import Book, BookCopy, BookExchangeRequest, CopyEvent, CustomUser, Shelf
 
 
 def _loan_due_date():
@@ -28,15 +29,30 @@ def add_owned_copy(user: CustomUser, book: Book) -> Shelf:
     Той самий ISBN можна додавати багато разів (окремі BookCopy).
     """
     copy = BookCopy.objects.create(book=book, owner=user)
-    return Shelf.objects.create(user=user, book=book, copy=copy)
+    shelf = Shelf.objects.create(user=user, book=book, copy=copy)
+    log_copy_event(
+        copy,
+        CopyEvent.Code.ADDED,
+        actor=user,
+        holder=user,
+        legal_owner=user,
+    )
+    return shelf
 
 
 def remove_owned_shelf(shelf: Shelf) -> None:
-    """Прибрати власний рядок; якщо примірник більше ніде не лежить — видалити BookCopy."""
+    """Прибрати власний рядок. BookCopy лишається — історія подій примірника."""
     copy = shelf.copy
+    user = shelf.user
+    log_copy_event(
+        copy,
+        CopyEvent.Code.REMOVED,
+        actor=user,
+        holder=user,
+        legal_owner=copy.owner if copy else user,
+        previous_holder=user,
+    )
     shelf.delete()
-    if copy is not None and not Shelf.objects.filter(copy_id=copy.pk).exists():
-        BookCopy.objects.filter(pk=copy.pk).delete()
 
 
 def ensure_shelf_copy(shelf: Shelf) -> Shelf:
@@ -293,6 +309,8 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
             .exists()
         ):
             return False, "У вас уже є запропонований до обміну примірник."
+        prev_target_owner = acting_user
+        prev_offer_owner = requester
         Shelf.objects.filter(pk=target.pk).update(
             user_id=requester.id,
             borrowed_from_id=None,
@@ -307,6 +325,28 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
         )
         BookCopy.objects.filter(pk=target.copy_id).update(owner_id=requester.id)
         BookCopy.objects.filter(pk=offer.copy_id).update(owner_id=acting_user.id)
+        log_copy_event(
+            target.copy_id,
+            CopyEvent.Code.EXCHANGED,
+            actor=acting_user,
+            holder=requester,
+            legal_owner=requester,
+            previous_holder=prev_target_owner,
+            previous_owner=prev_target_owner,
+            counterparty=requester,
+            exchange_request=req,
+        )
+        log_copy_event(
+            offer.copy_id,
+            CopyEvent.Code.EXCHANGED,
+            actor=acting_user,
+            holder=acting_user,
+            legal_owner=acting_user,
+            previous_holder=prev_offer_owner,
+            previous_owner=prev_offer_owner,
+            counterparty=acting_user,
+            exchange_request=req,
+        )
     else:
         Shelf.objects.create(
             user_id=requester.id,
@@ -315,6 +355,16 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
             borrowed_from_id=acting_user.id,
             due_date=_loan_due_date(),
             return_pending=False,
+        )
+        log_copy_event(
+            target.copy_id,
+            CopyEvent.Code.LOANED,
+            actor=acting_user,
+            holder=requester,
+            legal_owner=acting_user,
+            previous_holder=acting_user,
+            counterparty=requester,
+            exchange_request=req,
         )
 
     req.status = BookExchangeRequest.Status.ACCEPTED
@@ -369,7 +419,7 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
     Позичальник повідомляє, що повертає книгу. Рядок лишається на його полиці до підтвердження позикодавцем.
     """
     shelf = (
-        Shelf.objects.select_related("borrowed_from", "book")
+        Shelf.objects.select_related("borrowed_from", "book", "copy")
         .select_for_update(of=("self",))
         .filter(pk=shelf_id, user=borrower)
         .first()
@@ -383,6 +433,14 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
 
     Shelf.objects.filter(pk=shelf.pk).update(return_pending=True)
     shelf.return_pending = True
+    log_copy_event(
+        shelf.copy_id,
+        CopyEvent.Code.RETURN_REQUESTED,
+        actor=borrower,
+        holder=borrower,
+        legal_owner=shelf.borrowed_from,
+        counterparty=shelf.borrowed_from,
+    )
     message_service.notify_borrow_return_requested(shelf)
     return True, None
 
@@ -435,5 +493,14 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
     else:
         shelf.delete()
 
+    log_copy_event(
+        copy_id,
+        CopyEvent.Code.RETURNED,
+        actor=lender,
+        holder=lender,
+        legal_owner=lender,
+        previous_holder=borrower,
+        counterparty=borrower,
+    )
     message_service.notify_borrow_return_confirmed(lender, borrower, book_title)
     return True, None

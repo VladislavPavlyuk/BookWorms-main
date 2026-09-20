@@ -48,28 +48,32 @@ export default function Root() {
               <Stack.Screen name="(auth)" />
               <Stack.Screen
                 name="exchanges"
-                options={{ headerShown: true, title: "Запити на обмін", headerRight: () => <HeaderActions /> }}
+                options={{ headerShown: true, title: "", headerRight: () => <HeaderActions /> }}
               />
-              <Stack.Screen name="notifications" options={{ headerShown: true, title: "Сповіщення", headerRight: () => <HeaderActions /> }} />
+              <Stack.Screen name="notifications" options={{ headerShown: true, title: "", headerRight: () => <HeaderActions /> }} />
               <Stack.Screen
                 name="chat/[id]"
-                options={{ headerShown: true, title: "Чат", headerRight: () => <HeaderActions /> }}
+                options={{ headerShown: true, title: "", headerRight: () => <HeaderActions /> }}
               />
               <Stack.Screen
                 name="post/new"
-                options={{ headerShown: true, title: "Новий пост", headerRight: () => <HeaderActions /> }}
+                options={{ headerShown: true, title: "", headerRight: () => <HeaderActions /> }}
               />
               <Stack.Screen
                 name="post/[id]"
-                options={{ headerShown: true, title: "Пост", headerRight: () => <HeaderActions /> }}
+                options={{ headerShown: true, title: "", headerRight: () => <HeaderActions /> }}
               />
               <Stack.Screen
                 name="book/[id]"
-                options={{ headerShown: true, title: "Книга", headerRight: () => <HeaderActions /> }}
+                options={{ headerShown: true, title: "", headerRight: () => <HeaderActions /> }}
+              />
+              <Stack.Screen
+                name="copy/[id]"
+                options={{ headerShown: true, title: "", headerRight: () => <HeaderActions /> }}
               />
               <Stack.Screen
                 name="user/[id]"
-                options={{ headerShown: true, title: "Полиця", headerRight: () => <HeaderActions /> }}
+                options={{ headerShown: true, title: "", headerRight: () => <HeaderActions /> }}
               />
             </Stack>
           </Gate>

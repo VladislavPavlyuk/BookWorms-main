@@ -20,6 +20,9 @@
             {% if book.publisher %}
                 <p class="small text-muted mb-0">{{ book.publisher }}{% if book.publish_date %}, {{ book.publish_date }}{% endif %}</p>
             {% endif %}
+            <p class="mt-2 mb-0">
+                <a href="{{ book_history_url }}" class="btn btn-sm btn-outline-secondary">Примірники / історія</a>
+            </p>
         </div>
     </div>
 </div>

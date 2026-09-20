@@ -14,7 +14,9 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, ShelfApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
+import { HistoryLink } from "../../src/HistoryLink";
 import { colors } from "../../src/theme";
+import { UserNameLink } from "../../src/UserNameLink";
 import type { Shelf } from "../../src/types";
 
 export default function ShelfScreen() {
@@ -160,7 +162,10 @@ export default function ShelfScreen() {
                   <BookCover uri={s.book.cover_url} size="full" bleed={0} />
                   <View style={styles.cardBody}>
                     <Text style={styles.title}>{s.book.title}</Text>
-                    <Text style={styles.meta}>від {s.user.username}</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
+                      <Text style={styles.meta}>від </Text>
+                      <UserNameLink user={s.user} style={styles.meta} />
+                    </View>
                     <Pressable style={styles.confirmBtn} onPress={() => confirm(s)}>
                       <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
                     </Pressable>
@@ -180,18 +185,28 @@ export default function ShelfScreen() {
               <BookCover uri={item.book.cover_url} size="full" bleed={0} />
               <View style={styles.cardBody}>
                 <Text style={styles.title}>{item.book.title}</Text>
-                <Text style={styles.meta}>
-                  {item.copy_id ? `Примірник #${item.copy_id} · ` : ""}
-                  {item.book.authors}
-                  {item.borrowed_from ? ` · позичено у ${item.borrowed_from.username}` : ""}
-                  {item.is_lent_out && !item.borrowed_from ? " · зараз у позиці" : ""}
-                  {item.due_date ? ` · до ${item.due_date}` : ""}
-                  {item.return_pending ? " · очікує підтвердження" : ""}
-                  {` · ${item.book.reader_age_summary}`}
-                </Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
+                  <Text style={styles.meta}>
+                    {item.copy_id ? `Примірник #${item.copy_id} · ` : ""}
+                    {item.book.authors}
+                  </Text>
+                  {item.borrowed_from ? (
+                    <>
+                      <Text style={styles.meta}> · позичено у </Text>
+                      <UserNameLink user={item.borrowed_from} style={styles.meta} />
+                    </>
+                  ) : null}
+                  <Text style={styles.meta}>
+                    {item.is_lent_out && !item.borrowed_from ? " · зараз у позиці" : ""}
+                    {item.due_date ? ` · до ${item.due_date}` : ""}
+                    {item.return_pending ? " · очікує підтвердження" : ""}
+                    {` · ${item.book.reader_age_summary}`}
+                  </Text>
+                </View>
               </View>
             </Pressable>
             <View style={[styles.actions, styles.cardBody]}>
+              <HistoryLink copyId={item.copy_id} style={styles.link} />
               {item.borrowed_from && (
                 <Pressable onPress={() => router.push(`/chat/${item.borrowed_from!.id}`)}>
                   <Text style={styles.link}>Чат з власником</Text>

@@ -37,6 +37,27 @@ export type Shelf = {
   added_at: string;
 };
 
+export type BookCopyDetail = {
+  id: number;
+  book: Book;
+  owner: User;
+  created_at: string;
+};
+
+export type CopyEvent = {
+  id: number;
+  code: string;
+  code_display: string;
+  actor: User | null;
+  holder: User | null;
+  legal_owner: User | null;
+  previous_holder: User | null;
+  previous_owner: User | null;
+  counterparty: User | null;
+  exchange_request_id: number | null;
+  created_at: string;
+};
+
 /** Browse card: one cover per ISBN, owners listed inline. */
 export type BookBrowseGroup = {
   book: Book;

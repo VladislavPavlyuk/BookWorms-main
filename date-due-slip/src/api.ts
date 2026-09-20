@@ -1,9 +1,11 @@
 import * as SecureStore from "expo-secure-store";
 import { DEFAULT_API } from "./theme";
-import type {
+import {
+  BookCopyDetail,
   Book,
   BookBrowseGroup,
   Comment,
+  CopyEvent,
   Exchange,
   Message,
   Paginated,
@@ -234,6 +236,15 @@ export const BrowseApi = {
     api<{ book: Book; owners: User[]; holders: Shelf[]; posts: Post[] }>(
       `/api/books/${id}/`
     ),
+};
+
+export const CopyApi = {
+  history: (copyId: number) =>
+    api<{
+      copy: BookCopyDetail;
+      holders: Shelf[];
+      events: CopyEvent[];
+    }>(`/api/copies/${copyId}/history/`),
 };
 
 export const ExchangeApi = {

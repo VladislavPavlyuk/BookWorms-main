@@ -18,6 +18,7 @@ import { ApiError, BooksApi, FeedApi, type FeedSearch } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { HeaderActions } from "../../src/BurgerMenu";
 import { colors } from "../../src/theme";
+import { UserNameLink } from "../../src/UserNameLink";
 import type { Book, Post } from "../../src/types";
 
 const EMPTY_ADV: FeedSearch = {
@@ -85,7 +86,7 @@ export default function Feed() {
       } else {
         setBooks([]);
         loadPosts(1, filter).catch((e) =>
-          Alert.alert("Стрічка", e instanceof ApiError ? e.message : String(e))
+          Alert.alert("Головна", e instanceof ApiError ? e.message : String(e))
         );
       }
     }, [filter, search, searching])
@@ -125,7 +126,6 @@ export default function Feed() {
     <View style={{ flex: 1, backgroundColor: colors.screen }}>
       <View style={[styles.stickyChrome, { paddingTop: insets.top }]}>
         <View style={styles.topBar}>
-          <Text style={styles.topTitle}>Стрічка</Text>
           <HeaderActions />
         </View>
         <View style={styles.searchRow}>
@@ -214,25 +214,24 @@ export default function Feed() {
           }
           ListEmptyComponent={<Text style={styles.empty}>Книг не знайдено.</Text>}
           renderItem={({ item }) => (
-            <Pressable
-              style={[styles.card, landscape && { width: winW, height: pageH }]}
-              onPress={() => router.push(`/book/${item.id}`)}
-            >
-              <BookCover uri={item.cover_url} size="full" bleed={0} />
-              <View style={styles.cardPad}>
-                <Text style={styles.title} numberOfLines={landscape ? 2 : undefined}>
-                  {item.title}
-                </Text>
-                {!!item.authors && <Text style={styles.meta}>{item.authors}</Text>}
-                <Text style={styles.meta}>ISBN {item.isbn}</Text>
-                {(item.publisher || item.publish_date) && (
-                  <Text style={styles.meta}>
-                    {[item.publisher, item.publish_date].filter(Boolean).join(", ")}
+            <View style={[styles.card, landscape && { width: winW, height: pageH }]}>
+              <Pressable onPress={() => router.push(`/book/${item.id}`)}>
+                <BookCover uri={item.cover_url} size="full" bleed={0} />
+                <View style={styles.cardPad}>
+                  <Text style={styles.title} numberOfLines={landscape ? 2 : undefined}>
+                    {item.title}
                   </Text>
-                )}
-                <Text style={styles.meta}>Вік: {item.reader_age_summary}</Text>
-              </View>
-            </Pressable>
+                  {!!item.authors && <Text style={styles.meta}>{item.authors}</Text>}
+                  <Text style={styles.meta}>ISBN {item.isbn}</Text>
+                  {(item.publisher || item.publish_date) && (
+                    <Text style={styles.meta}>
+                      {[item.publisher, item.publish_date].filter(Boolean).join(", ")}
+                    </Text>
+                  )}
+                  <Text style={styles.meta}>Вік: {item.reader_age_summary}</Text>
+                </View>
+              </Pressable>
+            </View>
           )}
         />
       ) : (
@@ -278,9 +277,7 @@ export default function Feed() {
                 nestedScrollEnabled
               >
                 <View style={styles.cardPad}>
-                  <Pressable onPress={() => router.push(`/user/${item.author.id}`)}>
-                    <Text style={styles.meta}>{item.author.username}</Text>
-                  </Pressable>
+                  <UserNameLink user={item.author} style={styles.meta} />
                 </View>
                 {item.book ? (
                   <Pressable onPress={() => router.push(`/book/${item.book!.id}`)}>
@@ -367,16 +364,10 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     paddingHorizontal: 12,
     paddingTop: 4,
     minHeight: 40,
-  },
-  topTitle: {
-    color: colors.ink,
-    fontWeight: "800",
-    fontSize: 17,
-    letterSpacing: 0.5,
   },
   searchRow: {
     flexDirection: "row",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -20,26 +20,46 @@ type Link = {
 };
 
 const LINKS: Link[] = [
-  { label: "Стрічка", href: "/(tabs)" },
+  { label: "Профіль", href: "/(tabs)/more" },
   { label: "Моя полиця", href: "/(tabs)/shelf" },
   { label: "Реченець", href: "/(tabs)/slips" },
   { label: "Чужі полиці", href: "/(tabs)/browse" },
-  { label: "Ще", href: "/(tabs)/more", badge: true },
+  { label: "Обміни", href: "/exchanges" },
   { label: "Сповіщення", href: "/notifications", badge: true },
-  { label: "Обміни / чати", href: "/exchanges" },
 ];
 
 function pathMatch(pathname: string, href: string) {
-  if (href === "/(tabs)" || href === "/(tabs)/") {
-    return (
-      pathname === "/" ||
-      pathname.endsWith("/(tabs)") ||
-      pathname.endsWith("/(tabs)/") ||
-      pathname === "/index"
-    );
+  if (href.includes("/more")) {
+    return pathname.includes("/more");
   }
   const key = href.replace("/(tabs)/", "/").replace("/(tabs)", "");
   return pathname.includes(key) || pathname.includes(href);
+}
+
+/** Shared header control chrome — matches Search / + Пост (ink fill). */
+export function HeaderIconButton({
+  onPress,
+  accessibilityLabel,
+  children,
+  badge,
+}: {
+  onPress: () => void;
+  accessibilityLabel: string;
+  children: ReactNode;
+  badge?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={4}
+      style={({ pressed }) => [styles.hit, pressed && styles.hitPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
+      {children}
+      {badge ? <View style={styles.dot} /> : null}
+    </Pressable>
+  );
 }
 
 /** Hamburger → slide-over with former tab links. */
@@ -57,16 +77,13 @@ export function BurgerMenu() {
 
   return (
     <>
-      <Pressable
+      <HeaderIconButton
         onPress={() => setOpen(true)}
-        hitSlop={8}
-        style={styles.hit}
-        accessibilityRole="button"
         accessibilityLabel="Меню"
+        badge={unread > 0}
       >
-        <Ionicons name="menu" size={26} color={colors.ink} />
-        {unread > 0 ? <View style={styles.dot} /> : null}
-      </Pressable>
+        <Ionicons name="menu" size={24} color={colors.white} />
+      </HeaderIconButton>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <View style={styles.backdrop}>
@@ -79,8 +96,8 @@ export function BurgerMenu() {
           >
             <View style={styles.panelHead}>
               <Text style={styles.panelTitle}>Меню</Text>
-              <Pressable onPress={() => setOpen(false)} hitSlop={8}>
-                <Ionicons name="close" size={24} color={colors.ink} />
+              <Pressable onPress={() => setOpen(false)} hitSlop={8} style={styles.closeHit}>
+                <Ionicons name="close" size={22} color={colors.white} />
               </Pressable>
             </View>
             {LINKS.map((link) => {
@@ -108,11 +125,11 @@ export function BurgerMenu() {
   );
 }
 
-/** Bell + burger for stack/tab headers. */
+/** Bell + burger for stack/tab headers — same ink chip style app-wide. */
 export function HeaderActions() {
   return (
     <View style={styles.actions}>
-      <NotifBell />
+      <NotifBell variant="ink" />
       <BurgerMenu />
     </View>
   );
@@ -120,22 +137,37 @@ export function HeaderActions() {
 
 const styles = StyleSheet.create({
   hit: {
-    minWidth: 40,
+    width: 40,
     height: 40,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 4,
+    backgroundColor: colors.ink,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    marginLeft: 6,
+  },
+  hitPressed: {
+    backgroundColor: "#1a140e",
+  },
+  closeHit: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.ink,
   },
   dot: {
     position: "absolute",
-    top: 8,
-    right: 6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 4,
+    right: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
     backgroundColor: "#E53935",
+    borderWidth: 1.5,
+    borderColor: colors.ink,
   },
-  actions: { flexDirection: "row", alignItems: "center", gap: 2 },
+  actions: { flexDirection: "row", alignItems: "center" },
   backdrop: { flex: 1, flexDirection: "row", justifyContent: "flex-end" },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.35)" },
   panel: {
@@ -162,9 +194,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   },
-  itemOn: { backgroundColor: colors.white, marginHorizontal: -8, paddingHorizontal: 8 },
+  itemOn: {
+    backgroundColor: colors.ink,
+    marginHorizontal: -8,
+    paddingHorizontal: 16,
+    borderBottomColor: colors.ink,
+  },
   itemText: { color: colors.ink, fontSize: 16, fontWeight: "600" },
-  itemTextOn: { color: colors.stamp, fontWeight: "800" },
+  itemTextOn: { color: colors.white, fontWeight: "800" },
   badge: {
     minWidth: 22,
     height: 22,

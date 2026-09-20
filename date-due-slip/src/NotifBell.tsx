@@ -4,29 +4,37 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "./theme";
 import { useUnread } from "./unread";
 
+type Props = {
+  /** ink = solid header chip (matches Search / burger); plain = icon only */
+  variant?: "ink" | "plain";
+};
+
 /**
  * Дзвіночок у headerRight.
- * Бейдж лише всередині hitbox — на Pixel/Android header кліпає overflow,
- * тому absolute з top/right < 0 робить кружок невидимим (на емуляторі інколи «проскакує»).
+ * Бейдж лише всередині hitbox — на Pixel/Android header кліпає overflow.
  */
-export function NotifBell() {
+export function NotifBell({ variant = "ink" }: Props) {
   const router = useRouter();
   const { unread } = useUnread();
   const label = unread > 99 ? "99+" : String(unread);
+  const ink = variant === "ink";
 
   return (
     <Pressable
       onPress={() => router.push("/notifications")}
-      hitSlop={8}
-      style={styles.wrap}
+      hitSlop={4}
+      style={({ pressed }) => [
+        ink ? styles.ink : styles.plain,
+        ink && pressed && styles.inkPressed,
+      ]}
       accessibilityRole="button"
       accessibilityLabel={
         unread > 0 ? `Сповіщення, непрочитаних ${unread}` : "Сповіщення"
       }
     >
-      <Ionicons name="notifications" size={22} color={colors.ink} />
+      <Ionicons name="notifications" size={22} color={ink ? colors.white : colors.ink} />
       {unread > 0 ? (
-        <View style={styles.badge} pointerEvents="none">
+        <View style={[styles.badge, ink && styles.badgeOnInk]} pointerEvents="none">
           <Text style={styles.badgeText}>{label}</Text>
         </View>
       ) : null}
@@ -35,7 +43,20 @@ export function NotifBell() {
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  ink: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.ink,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    marginLeft: 6,
+  },
+  inkPressed: {
+    backgroundColor: "#1a140e",
+  },
+  plain: {
     marginRight: 8,
     minWidth: 44,
     height: 40,
@@ -59,6 +80,9 @@ const styles = StyleSheet.create({
     borderColor: colors.paperDark,
     zIndex: 2,
     elevation: 3,
+  },
+  badgeOnInk: {
+    borderColor: colors.ink,
   },
   badgeText: {
     color: "#fff",
