@@ -1,13 +1,12 @@
 import { Tabs, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
 import { Platform } from "react-native";
-import { NotifBell } from "../../src/NotifBell";
+import { HeaderActions } from "../../src/BurgerMenu";
 import { colors } from "../../src/theme";
 import { useUnread } from "../../src/unread";
 
 export default function TabsLayout() {
-  const { unread, refresh } = useUnread();
-  const badge = unread > 0 ? (unread > 99 ? "99+" : unread) : undefined;
+  const { refresh } = useUnread();
 
   useFocusEffect(
     useCallback(() => {
@@ -21,39 +20,22 @@ export default function TabsLayout() {
         headerStyle: { backgroundColor: colors.paperDark },
         headerTintColor: colors.ink,
         headerTitleStyle: { fontWeight: "700", letterSpacing: 1 },
-        // Pixel/Android кліпає badge, якщо вилазить за межі контейнера
         headerRightContainerStyle: {
-          paddingRight: Platform.OS === "android" ? 12 : 8,
+          paddingRight: Platform.OS === "android" ? 8 : 4,
           overflow: "visible",
         },
-        headerRight: () => <NotifBell />,
+        headerRight: () => <HeaderActions />,
         sceneContainerStyle: { backgroundColor: "transparent" },
-        tabBarStyle: { backgroundColor: colors.paperDark, borderTopColor: colors.line },
-        tabBarActiveTintColor: colors.stamp,
-        tabBarInactiveTintColor: colors.muted,
+        // Nav moved to burger menu (top-right)
+        tabBarStyle: { display: "none", height: 0 },
+        tabBarShowLabel: false,
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{ title: "Стрічка", tabBarLabel: "Стрічка", headerShown: false }}
-      />
-      <Tabs.Screen name="shelf" options={{ title: "Полиця", tabBarLabel: "Полиця" }} />
-      <Tabs.Screen name="slips" options={{ title: "Date Due Slip", tabBarLabel: "Терміни" }} />
-      <Tabs.Screen name="browse" options={{ title: "Чужі полиці", tabBarLabel: "Каталог" }} />
-      <Tabs.Screen
-        name="more"
-        options={{
-          title: "Ще",
-          tabBarLabel: "Ще",
-          tabBarBadge: badge,
-          tabBarBadgeStyle: {
-            backgroundColor: "#E53935",
-            color: "#fff",
-            fontSize: 11,
-            fontWeight: "800",
-          },
-        }}
-      />
+      <Tabs.Screen name="index" options={{ title: "Стрічка", headerShown: false }} />
+      <Tabs.Screen name="shelf" options={{ title: "Моя полиця" }} />
+      <Tabs.Screen name="slips" options={{ title: "Реченець" }} />
+      <Tabs.Screen name="browse" options={{ title: "Чужі полиці" }} />
+      <Tabs.Screen name="more" options={{ title: "Ще" }} />
     </Tabs>
   );
 }

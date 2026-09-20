@@ -36,8 +36,8 @@ export default function Login() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.wrap}
     >
-      <Text style={styles.stamp}>DATE DUE SLIP</Text>
-      <Text style={styles.sub}>BookWorms · локальна мережа</Text>
+      <Text style={styles.stamp}>РЕЧЕНЕЦЬ</Text>
+      <Text style={styles.sub}>локальна мережа</Text>
       <TextInput
         placeholder="Логін"
         placeholderTextColor={colors.muted}

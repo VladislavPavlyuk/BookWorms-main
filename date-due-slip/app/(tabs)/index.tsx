@@ -16,7 +16,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError, BooksApi, FeedApi, type FeedSearch } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
-import { NotifBell } from "../../src/NotifBell";
+import { HeaderActions } from "../../src/BurgerMenu";
 import { colors } from "../../src/theme";
 import type { Book, Post } from "../../src/types";
 
@@ -38,8 +38,8 @@ export default function Feed() {
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
   const landscape = winW > winH;
-  // chrome ≈ safe top + search + buttons row
-  const chromeH = insets.top + (landscape ? 96 : 108);
+  // chrome ≈ safe top + top bar + search row + filters
+  const chromeH = insets.top + (landscape ? 108 : 120);
   const pageH = Math.max(200, winH - chromeH);
   const [posts, setPosts] = useState<Post[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
@@ -124,10 +124,14 @@ export default function Feed() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.screen }}>
       <View style={[styles.stickyChrome, { paddingTop: insets.top }]}>
+        <View style={styles.topBar}>
+          <Text style={styles.topTitle}>Стрічка</Text>
+          <HeaderActions />
+        </View>
         <View style={styles.searchRow}>
           <TextInput
             style={styles.searchInput}
-            placeholder="Пошук книги за назвою…"
+            placeholder="Назва…"
             placeholderTextColor={colors.muted}
             value={q}
             onChangeText={setQ}
@@ -135,14 +139,15 @@ export default function Feed() {
             returnKeyType="search"
           />
           <Pressable style={styles.searchBtn} onPress={runSearch}>
-            <Text style={styles.searchBtnText}>Знайти</Text>
+            <Text style={styles.searchBtnText}>Search</Text>
           </Pressable>
-          <NotifBell />
+          <Pressable style={styles.advBtn} onPress={() => setAdvOpen(true)}>
+            <Text style={styles.advBtnText} numberOfLines={1}>
+              Advanced Search
+            </Text>
+          </Pressable>
         </View>
         <View style={styles.advRow}>
-          <Pressable style={styles.advBtn} onPress={() => setAdvOpen(true)}>
-            <Text style={styles.advBtnText}>Advanced search</Text>
-          </Pressable>
           {searching && (
             <Pressable onPress={clearSearch}>
               <Text style={styles.clear}>Скинути</Text>
@@ -359,25 +364,41 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
   },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    minHeight: 40,
+  },
+  topTitle: {
+    color: colors.ink,
+    fontWeight: "800",
+    fontSize: 17,
+    letterSpacing: 0.5,
+  },
   searchRow: {
     flexDirection: "row",
-    gap: 8,
+    flexWrap: "nowrap",
+    gap: 6,
     paddingHorizontal: 12,
     paddingTop: 8,
     alignItems: "center",
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
     color: colors.ink,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 15,
   },
-  searchBtn: { backgroundColor: colors.ink, paddingHorizontal: 14, paddingVertical: 11 },
-  searchBtnText: { color: colors.white, fontWeight: "700" },
+  searchBtn: { backgroundColor: colors.ink, paddingHorizontal: 8, paddingVertical: 9 },
+  searchBtnText: { color: colors.white, fontWeight: "700", fontSize: 12 },
   advRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -390,10 +411,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 9,
+    flexShrink: 1,
+    maxWidth: 118,
   },
-  advBtnText: { color: colors.ink, fontWeight: "700", fontSize: 13 },
+  advBtnText: { color: colors.ink, fontWeight: "700", fontSize: 11 },
   clear: { color: colors.stamp, fontWeight: "700" },
   filters: { flexDirection: "row", gap: 6, marginLeft: "auto" },
   chip: { color: colors.muted, fontWeight: "700", paddingHorizontal: 10, paddingVertical: 6 },

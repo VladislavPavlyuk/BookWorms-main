@@ -11,6 +11,10 @@ from .models import (
     Shelf,
 )
 
+admin.site.site_header = "Реченець"
+admin.site.site_title = "Реченець"
+admin.site.index_title = "Адміністрування"
+
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
     list_display = (

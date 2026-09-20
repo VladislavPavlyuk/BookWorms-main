@@ -29,7 +29,7 @@ function Slip({
   const overdue = s.is_overdue;
   return (
     <View style={[styles.slip, overdue && styles.overdue, s.return_pending && role === "lent" && styles.pending]}>
-      <Text style={styles.library}>DATE DUE SLIP</Text>
+      <Text style={styles.library}>РЕЧЕНЕЦЬ</Text>
       <BookCover uri={s.book.cover_url} size="full" bleed={0} />
       <Text style={styles.title}>{s.book.title}</Text>
       <Text style={styles.meta}>{s.book.authors || "—"}</Text>

@@ -136,8 +136,8 @@ def health(request):
 
     payload = {
         "status": "ok",
-        "app": "date-due-slip",
-        "code_rev": "2026-09-20-bookcopy-shelf",
+        "app": "rechenets",
+        "code_rev": "2026-09-20-rechenets",
     }
     try:
         connection.ensure_connection()
@@ -165,8 +165,8 @@ def health(request):
             send_web3forms(
                 {
                     "access_key": settings.WEB3FORMS_ACCESS_KEY,
-                    "subject": "Date Due Slip — health test",
-                    "from_name": "Date Due Slip",
+                    "subject": "Реченець — health test",
+                    "from_name": "Реченець",
                     "name": "health-check",
                     "email": "health@localhost",
                     "message": "Тестовий ping з /api/health/?test_mail=1 — якщо бачиш цей лист, Web3Forms працює.",

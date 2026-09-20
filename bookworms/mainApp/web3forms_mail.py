@@ -48,7 +48,7 @@ def activation_url_for(user, request=None) -> str:
 def activation_message(user, activation_url: str) -> str:
     minutes = int(getattr(settings, "ACTIVATION_TIMEOUT_MINUTES", 5))
     return (
-        f"Нова реєстрація Date Due Slip / BookWorms\n\n"
+        f"Нова реєстрація Реченець\n\n"
         f"Логін: {user.username}\n"
         f"Email (reply): {user.email}\n\n"
         f"Активація (дійсна {minutes} хв):\n{activation_url}\n\n"
@@ -63,8 +63,8 @@ def activation_payload(user, activation_url: str) -> dict[str, Any]:
     """
     return {
         "access_key": (settings.WEB3FORMS_ACCESS_KEY or "").strip(),
-        "subject": "Date Due Slip — підтвердження реєстрації",
-        "from_name": "Date Due Slip",
+        "subject": "Реченець — підтвердження реєстрації",
+        "from_name": "Реченець",
         "name": user.username,
         "email": user.email,
         "message": activation_message(user, activation_url),
@@ -78,7 +78,7 @@ def _post(body: bytes, content_type: str) -> dict[str, Any]:
         headers={
             "Content-Type": content_type,
             "Accept": "application/json",
-            "User-Agent": "BookWorms/DateDueSlip",
+            "User-Agent": "Rechenets/1.0",
         },
         method="POST",
     )

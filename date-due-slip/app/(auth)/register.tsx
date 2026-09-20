@@ -102,7 +102,7 @@ export default function Register() {
       style={{ flex: 1, backgroundColor: colors.screen }}
     >
       <ScrollView contentContainerStyle={styles.wrap}>
-        <Text style={styles.title}>Новий квиток</Text>
+        <Text style={styles.title}>Реченець</Text>
         <Text style={styles.warn}>
           Підтвердіть email протягом 5 хвилин після реєстрації. Інакше акаунт буде
           автоматично видалено з бази — доведеться реєструватися знову.
