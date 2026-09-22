@@ -29,7 +29,7 @@ class CustomUserAdmin(UserAdmin):
     list_filter = ("is_active", "email_confirmed", "is_staff", "date_joined")
     actions = ("purge_expired_unconfirmed",)
     fieldsets = UserAdmin.fieldsets + (
-        (None, {"fields": ("biography", "avatar", "email_confirmed")}),
+        (None, {"fields": ("biography", "avatar", "email_confirmed", "last_watched_post")}),
     )
 
     @admin.action(description="Видалити прострочених непідтверджених (email_confirmed=False)")

@@ -7,8 +7,8 @@ import {
   View,
 } from "react-native";
 import { usePathname, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BurgerGlyph, CloseGlyph } from "./HeaderGlyphs";
 import { NotifBell } from "./NotifBell";
 import { colors } from "./theme";
 import { useUnread } from "./unread";
@@ -36,7 +36,7 @@ function pathMatch(pathname: string, href: string) {
   return pathname.includes(key) || pathname.includes(href);
 }
 
-/** Shared header control chrome — matches Search / + Пост (ink fill). */
+/** Shared header control — paper/line/ink (same as «Рітельніше»). */
 export function HeaderIconButton({
   onPress,
   accessibilityLabel,
@@ -82,7 +82,7 @@ export function BurgerMenu() {
         accessibilityLabel="Меню"
         badge={unread > 0}
       >
-        <Ionicons name="menu" size={24} color={colors.white} />
+        <BurgerGlyph color={colors.ink} size={20} />
       </HeaderIconButton>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -97,7 +97,7 @@ export function BurgerMenu() {
             <View style={styles.panelHead}>
               <Text style={styles.panelTitle}>Меню</Text>
               <Pressable onPress={() => setOpen(false)} hitSlop={8} style={styles.closeHit}>
-                <Ionicons name="close" size={22} color={colors.white} />
+                <CloseGlyph color={colors.ink} size={18} />
               </Pressable>
             </View>
             {LINKS.map((link) => {
@@ -125,11 +125,11 @@ export function BurgerMenu() {
   );
 }
 
-/** Bell + burger for stack/tab headers — same ink chip style app-wide. */
+/** Bell + burger for stack/tab headers — theme paper chrome app-wide. */
 export function HeaderActions() {
   return (
     <View style={styles.actions}>
-      <NotifBell variant="ink" />
+      <NotifBell variant="paper" />
       <BurgerMenu />
     </View>
   );
@@ -137,39 +137,41 @@ export function HeaderActions() {
 
 const styles = StyleSheet.create({
   hit: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: colors.ink,
-    marginLeft: 6,
+    borderColor: colors.line,
+    marginLeft: 4,
   },
   hitPressed: {
-    backgroundColor: "#1a140e",
+    backgroundColor: colors.paperDark,
   },
   closeHit: {
     width: 36,
     height: 36,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   dot: {
     position: "absolute",
-    top: 4,
-    right: 4,
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: "#E53935",
+    top: 3,
+    right: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.stamp,
     borderWidth: 1.5,
-    borderColor: colors.ink,
+    borderColor: colors.white,
   },
-  actions: { flexDirection: "row", alignItems: "center" },
+  actions: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
   backdrop: { flex: 1, flexDirection: "row", justifyContent: "flex-end" },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.35)" },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(42, 31, 20, 0.35)" },
   panel: {
     width: "78%",
     maxWidth: 320,
@@ -184,6 +186,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
   },
   panelTitle: { fontSize: 18, fontWeight: "800", color: colors.ink },
   item: {
@@ -195,21 +200,21 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
   },
   itemOn: {
-    backgroundColor: colors.ink,
+    backgroundColor: colors.paperDark,
     marginHorizontal: -8,
     paddingHorizontal: 16,
-    borderBottomColor: colors.ink,
+    borderBottomColor: colors.line,
   },
   itemText: { color: colors.ink, fontSize: 16, fontWeight: "600" },
-  itemTextOn: { color: colors.white, fontWeight: "800" },
+  itemTextOn: { color: colors.ink, fontWeight: "800" },
   badge: {
     minWidth: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "#E53935",
+    backgroundColor: colors.stamp,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 6,
   },
-  badgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  badgeText: { color: colors.white, fontSize: 11, fontWeight: "800" },
 });

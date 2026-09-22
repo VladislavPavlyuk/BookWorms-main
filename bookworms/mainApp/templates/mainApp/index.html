@@ -14,14 +14,14 @@
                value="{{ q }}"
                autocomplete="off"
                aria-label="Пошук книги за назвою">
-        <button type="submit" class="btn btn-dark">Знайти</button>
+        <button type="submit" class="btn btn-dark">Шукати</button>
         <button type="button"
                 class="btn btn-outline-secondary"
                 data-bs-toggle="collapse"
                 data-bs-target="#advancedSearch"
                 aria-expanded="{% if advanced_open %}true{% else %}false{% endif %}"
                 aria-controls="advancedSearch">
-            Advanced search
+            Рітельніше
         </button>
     </div>
 
@@ -208,6 +208,67 @@
         <a href="?{% if filter_type %}filter={{ filter_type }}&{% endif %}page={{ posts.next_page_number }}">Вперед</a>
     {% endif %}
 </div>
+{% endif %}
+
+{% if user.is_authenticated %}
+    {% csrf_token %}
+{% endif %}
+{% if scroll_post_id or track_watched %}
+<script>
+(function () {
+  var scrollId = {{ scroll_post_id|default:"null" }};
+  var track = {{ track_watched|yesno:"true,false" }};
+  var watchedUrlTpl = "{% url 'mark_post_watched' 999999001 %}".replace("999999001", "__ID__");
+  function csrfToken() {
+    var inp = document.querySelector("[name=csrfmiddlewaretoken]");
+    if (inp && inp.value) return inp.value;
+    var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+
+  function markWatched(id) {
+    if (!track || !id) return;
+    var url = watchedUrlTpl.replace("__ID__", String(id));
+    var token = csrfToken();
+    var fd = new FormData();
+    if (token) fd.append("csrfmiddlewaretoken", token);
+    try {
+      if (navigator.sendBeacon && navigator.sendBeacon(url, fd)) return;
+    } catch (e) {}
+    fetch(url, {
+      method: "POST",
+      headers: token ? { "X-CSRFToken": token } : {},
+      credentials: "same-origin",
+      body: fd,
+    }).catch(function () {});
+  }
+
+  if (scrollId) {
+    var el = document.getElementById("post-" + scrollId);
+    if (el) {
+      requestAnimationFrame(function () {
+        el.scrollIntoView({ block: "start", behavior: "auto" });
+      });
+    }
+  }
+
+  if (track && "IntersectionObserver" in window) {
+    var last = 0;
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.55) return;
+        var id = parseInt(entry.target.id.replace("post-", ""), 10);
+        if (!id || id === last) return;
+        last = id;
+        markWatched(id);
+      });
+    }, { threshold: [0.55] });
+    document.querySelectorAll("[id^=post-]").forEach(function (node) {
+      obs.observe(node);
+    });
+  }
+})();
+</script>
 {% endif %}
 
 {% endblock %}

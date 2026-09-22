@@ -59,7 +59,7 @@
                    value="{{ request.GET.q|default:'' }}"
                    autocomplete="off"
                    aria-label="Пошук книги за назвою">
-            <button type="submit" class="btn btn-sm btn-light site-navbar-search__btn">Знайти</button>
+            <button type="submit" class="btn btn-sm btn-light site-navbar-search__btn">Шукати</button>
             {% if un == 'home' %}
             <button type="button"
                     class="btn btn-sm btn-outline-light site-navbar-search__btn"
@@ -67,11 +67,11 @@
                     data-bs-target="#advancedSearch"
                     aria-expanded="{% if advanced_open %}true{% else %}false{% endif %}"
                     aria-controls="advancedSearch">
-                Adv
+                Рітельніше
             </button>
             {% else %}
             <a class="btn btn-sm btn-outline-light site-navbar-search__btn"
-               href="{% url 'home' %}?adv=1">Adv</a>
+               href="{% url 'home' %}?adv=1">Рітельніше</a>
             {% endif %}
         </form>
 

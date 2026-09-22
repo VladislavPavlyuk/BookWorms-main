@@ -177,6 +177,7 @@ def _from_edition(edition: dict[str, Any], isbn: str) -> dict[str, Any] | None:
         "cover_url": _cover_url_from_edition(edition, isbn),
         "info_url": info_url,
         "isbn": isbn,
+        "source": "openlibrary",
     }
 
 
@@ -207,6 +208,7 @@ def _from_search_doc(doc: dict[str, Any], isbn: str) -> dict[str, Any] | None:
         "cover_url": cover_url,
         "info_url": info_url,
         "isbn": isbn,
+        "source": "openlibrary",
     }
 
 

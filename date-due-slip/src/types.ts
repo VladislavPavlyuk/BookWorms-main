@@ -4,6 +4,7 @@ export type User = {
   email?: string;
   biography: string;
   avatar_url: string | null;
+  last_watched_post_id?: number | null;
 };
 
 export type Book = {

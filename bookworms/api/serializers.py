@@ -37,7 +37,15 @@ class UserPublicSerializer(serializers.ModelSerializer):
 
 class MeSerializer(UserPublicSerializer):
     class Meta(UserPublicSerializer.Meta):
-        fields = ("id", "username", "email", "biography", "avatar_url", "date_joined")
+        fields = (
+            "id",
+            "username",
+            "email",
+            "biography",
+            "avatar_url",
+            "date_joined",
+            "last_watched_post_id",
+        )
 
 
 class RegisterSerializer(serializers.Serializer):

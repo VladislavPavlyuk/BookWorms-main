@@ -28,6 +28,15 @@ class CustomUser(AbstractUser):
         verbose_name="Email підтверджено",
         help_text="False після реєстрації до активації; True для суперюзерів і після confirm.",
     )
+    last_watched_post = models.ForeignKey(
+        "Post",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="Останній переглянутий пост",
+        help_text="Головна відкривається на цьому пості для залогіненого користувача.",
+    )
 
     def __str__(self):
         return self.username

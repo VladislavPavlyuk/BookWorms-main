@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -9,12 +9,13 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  ViewToken,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ApiError, BooksApi, FeedApi, type FeedSearch } from "../../src/api";
+import { ApiError, AuthApi, BooksApi, FeedApi, type FeedSearch } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { HeaderActions } from "../../src/BurgerMenu";
 import { colors } from "../../src/theme";
@@ -40,8 +41,11 @@ export default function Feed() {
   const { width: winW, height: winH } = useWindowDimensions();
   const landscape = winW > winH;
   // chrome ≈ safe top + top bar + search row + filters
-  const chromeH = insets.top + (landscape ? 108 : 120);
+  const chromeH = insets.top + (landscape ? 88 : 96);
   const pageH = Math.max(200, winH - chromeH);
+  const lastMarked = useRef<number | null>(null);
+  const skipResumeRef = useRef(false);
+  const resumeFromId = useRef<number | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [page, setPage] = useState(1);
@@ -63,8 +67,13 @@ export default function Feed() {
   );
   const searching = hasSearch(search);
 
-  const loadPosts = async (p = 1, mode: "all" | "my" = filter, append = false) => {
-    const data = await FeedApi.list(p, mode === "my" ? "my" : undefined);
+  const loadPosts = async (
+    p = 1,
+    mode: "all" | "my" = filter,
+    append = false,
+    fromId: number | null = resumeFromId.current
+  ) => {
+    const data = await FeedApi.list(p, mode === "my" ? "my" : undefined, fromId);
     setPosts((prev) => (append ? [...prev, ...data.results] : data.results));
     setPage(p);
     setHasMore(Boolean(data.next));
@@ -79,18 +88,55 @@ export default function Feed() {
 
   useFocusEffect(
     useCallback(() => {
-      if (searching) {
-        loadBooks(1, search).catch((e) =>
-          Alert.alert("Пошук книг", e instanceof ApiError ? e.message : String(e))
-        );
-      } else {
+      let cancelled = false;
+      (async () => {
+        if (searching) {
+          try {
+            await loadBooks(1, search);
+          } catch (e) {
+            Alert.alert("Пошук книг", e instanceof ApiError ? e.message : String(e));
+          }
+          return;
+        }
         setBooks([]);
-        loadPosts(1, filter).catch((e) =>
-          Alert.alert("Головна", e instanceof ApiError ? e.message : String(e))
-        );
-      }
+        let watched: number | null = null;
+        try {
+          const me = await AuthApi.me();
+          watched = me.last_watched_post_id ?? null;
+        } catch {
+          watched = null;
+        }
+        if (cancelled) return;
+        const fromId = skipResumeRef.current ? null : watched;
+        skipResumeRef.current = false;
+        resumeFromId.current = fromId;
+        try {
+          await loadPosts(1, filter, false, fromId);
+        } catch (e) {
+          Alert.alert("Головна", e instanceof ApiError ? e.message : String(e));
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
     }, [filter, search, searching])
   );
+
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const top = viewableItems.find((v) => v.isViewable && v.item);
+      if (!top?.item) return;
+      const id = (top.item as Post).id;
+      if (lastMarked.current === id) return;
+      lastMarked.current = id;
+      FeedApi.markWatched(id).catch(() => {});
+    }
+  ).current;
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 55,
+    minimumViewTime: 400,
+  }).current;
 
   const runSearch = () => {
     setAppliedQ(q.trim());
@@ -125,9 +171,6 @@ export default function Feed() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.screen }}>
       <View style={[styles.stickyChrome, { paddingTop: insets.top }]}>
-        <View style={styles.topBar}>
-          <HeaderActions />
-        </View>
         <View style={styles.searchRow}>
           <TextInput
             style={styles.searchInput}
@@ -139,13 +182,18 @@ export default function Feed() {
             returnKeyType="search"
           />
           <Pressable style={styles.searchBtn} onPress={runSearch}>
-            <Text style={styles.searchBtnText}>Search</Text>
+            <Text style={styles.searchBtnText}>Шукати</Text>
           </Pressable>
-          <Pressable style={styles.advBtn} onPress={() => setAdvOpen(true)}>
+          <Pressable
+            style={styles.advBtn}
+            onPress={() => setAdvOpen(true)}
+            accessibilityLabel="Рітельніше"
+          >
             <Text style={styles.advBtnText} numberOfLines={1}>
-              Advanced Search
+              Рітельніше
             </Text>
           </Pressable>
+          <HeaderActions />
         </View>
         <View style={styles.advRow}>
           {searching && (
@@ -243,13 +291,20 @@ export default function Feed() {
           horizontal={landscape}
           pagingEnabled={landscape}
           showsHorizontalScrollIndicator={landscape}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={async () => {
                 setRefreshing(true);
-                await loadPosts(1, filter);
-                setRefreshing(false);
+                skipResumeRef.current = true;
+                resumeFromId.current = null;
+                try {
+                  await loadPosts(1, filter, false, null);
+                } finally {
+                  setRefreshing(false);
+                }
               }}
             />
           }
@@ -257,7 +312,7 @@ export default function Feed() {
             if (!hasMore || loadingMore) return;
             setLoadingMore(true);
             try {
-              await loadPosts(page + 1, filter, true);
+              await loadPosts(page + 1, filter, true, resumeFromId.current);
             } finally {
               setLoadingMore(false);
             }
@@ -304,7 +359,7 @@ export default function Feed() {
 
       <Modal visible={advOpen} animationType="slide" onRequestClose={() => setAdvOpen(false)}>
         <View style={styles.modal}>
-          <Text style={styles.modalTitle}>Advanced search · книги</Text>
+          <Text style={styles.modalTitle}>Рітельніше · книги</Text>
           <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
             {(
               [
@@ -353,7 +408,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paperDark,
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
-    paddingBottom: 10,
+    paddingBottom: 8,
     zIndex: 20,
     elevation: 6,
     shadowColor: "#000",
@@ -361,20 +416,12 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
   },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingHorizontal: 12,
-    paddingTop: 4,
-    minHeight: 40,
-  },
   searchRow: {
     flexDirection: "row",
     flexWrap: "nowrap",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingTop: 8,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingTop: 6,
     alignItems: "center",
   },
   searchInput: {
@@ -384,30 +431,38 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.white,
     color: colors.ink,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 15,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    fontSize: 14,
+    height: 36,
   },
-  searchBtn: { backgroundColor: colors.ink, paddingHorizontal: 8, paddingVertical: 9 },
-  searchBtnText: { color: colors.white, fontWeight: "700", fontSize: 12 },
+  searchBtn: {
+    backgroundColor: colors.ink,
+    paddingHorizontal: 8,
+    height: 36,
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  searchBtnText: { color: colors.white, fontWeight: "700", fontSize: 11 },
   advRow: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
     gap: 10,
     paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingTop: 6,
   },
   advBtn: {
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
-    paddingHorizontal: 6,
-    paddingVertical: 9,
+    paddingHorizontal: 5,
+    height: 36,
+    justifyContent: "center",
     flexShrink: 1,
-    maxWidth: 118,
+    maxWidth: 96,
   },
-  advBtnText: { color: colors.ink, fontWeight: "700", fontSize: 11 },
+  advBtnText: { color: colors.ink, fontWeight: "700", fontSize: 10 },
   clear: { color: colors.stamp, fontWeight: "700" },
   filters: { flexDirection: "row", gap: 6, marginLeft: "auto" },
   chip: { color: colors.muted, fontWeight: "700", paddingHorizontal: 10, paddingVertical: 6 },

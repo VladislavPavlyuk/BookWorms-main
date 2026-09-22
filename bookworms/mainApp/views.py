@@ -34,7 +34,6 @@ from django.views.generic import CreateView
 from django.urls import reverse_lazy
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from .openlibrary import fetch_book_by_isbn
 from django.conf import settings
 # Бізнес-правила обміну/позик винесені в exchange_service - тут лише HTTP і шаблони.
 from .message_service import (
@@ -57,6 +56,7 @@ from .exchange_service import (
     reject_exchange_request,
     remove_owned_shelf,
     request_borrow_return,
+    resolve_and_sync_book_by_isbn,
 )
 from .web3forms_mail import (
     Web3FormsError,
@@ -82,6 +82,7 @@ def _activation_minutes() -> int:
 def home(request):
     filter_type = request.GET.get("filter")
 
+    from .feed_resume import feed_position, feed_queryset
     from .feed_search import (
         advanced_active,
         apply_book_search,
@@ -95,18 +96,50 @@ def home(request):
         book_paginator = Paginator(books_qs, 12)
         books_page = book_paginator.get_page(request.GET.get("bpage") or request.GET.get("page"))
 
-    # Стрічка постів — окремо, без книжкового пошуку
-    posts_list = Post.objects.select_related("author", "book").order_by("-created_ad")
-    if filter_type == "my" and request.user.is_authenticated:
-        posts_list = posts_list.filter(author=request.user)
+    filter_my = filter_type == "my" and request.user.is_authenticated
+    posts_list = feed_queryset(filter_my=filter_my, user=request.user)
+
+    WEB_PAGE_SIZE = 5
+    scroll_post_id = None
+
+    # Resume: без явного ?page= відкриваємо сторінку останнього переглянутого поста
+    if (
+        request.user.is_authenticated
+        and not searching
+        and "page" not in request.GET
+        and request.GET.get("no_resume") != "1"
+        and request.user.last_watched_post_id
+    ):
+        pos = feed_position(
+            request.user.last_watched_post_id,
+            page_size=WEB_PAGE_SIZE,
+            filter_my=filter_my,
+            user=request.user,
+        )
+        if pos:
+            scroll_post_id = pos["post_id"]
+            if pos["page"] > 1:
+                q = request.GET.copy()
+                q["page"] = str(pos["page"])
+                return redirect(f"/?{q.urlencode()}#post-{pos['post_id']}")
 
     post_params = request.GET.copy()
-    # pagination for posts uses `page` only when not in book-search mode
     if searching:
         post_params.pop("page", None)
-    paginator = Paginator(posts_list, 5)
+    paginator = Paginator(posts_list, WEB_PAGE_SIZE)
     page_number = None if searching else request.GET.get("page")
     posts = paginator.get_page(page_number or 1)
+
+    if (
+        request.user.is_authenticated
+        and not searching
+        and scroll_post_id is None
+        and request.user.last_watched_post_id
+    ):
+        # уже на потрібній сторінці (page=N або page 1)
+        on_page_ids = {p.id for p in posts.object_list}
+        if request.user.last_watched_post_id in on_page_ids:
+            scroll_post_id = request.user.last_watched_post_id
 
     qs_params = request.GET.copy()
     qs_params.pop("page", None)
@@ -138,8 +171,22 @@ def home(request):
             "publish_date": (request.GET.get("publish_date") or "").strip(),
             "age_min": (request.GET.get("age_min") or "").strip(),
             "age_max": (request.GET.get("age_max") or "").strip(),
+            "scroll_post_id": scroll_post_id,
+            "track_watched": request.user.is_authenticated and not searching,
         },
     )
+
+
+@login_required
+@require_POST
+def mark_post_watched(request, post_id):
+    """AJAX/beacon: запам'ятати останній переглянутий пост у стрічці."""
+    from .feed_resume import set_last_watched_post
+
+    post = set_last_watched_post(request.user, post_id)
+    if not post:
+        return JsonResponse({"ok": False, "detail": "not found"}, status=404)
+    return JsonResponse({"ok": True, "last_watched_post_id": post.id})
 
 
 @login_required
@@ -428,11 +475,10 @@ def my_library(request):
     if request.method == "POST" and "add_isbn" in request.POST:
         form = AddIsbnForm(request.POST)
         if form.is_valid():
-            payload, err = fetch_book_by_isbn(form.cleaned_data["isbn"])
-            if err:
-                messages.error(request, err)
+            book, err = resolve_and_sync_book_by_isbn(form.cleaned_data["isbn"])
+            if err or not book:
+                messages.error(request, err or "Книгу з таким ISBN не знайдено.")
             else:
-                book, _ = get_or_create_book_from_payload(payload)
                 add_owned_copy(request.user, book)
                 messages.success(request, f"Додано: {book.title}")
                 return redirect("my_library")
@@ -482,6 +528,7 @@ def my_library(request):
         {
             "form": form,
             "manual_form": manual_form,
+            "manual_open": bool(manual_form.errors),
             "shelves": shelves,
             "pending_returns_to_confirm": pending_returns_to_confirm,
             "reader_age_min": READER_AGE_MIN,

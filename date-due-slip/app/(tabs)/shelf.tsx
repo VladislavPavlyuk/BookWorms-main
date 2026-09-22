@@ -133,7 +133,12 @@ export default function ShelfScreen() {
         <Pressable style={styles.add} onPress={addIsbn}>
           <Text style={styles.addText}>ISBN</Text>
         </Pressable>
-        <Pressable style={[styles.add, { backgroundColor: colors.stamp }]} onPress={() => setManualOpen(true)}>
+        <Pressable
+          style={[styles.add, { backgroundColor: colors.stamp }]}
+          onPress={() => setManualOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Додати книгу вручну"
+        >
           <Text style={styles.addText}>Вручну</Text>
         </Pressable>
       </View>
@@ -247,7 +252,7 @@ export default function ShelfScreen() {
 
       <Modal visible={manualOpen} animationType="slide" onRequestClose={() => setManualOpen(false)}>
         <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ padding: 20, paddingTop: 56 }}>
-          <Text style={styles.modalH}>Книга вручну</Text>
+          <Text style={styles.modalH}>Додати книгу вручну</Text>
           {(["isbn", "title", "authors", "publisher", "publish_date"] as const).map((k) => (
             <TextInput
               key={k}

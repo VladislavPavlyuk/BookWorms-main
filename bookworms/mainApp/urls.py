@@ -18,6 +18,7 @@ from .views import (
     create_post,
     delete_post,
     edit_post,
+    mark_post_watched,
     my_library,
     due_slips,
     update_shelf_book_reader_age,
@@ -102,4 +103,5 @@ urlpatterns = [
     path('posts/edit/<int:post_id>/', edit_post, name='edit_post'),
     path('posts/<int:post_id>/comment/', add_comment, name='add_comment'),
     path('posts/<int:post_id>/like/', toggle_like, name='toggle_like'),
+    path('posts/<int:post_id>/watched/', mark_post_watched, name='mark_post_watched'),
 ]

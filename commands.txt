@@ -1,0 +1,22 @@
+
+NAS:
+cd /share/Container/BookWorms-main && sh deploy/qnap/rebuild-api.sh
+
+PC run Expo
+cd ~/BookWorms-main/date-due-slip
+npx expo start -c
+# або нативний білд:
+npx expo run:android
+npx expo run:android --device emulator-5554
+
+
+emulator -avd Pixel_8 -wipe-data
+
+adb devices
+
+# sync + rebuild api на NAS
+# потім APK:
+cd ~/BookWorms-main/date-due-slip/android && ./gradlew assembleDebug
+adb -s 38210DLJH000NW install -r app/build/outputs/apk/debug/app-debug.apk
+
+adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk

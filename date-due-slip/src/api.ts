@@ -184,8 +184,13 @@ function bookQuery(page: number, search?: FeedSearch) {
 }
 
 export const FeedApi = {
-  list: (page = 1, filter?: "my") =>
-    api<Paginated<Post>>(`/api/posts/?page=${page}${filter === "my" ? "&filter=my" : ""}`),
+  list: (page = 1, filter?: "my", fromId?: number | null) => {
+    const p = new URLSearchParams();
+    p.set("page", String(page));
+    if (filter === "my") p.set("filter", "my");
+    if (fromId) p.set("from_id", String(fromId));
+    return api<Paginated<Post>>(`/api/posts/?${p.toString()}`);
+  },
   get: (id: number) => api<Post>(`/api/posts/${id}/`),
   create: (body: { title: string; text: string; book_id?: number; confirm_new_post?: boolean }) =>
     api<Post>("/api/posts/create/", { method: "POST", body }),
@@ -195,6 +200,8 @@ export const FeedApi = {
   like: (id: number) => api<{ liked: boolean; likes_count: number }>(`/api/posts/${id}/like/`, { method: "POST" }),
   comment: (id: number, text: string) =>
     api<Comment>(`/api/posts/${id}/comments/`, { method: "POST", body: { text } }),
+  markWatched: (id: number) =>
+    api<{ ok: boolean; last_watched_post_id: number }>(`/api/posts/${id}/watched/`, { method: "POST" }),
 };
 
 export const BooksApi = {

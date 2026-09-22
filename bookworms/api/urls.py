@@ -15,6 +15,7 @@ urlpatterns = [
     path("posts/<int:post_id>/", views.post_detail),
     path("posts/<int:post_id>/like/", views.post_like),
     path("posts/<int:post_id>/comments/", views.post_comment),
+    path("posts/<int:post_id>/watched/", views.post_mark_watched),
     path("shelf/", views.my_shelf),
     path("shelf/isbn/", views.shelf_add_isbn),
     path("shelf/manual/", views.shelf_add_manual),

@@ -1,40 +1,45 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { BellGlyph } from "./HeaderGlyphs";
 import { colors } from "./theme";
 import { useUnread } from "./unread";
 
 type Props = {
-  /** ink = solid header chip (matches Search / burger); plain = icon only */
-  variant?: "ink" | "plain";
+  /** paper = theme chrome (default); plain = icon only in stack headers */
+  variant?: "paper" | "plain" | "ink";
 };
 
 /**
- * Дзвіночок у headerRight.
- * Бейдж лише всередині hitbox — на Pixel/Android header кліпає overflow.
+ * Дзвіночок у header — paper/line/ink як «Рітельніше».
+ * Glyph намальований View'ами (без Ionicons — на збірках шрифт інколи дає порожній квадрат).
  */
-export function NotifBell({ variant = "ink" }: Props) {
+export function NotifBell({ variant = "paper" }: Props) {
   const router = useRouter();
   const { unread } = useUnread();
   const label = unread > 99 ? "99+" : String(unread);
-  const ink = variant === "ink";
+  const chrome = variant === "paper" || variant === "ink";
+  const solid = variant === "ink";
+  const glyphColor = solid ? colors.white : colors.ink;
 
   return (
     <Pressable
       onPress={() => router.push("/notifications")}
       hitSlop={4}
       style={({ pressed }) => [
-        ink ? styles.ink : styles.plain,
-        ink && pressed && styles.inkPressed,
+        chrome ? (solid ? styles.solid : styles.paper) : styles.plain,
+        chrome && pressed && (solid ? styles.solidPressed : styles.paperPressed),
       ]}
       accessibilityRole="button"
       accessibilityLabel={
         unread > 0 ? `Сповіщення, непрочитаних ${unread}` : "Сповіщення"
       }
     >
-      <Ionicons name="notifications" size={22} color={ink ? colors.white : colors.ink} />
+      <BellGlyph color={glyphColor} size={20} />
       {unread > 0 ? (
-        <View style={[styles.badge, ink && styles.badgeOnInk]} pointerEvents="none">
+        <View
+          style={[styles.badge, solid && styles.badgeOnSolid]}
+          pointerEvents="none"
+        >
           <Text style={styles.badgeText}>{label}</Text>
         </View>
       ) : null}
@@ -43,17 +48,30 @@ export function NotifBell({ variant = "ink" }: Props) {
 }
 
 const styles = StyleSheet.create({
-  ink: {
-    width: 40,
-    height: 40,
+  paper: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
+    marginLeft: 4,
+  },
+  paperPressed: {
+    backgroundColor: colors.paperDark,
+  },
+  solid: {
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.ink,
     borderWidth: 1,
     borderColor: colors.ink,
-    marginLeft: 6,
+    marginLeft: 4,
   },
-  inkPressed: {
+  solidPressed: {
     backgroundColor: "#1a140e",
   },
   plain: {
@@ -67,28 +85,28 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: "absolute",
-    top: 2,
-    right: 2,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#E53935",
+    top: 1,
+    right: 1,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.stamp,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: colors.paperDark,
+    borderColor: colors.white,
     zIndex: 2,
     elevation: 3,
   },
-  badgeOnInk: {
+  badgeOnSolid: {
     borderColor: colors.ink,
   },
   badgeText: {
-    color: "#fff",
-    fontSize: 10,
+    color: colors.white,
+    fontSize: 9,
     fontWeight: "800",
-    lineHeight: 12,
+    lineHeight: 11,
     includeFontPadding: false,
   },
 });

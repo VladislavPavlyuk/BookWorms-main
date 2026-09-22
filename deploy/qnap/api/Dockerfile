@@ -26,11 +26,19 @@ RUN chmod +x /entrypoint.sh \
     && test -f /app/mainApp/migrations/0017_privatemessage_related_shelf.py \
     && test -f /app/mainApp/migrations/0018_bookcopy_shelf_copy.py \
     && test -f /app/mainApp/migrations/0019_copyevent.py \
+    && test -f /app/mainApp/migrations/0020_customuser_last_watched_post.py \
+    && grep -q 'last_watched_post' /app/mainApp/models.py \
     && grep -q 'code_rev' /app/api/views.py \
     && grep -q 'Cheap by default' /app/api/views.py \
     && grep -q post_worker_init /app/bookworms/gunicorn.conf.py \
     && ! grep -q 'purge loop every' /entrypoint.sh \
     && grep -q 'OL_HOST' /app/mainApp/openlibrary.py \
+    && grep -q 'librarything.ck.getwork' /app/mainApp/librarything.py \
+    && grep -q 'api2.isbndb.com' /app/mainApp/isbndb.py \
+    && grep -q 'googlebooks' /app/mainApp/book_lookup.py \
+    && test -f /app/mainApp/googlebooks.py \
+    && test -f /app/mainApp/isbndb.py \
+    && grep -q 'BOOK_METADATA_PROVIDERS' /app/mainApp/book_lookup.py \
     && ! grep -q 'openlibrary.org/api/books' /app/mainApp/openlibrary.py
 
 EXPOSE 8000

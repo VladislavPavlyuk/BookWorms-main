@@ -26,6 +26,7 @@ from mainApp.exchange_service import (
     reject_exchange_request,
     remove_owned_shelf,
     request_borrow_return,
+    resolve_and_sync_book_by_isbn,
 )
 from mainApp.message_service import (
     get_exchange_message_partners,
@@ -49,7 +50,7 @@ from mainApp.models import (
     PrivateMessage,
     Shelf,
 )
-from mainApp.openlibrary import fetch_book_by_isbn, normalize_isbn
+from mainApp.book_lookup import normalize_isbn
 from mainApp.web3forms_mail import (
     activation_payload,
     activation_url_for,
@@ -151,11 +152,11 @@ def health(request):
         payload["db"] = f"fail: {e}"
 
     if request.GET.get("deep") == "1":
-        from mainApp.openlibrary import openlibrary_ping
+        from mainApp.book_lookup import metadata_providers_ping
         from mainApp.registration_service import purge_status
 
         payload.update(purge_status())
-        payload.update(openlibrary_ping())
+        payload.update(metadata_providers_ping())
 
     if request.GET.get("test_mail") == "1":
         from mainApp.web3forms_mail import Web3FormsError, send_web3forms
@@ -268,9 +269,22 @@ def me(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def post_list(request):
-    qs = Post.objects.select_related("author", "book").order_by("-created_ad")
-    if request.GET.get("filter") == "my" and request.user.is_authenticated:
-        qs = qs.filter(author=request.user)
+    from mainApp.feed_resume import (
+        FEED_ORDER,
+        feed_queryset,
+        qs_from_post_inclusive,
+    )
+
+    filter_my = request.GET.get("filter") == "my" and request.user.is_authenticated
+    qs = feed_queryset(filter_my=filter_my, user=request.user)
+
+    # Resume: стрічка починаючи з last watched (включно) → вниз до старіших
+    from_id = request.GET.get("from_id") or request.GET.get("resume_from")
+    if from_id and str(from_id).isdigit():
+        anchor = qs.filter(pk=int(from_id)).first()
+        if anchor:
+            qs = qs_from_post_inclusive(qs, anchor).order_by(*FEED_ORDER)
+
     comments_qs = Comment.objects.select_related("author").order_by("created_at")
     qs = qs.prefetch_related(Prefetch("comments", queryset=comments_qs))
     qs = _annotate_posts(qs, request.user)
@@ -278,6 +292,16 @@ def post_list(request):
     page = paginator.paginate_queryset(qs, request)
     ser = PostSerializer(page, many=True, context={"request": request})
     return paginator.get_paginated_response(ser.data)
+
+
+@api_view(["POST"])
+def post_mark_watched(request, post_id):
+    from mainApp.feed_resume import set_last_watched_post
+
+    post = set_last_watched_post(request.user, post_id)
+    if not post:
+        return _error("Пост не знайдено.", 404)
+    return Response({"ok": True, "last_watched_post_id": post.id})
 
 
 @api_view(["GET"])
@@ -455,10 +479,9 @@ def due_slips(request):
 def shelf_add_isbn(request):
     ser = AddIsbnSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
-    payload, err = fetch_book_by_isbn(ser.validated_data["isbn"])
-    if err:
-        return _error(err)
-    book, _ = get_or_create_book_from_payload(payload)
+    book, err = resolve_and_sync_book_by_isbn(ser.validated_data["isbn"])
+    if err or not book:
+        return _error(err or "Книгу з таким ISBN не знайдено.")
     shelf = add_owned_copy(request.user, book)
     shelf = Shelf.objects.select_related("book", "borrowed_from", "user", "copy").get(
         pk=shelf.pk
