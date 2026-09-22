@@ -321,7 +321,7 @@
     }
 
     /**
-     * Navbar height → --site-nav-h; sync advanced form q from navbar search.
+     * Navbar height → --site-nav-h; sync advanced form q; filter toggle state.
      */
     function initNavChrome() {
         var nav = document.querySelector(".site-navbar");
@@ -344,10 +344,61 @@
         }
 
         var adv = document.getElementById("advancedSearch");
+        var toggle = document.getElementById("siteFilterToggle");
         var navQ = document.getElementById("siteNavbarSearchQ");
         var mirror = document.getElementById("advQMirror");
-        if (adv && navQ && mirror) {
-            adv.addEventListener("submit", function () {
+        var form = document.getElementById("advancedSearchForm");
+        var scrollBeforeAdv = 0;
+
+        function isHomePage() {
+            var p = window.location.pathname || "/";
+            return p === "/" || p === "";
+        }
+
+        function setToggleOpen(open) {
+            if (!toggle) return;
+            toggle.setAttribute("aria-expanded", open ? "true" : "false");
+            toggle.classList.toggle("is-open", open);
+        }
+
+        function scrollToY(y) {
+            var top = Math.max(0, Math.round(y));
+            if (typeof window.scrollTo === "function") {
+                try {
+                    window.scrollTo({ top: top, left: 0, behavior: "auto" });
+                } catch (e) {
+                    window.scrollTo(0, top);
+                }
+            } else {
+                window.scrollTop = top;
+                document.documentElement.scrollTop = top;
+                document.body.scrollTop = top;
+            }
+        }
+
+        if (adv && toggle) {
+            setToggleOpen(adv.classList.contains("show"));
+            adv.addEventListener("show.bs.collapse", function () {
+                setToggleOpen(true);
+                if (!isHomePage()) return;
+                scrollBeforeAdv = window.scrollY || window.pageYOffset || 0;
+            });
+            adv.addEventListener("shown.bs.collapse", function () {
+                if (!isHomePage()) return;
+                var h = Math.ceil(adv.getBoundingClientRect().height);
+                if (h > 0) scrollToY(scrollBeforeAdv + h);
+            });
+            adv.addEventListener("hide.bs.collapse", function () {
+                setToggleOpen(false);
+            });
+            adv.addEventListener("hidden.bs.collapse", function () {
+                if (!isHomePage()) return;
+                scrollToY(scrollBeforeAdv);
+            });
+        }
+
+        if (form && navQ && mirror) {
+            form.addEventListener("submit", function () {
                 mirror.value = navQ.value || "";
             });
         }

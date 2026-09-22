@@ -72,12 +72,12 @@
             {% if feed_filter == 'my' %}
             <input type="hidden" name="filter" value="my">
             {% endif %}
-            {% if un == 'home' %}
             <button type="button"
                     class="btn btn-sm btn-outline-light site-navbar-search__btn site-navbar-search__btn--icon"
+                    id="siteFilterToggle"
                     data-bs-toggle="collapse"
                     data-bs-target="#advancedSearch"
-                    aria-expanded="{% if advanced_open %}true{% else %}false{% endif %}"
+                    aria-expanded="false"
                     aria-controls="advancedSearch"
                     aria-label="Фільтр"
                     title="Фільтр">
@@ -85,17 +85,39 @@
                     <path fill="currentColor" d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
                 </svg>
             </button>
-            {% else %}
-            <a class="btn btn-sm btn-outline-light site-navbar-search__btn site-navbar-search__btn--icon"
-               href="{% url 'home' %}?adv=1"
-               aria-label="Фільтр"
-               title="Фільтр">
-                <svg class="site-filter-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <path fill="currentColor" d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
-                </svg>
-            </a>
-            {% endif %}
         </form>
+
+        {% if user.is_authenticated and un == 'home' %}
+        <div class="site-navbar-feed site-navbar-feed--bar d-lg-none">
+            <div class="feed-switch" role="group" aria-label="All / mine">
+                <a href="{% url 'home' %}"
+                   class="feed-switch__opt{% if feed_filter != 'my' %} is-on{% endif %}"
+                   {% if feed_filter != 'my' %}aria-current="true"{% endif %}>all</a>
+                <a href="{% url 'home' %}?filter=my"
+                   class="feed-switch__opt{% if feed_filter == 'my' %} is-on{% endif %}"
+                   {% if feed_filter == 'my' %}aria-current="true"{% endif %}>mine</a>
+            </div>
+            <div class="dropdown">
+                <button class="site-nav-plus"
+                        type="button"
+                        id="navCreatePostMobile"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        aria-label="Створити пост"
+                        title="Створити пост">
+                    +
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navCreatePostMobile">
+                    <li>
+                        <a class="dropdown-item" href="{% url 'create_post' %}?mode=event">Подія</a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'create_post' %}?mode=feedback">Відгук про прочитану книгу</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        {% endif %}
 
         <button class="navbar-toggler"
                 type="button"
@@ -128,12 +150,6 @@
                     <a class="nav-link{% if un == 'exchange_requests' or un == 'message_thread' %} active{% endif %}"
                        href="{% url 'exchange_requests' %}">Обміни</a>
                 </li>
-                {% endif %}
-
-            </ul>
-
-            <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
-                {% if user.is_authenticated %}
                 <li class="nav-item">
                     <a class="nav-link position-relative d-inline-block{% if un == 'notifications_inbox' %} active{% endif %}"
                        href="{% url 'notifications_inbox' %}"
@@ -147,8 +163,14 @@
                         </span>
                     </a>
                 </li>
+                {% endif %}
 
-                <li class="nav-item site-navbar-feed">
+            </ul>
+
+            <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+                {% if user.is_authenticated %}
+                {% if un == 'home' %}
+                <li class="nav-item site-navbar-feed d-none d-lg-flex">
                     <div class="feed-switch" role="group" aria-label="All / mine">
                         <a href="{% url 'home' %}"
                            class="feed-switch__opt{% if feed_filter != 'my' %} is-on{% endif %}"
@@ -177,6 +199,7 @@
                         </ul>
                     </div>
                 </li>
+                {% endif %}
 
                 <li class="nav-item">
                     {% if ns == 'profile_app' %}
@@ -215,6 +238,55 @@
 </nav>
 
 <main class="site-main">
+<div class="collapse site-advanced-collapse{% if request.GET.isbn or request.GET.authors or request.GET.publisher or request.GET.publish_date or request.GET.age_min or request.GET.age_max %} show{% endif %}"
+     id="advancedSearch">
+    <div class="container site-advanced-collapse__inner">
+        <form class="home-advanced"
+              method="get"
+              action="{% url 'home' %}"
+              id="advancedSearchForm"
+              accept-charset="UTF-8"
+              role="search">
+            <input type="hidden" name="q" id="advQMirror" value="{{ request.GET.q|default:'' }}">
+            {% if feed_filter == 'my' %}
+            <input type="hidden" name="filter" value="my">
+            {% endif %}
+            <div class="home-advanced__panel p-3">
+                <p class="small text-muted mb-3 mb-md-2">Фільтри по полях довідника книг (усі книги в базі).</p>
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-0" for="adv-isbn">ISBN</label>
+                        <input id="adv-isbn" class="form-control" name="isbn" value="{{ request.GET.isbn|default:'' }}" placeholder="978…">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-0" for="adv-authors">Автори</label>
+                        <input id="adv-authors" class="form-control" name="authors" value="{{ request.GET.authors|default:'' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-0" for="adv-publisher">Видавець</label>
+                        <input id="adv-publisher" class="form-control" name="publisher" value="{{ request.GET.publisher|default:'' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-0" for="adv-publish-date">Дата видання</label>
+                        <input id="adv-publish-date" class="form-control" name="publish_date" value="{{ request.GET.publish_date|default:'' }}" placeholder="1980">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small mb-0" for="adv-age-min">Вік від</label>
+                        <input id="adv-age-min" class="form-control" type="number" min="0" max="18" name="age_min" value="{{ request.GET.age_min|default:'' }}">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small mb-0" for="adv-age-max">Вік до</label>
+                        <input id="adv-age-max" class="form-control" type="number" min="0" max="18" name="age_max" value="{{ request.GET.age_max|default:'' }}">
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                    <button type="submit" class="btn btn-dark btn-sm">Застосувати фільтри</button>
+                    <a href="{% url 'home' %}" class="btn btn-outline-secondary btn-sm">Скинути</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
 <div class="container site-content">
     {% block content %}
     {% endblock %}
