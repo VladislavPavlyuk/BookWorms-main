@@ -181,7 +181,7 @@
                         {% endif %}
                         <p class="mb-2 d-flex flex-wrap gap-2">
                             <a href="{% url 'copy_history' shelf.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія подій</a>
-                            <a href="{% url 'create_post' %}?book_id={{ book.id %}" class="btn btn-sm btn-outline-success">Написати пост про книгу</a>
+                            <a href="{% url 'create_post' %}?mode=feedback&amp;book_id={{ book.id }}" class="btn btn-sm btn-outline-success">Написати відгук</a>
                         </p>
                         {# Позичена книга: не показуємо "Видалити", лише форму на return_borrowed_shelf_book. #}
                         {% if shelf.borrowed_from_id %}

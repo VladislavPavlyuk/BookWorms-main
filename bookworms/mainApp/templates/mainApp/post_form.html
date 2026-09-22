@@ -1,8 +1,21 @@
 {% extends "mainApp/base.html" %}
 
-{% block title %}{% if post %}Редагувати пост{% elif book %}Пост про книгу{% else %}Новий пост{% endif %}{% endblock %}
+{% block title %}
+{% if post %}Редагувати пост
+{% elif mode == 'feedback' or book %}Відгук про книгу
+{% elif mode == 'event' %}Нова подія
+{% else %}Новий пост{% endif %}
+{% endblock %}
 
 {% block content %}
+
+{% if mode == 'event' %}
+    <h1 class="h4 mb-3">Подія</h1>
+    <p class="text-muted small mb-3">Анонс або новина без прив’язки до книги з полиці.</p>
+{% elif mode == 'feedback' %}
+    <h1 class="h4 mb-3">Відгук про прочитану книгу</h1>
+    <p class="text-muted small mb-3">Оберіть книгу зі своєї полиці та поділіться враженнями.</p>
+{% endif %}
 
 {% if book %}
     {% include "mainApp/includes/post_book_card.html" with book=book %}
@@ -12,6 +25,7 @@
 
 <form method="post">
     {% csrf_token %}
+    <input type="hidden" name="mode" value="{{ mode|default:'event' }}">
     {% if book and not post %}
         <input type="hidden" name="book_id" value="{{ book.id }}">
         {% if confirm_new_post %}
@@ -19,23 +33,45 @@
         {% endif %}
     {% endif %}
 
+    {% if not post and mode == 'feedback' and not book %}
+    <div class="mb-3">
+        <label class="form-label" for="post-book">Книга з полиці</label>
+        {% if owned_books %}
+        <select name="book_id" id="post-book" class="form-select" required>
+            <option value="">— оберіть книгу —</option>
+            {% for b in owned_books %}
+            <option value="{{ b.id }}">{{ b.title }}{% if b.authors %} · {{ b.authors }}{% endif %}</option>
+            {% endfor %}
+        </select>
+        {% else %}
+        <p class="text-muted mb-1">На полиці немає книг.</p>
+        <a href="{% url 'my_library' %}" class="btn btn-sm btn-outline-secondary">До Моєї полиці</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <div class="mb-3">
         <label class="form-label" for="post-title">Заголовок</label>
         <input type="text" name="title" id="post-title" class="form-control"
-               placeholder="{% if book %}Наприклад: Враження від '{{ book.title|truncatechars:35 }}'{% else %}Заголовок поста{% endif %}"
-               value="{{ post.title|default:'' }}"
-               maxlength="200" required>
+               placeholder="{% if mode == 'event' %}Наприклад: Зустріч книжкового клубу{% elif book %}Наприклад: Враження від '{{ book.title|truncatechars:35 }}'{% else %}Заголовок{% endif %}"
+               value="{% firstof draft_title post.title '' %}"
+               maxlength="200" required
+               {% if mode == 'feedback' and not book and not owned_books %}disabled{% endif %}>
     </div>
 
     <div class="mb-3">
-        <label class="form-label" for="post-text">Текст поста</label>
+        <label class="form-label" for="post-text">Текст</label>
         <textarea name="text" id="post-text" class="form-control" rows="8"
-                  placeholder="Розкажіть, що сподобалось, що ні, кому порадите…" required>{{ post.text|default:'' }}</textarea>
+                  placeholder="{% if mode == 'event' %}Опишіть подію, місце, час…{% else %}Розкажіть, що сподобалось, що ні, кому порадите…{% endif %}"
+                  required
+                  {% if mode == 'feedback' and not book and not owned_books %}disabled{% endif %}>{% firstof draft_text post.text '' %}</textarea>
     </div>
 
+    {% if mode != 'feedback' or book or owned_books %}
     <button type="submit" class="btn btn-success">
         {% if post %}Зберегти{% else %}Опублікувати{% endif %}
     </button>
+    {% endif %}
     <a href="{% url 'home' %}" class="btn btn-outline-secondary">Скасувати</a>
 </form>
 

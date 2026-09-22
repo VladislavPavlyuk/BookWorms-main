@@ -37,7 +37,27 @@
                 Мои посты
             </a>
         </div>
-        <a href="{% url 'create_post' %}" class="btn btn-sm btn-success home-search__create">Створити пост</a>
+        <div class="dropdown home-search__create">
+            <button class="btn btn-sm btn-success dropdown-toggle"
+                    type="button"
+                    id="createPostMenu"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false">
+                Створити пост
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="createPostMenu">
+                <li>
+                    <a class="dropdown-item" href="{% url 'create_post' %}?mode=event">
+                        Подія
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{% url 'create_post' %}?mode=feedback">
+                        Відгук про прочитану книгу
+                    </a>
+                </li>
+            </ul>
+        </div>
     </div>
     {% endif %}
 

@@ -6,16 +6,20 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi, ShelfApi } from "../../src/api";
 import { colors } from "../../src/theme";
 import type { Shelf } from "../../src/types";
 
+type Mode = "event" | "feedback";
+
 export default function NewPost() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ book_id?: string }>();
+  const params = useLocalSearchParams<{ book_id?: string; mode?: string }>();
+  const mode: Mode =
+    params.mode === "feedback" || Boolean(params.book_id) ? "feedback" : "event";
+
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [shelves, setShelves] = useState<Shelf[]>([]);
@@ -24,21 +28,26 @@ export default function NewPost() {
   );
 
   useEffect(() => {
+    if (mode !== "feedback") return;
     ShelfApi.mine()
       .then((d) => setShelves(d.shelves))
       .catch(() => {});
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     if (params.book_id) setBookId(Number(params.book_id));
   }, [params.book_id]);
 
   const submit = async (confirm = false) => {
+    if (mode === "feedback" && !bookId) {
+      Alert.alert("Відгук", "Оберіть книгу зі своєї полиці.");
+      return;
+    }
     try {
       await FeedApi.create({
         title,
         text,
-        book_id: bookId || undefined,
+        book_id: mode === "feedback" ? bookId || undefined : undefined,
         confirm_new_post: confirm,
       });
       router.replace("/(tabs)");
@@ -56,6 +65,15 @@ export default function NewPost() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ padding: 20 }}>
+      <Text style={styles.heading}>
+        {mode === "feedback" ? "Відгук про прочитану книгу" : "Подія"}
+      </Text>
+      <Text style={styles.hint}>
+        {mode === "feedback"
+          ? "Оберіть книгу з полиці та поділіться враженнями."
+          : "Анонс або новина без прив’язки до книги."}
+      </Text>
+
       <TextInput
         placeholder="Заголовок"
         placeholderTextColor={colors.muted}
@@ -64,7 +82,7 @@ export default function NewPost() {
         onChangeText={setTitle}
       />
       <TextInput
-        placeholder="Текст"
+        placeholder={mode === "event" ? "Опишіть подію…" : "Ваші враження…"}
         placeholderTextColor={colors.muted}
         style={[styles.input, { height: 140 }]}
         multiline
@@ -72,24 +90,30 @@ export default function NewPost() {
         onChangeText={setText}
       />
 
-      <Text style={styles.sec}>Книга з полиці (необов'язково)</Text>
-      <Pressable
-        style={[styles.opt, bookId === null && styles.optOn]}
-        onPress={() => setBookId(null)}
-      >
-        <Text style={styles.optText}>Без книги</Text>
-      </Pressable>
-      {shelves.map((s) => (
-        <Pressable
-          key={s.id}
-          style={[styles.opt, bookId === s.book.id && styles.optOn]}
-          onPress={() => setBookId(s.book.id)}
-        >
-          <Text style={styles.optText}>{s.book.title}</Text>
-        </Pressable>
-      ))}
+      {mode === "feedback" && (
+        <>
+          <Text style={styles.sec}>Книга з полиці</Text>
+          {shelves.length === 0 ? (
+            <Text style={styles.empty}>Немає книг на полиці. Додайте книгу в «Моя полиця».</Text>
+          ) : (
+            shelves.map((s) => (
+              <Pressable
+                key={s.id}
+                style={[styles.opt, bookId === s.book.id && styles.optOn]}
+                onPress={() => setBookId(s.book.id)}
+              >
+                <Text style={styles.optText}>{s.book.title}</Text>
+              </Pressable>
+            ))
+          )}
+        </>
+      )}
 
-      <Pressable style={styles.btn} onPress={() => submit(false)}>
+      <Pressable
+        style={[styles.btn, mode === "feedback" && !bookId && styles.btnDisabled]}
+        onPress={() => submit(false)}
+        disabled={mode === "feedback" && !bookId}
+      >
         <Text style={styles.btnText}>Опублікувати</Text>
       </Pressable>
     </ScrollView>
@@ -97,6 +121,8 @@ export default function NewPost() {
 }
 
 const styles = StyleSheet.create({
+  heading: { fontSize: 20, fontWeight: "800", color: colors.ink, marginBottom: 6 },
+  hint: { color: colors.muted, marginBottom: 16, lineHeight: 20 },
   input: {
     borderBottomWidth: 1,
     borderColor: colors.line,
@@ -105,6 +131,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sec: { fontWeight: "700", color: colors.ink, marginBottom: 8 },
+  empty: { color: colors.muted, marginBottom: 12 },
   opt: {
     borderWidth: 1,
     borderColor: colors.line,
@@ -115,5 +142,6 @@ const styles = StyleSheet.create({
   optOn: { borderColor: colors.stamp, backgroundColor: colors.paperDark },
   optText: { color: colors.ink },
   btn: { backgroundColor: colors.ink, padding: 14, marginTop: 16 },
+  btnDisabled: { opacity: 0.45 },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },
 });

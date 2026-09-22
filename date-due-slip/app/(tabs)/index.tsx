@@ -60,6 +60,7 @@ export default function Feed() {
   const [adv, setAdv] = useState<FeedSearch>(EMPTY_ADV);
   const [appliedAdv, setAppliedAdv] = useState<FeedSearch>(EMPTY_ADV);
   const [advOpen, setAdvOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const search = useMemo<FeedSearch>(
     () => ({ q: appliedQ, ...appliedAdv }),
@@ -396,18 +397,52 @@ export default function Feed() {
       </Modal>
 
       {!searching && (
-        <Pressable
-          style={({ pressed }) => [
-            styles.fab,
-            { bottom: Math.max(16, insets.bottom + 12), right: 16 },
-            pressed && styles.fabPressed,
-          ]}
-          onPress={() => router.push("/post/new")}
-          accessibilityRole="button"
-          accessibilityLabel="Створити пост"
-        >
-          <Text style={styles.fabPlus}>+</Text>
-        </Pressable>
+        <>
+          <Pressable
+            style={({ pressed }) => [
+              styles.fab,
+              { bottom: Math.max(16, insets.bottom + 12), right: 16 },
+              pressed && styles.fabPressed,
+            ]}
+            onPress={() => setCreateOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Створити пост"
+          >
+            <Text style={styles.fabPlus}>+</Text>
+          </Pressable>
+
+          <Modal visible={createOpen} transparent animationType="fade" onRequestClose={() => setCreateOpen(false)}>
+            <View style={styles.createScrim}>
+              <Pressable style={StyleSheet.absoluteFill} onPress={() => setCreateOpen(false)} />
+              <View style={styles.createSheet}>
+                <Text style={styles.createTitle}>Створити пост</Text>
+                <Pressable
+                  style={styles.createOpt}
+                  onPress={() => {
+                    setCreateOpen(false);
+                    router.push({ pathname: "/post/new", params: { mode: "event" } });
+                  }}
+                >
+                  <Text style={styles.createOptTitle}>Подія</Text>
+                  <Text style={styles.createOptSub}>Анонс або новина без книги</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.createOpt}
+                  onPress={() => {
+                    setCreateOpen(false);
+                    router.push({ pathname: "/post/new", params: { mode: "feedback" } });
+                  }}
+                >
+                  <Text style={styles.createOptTitle}>Відгук про прочитану книгу</Text>
+                  <Text style={styles.createOptSub}>Книга з вашої полиці</Text>
+                </Pressable>
+                <Pressable onPress={() => setCreateOpen(false)}>
+                  <Text style={styles.createCancel}>Скасувати</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
+        </>
       )}
     </View>
   );
@@ -504,6 +539,42 @@ const styles = StyleSheet.create({
     lineHeight: 40,
     includeFontPadding: false,
     marginTop: -2,
+  },
+  createScrim: {
+    flex: 1,
+    backgroundColor: "rgba(42, 31, 20, 0.45)",
+    justifyContent: "flex-end",
+  },
+  createSheet: {
+    backgroundColor: colors.paper,
+    borderTopWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 28,
+    zIndex: 2,
+  },
+  createTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: colors.ink,
+    marginBottom: 12,
+  },
+  createOpt: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    padding: 14,
+    marginBottom: 8,
+  },
+  createOptTitle: { color: colors.ink, fontWeight: "700", fontSize: 16 },
+  createOptSub: { color: colors.muted, marginTop: 4, fontSize: 13 },
+  createCancel: {
+    color: colors.stamp,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 10,
+    padding: 8,
   },
   section: { color: colors.ink, fontWeight: "800", marginBottom: 10, fontSize: 16 },
   card: {

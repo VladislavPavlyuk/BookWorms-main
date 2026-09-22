@@ -100,7 +100,23 @@ export default function More() {
       <Pressable style={styles.row} onPress={() => router.push("/exchanges")}>
         <Text style={styles.rowText}>Обміни / позики / чати</Text>
       </Pressable>
-      <Pressable style={styles.row} onPress={() => router.push("/post/new")}>
+      <Pressable
+        style={styles.row}
+        onPress={() =>
+          Alert.alert("Створити пост", undefined, [
+            {
+              text: "Подія",
+              onPress: () => router.push({ pathname: "/post/new", params: { mode: "event" } }),
+            },
+            {
+              text: "Відгук про книгу",
+              onPress: () =>
+                router.push({ pathname: "/post/new", params: { mode: "feedback" } }),
+            },
+            { text: "Скасувати", style: "cancel" },
+          ])
+        }
+      >
         <Text style={styles.rowText}>Новий пост</Text>
       </Pressable>
 

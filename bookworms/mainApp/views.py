@@ -360,12 +360,44 @@ def _confirm_separate_post_despite_similar(request):
 def create_post(request):
     book = None
     confirm_new = _confirm_separate_post_despite_similar(request)
+    mode = (request.POST.get("mode") or request.GET.get("mode") or "").strip().lower()
+    if mode not in ("event", "feedback"):
+        # deep-link з полиці (?book_id=) → відгук; інакше — вибір на головній
+        if request.GET.get("book_id") or request.POST.get("book_id"):
+            mode = "feedback"
+        else:
+            mode = "event"
 
     if request.method == "POST":
         title = (request.POST.get("title") or "").strip()
         text = (request.POST.get("text") or "").strip()
-        post_book = _post_book_from_shelf(request.user, request.POST.get("book_id"))
-        book = post_book
+        if mode == "event":
+            post_book = None
+        else:
+            post_book = _post_book_from_shelf(request.user, request.POST.get("book_id"))
+            book = post_book
+            if not post_book:
+                messages.error(
+                    request,
+                    "Оберіть книгу з вашої полиці для відгуку.",
+                )
+                owned = (
+                    Book.objects.filter(shelf_entries__user=request.user)
+                    .distinct()
+                    .order_by("title")
+                )
+                return render(
+                    request,
+                    "mainApp/post_form.html",
+                    {
+                        "book": None,
+                        "mode": "feedback",
+                        "owned_books": owned,
+                        "draft_title": title,
+                        "draft_text": text,
+                        "confirm_new_post": False,
+                    },
+                )
 
         if post_book and not confirm_new:
             related = _posts_by_other_users_same_book_title_or_isbn(post_book).exclude(
@@ -375,6 +407,7 @@ def create_post(request):
                 ctx = {
                     "book": post_book,
                     "related_posts": related,
+                    "mode": mode,
                 }
                 if title and text:
                     ctx["draft_title"] = title
@@ -394,7 +427,7 @@ def create_post(request):
             return redirect("home")
     else:
         raw = request.GET.get("book_id")
-        if raw:
+        if raw and mode == "feedback":
             try:
                 bid = int(raw)
             except (TypeError, ValueError):
@@ -406,7 +439,7 @@ def create_post(request):
                 elif b:
                     messages.error(
                         request,
-                        "Цієї книги немає на вашій полиці - додайте її, щоб писати пост про неї.",
+                        "Цієї книги немає на вашій полиці - додайте її, щоб писати відгук.",
                     )
 
         if book and not confirm_new:
@@ -420,14 +453,25 @@ def create_post(request):
                     {
                         "book": book,
                         "related_posts": related,
+                        "mode": mode,
                     },
                 )
+
+    owned_books = None
+    if mode == "feedback" and not book:
+        owned_books = (
+            Book.objects.filter(shelf_entries__user=request.user)
+            .distinct()
+            .order_by("title")
+        )
 
     return render(
         request,
         "mainApp/post_form.html",
         {
             "book": book,
+            "mode": mode,
+            "owned_books": owned_books,
             "confirm_new_post": confirm_new and bool(book),
         },
     )
