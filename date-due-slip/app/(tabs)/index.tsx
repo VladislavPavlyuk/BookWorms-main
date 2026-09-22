@@ -202,19 +202,14 @@ export default function Feed() {
             </Pressable>
           )}
           {!searching && (
-            <>
-              <View style={styles.filters}>
-                <Pressable onPress={() => setFilter("all")}>
-                  <Text style={[styles.chip, filter === "all" && styles.chipOn]}>Усі</Text>
-                </Pressable>
-                <Pressable onPress={() => setFilter("my")}>
-                  <Text style={[styles.chip, filter === "my" && styles.chipOn]}>Мої</Text>
-                </Pressable>
-              </View>
-              <Pressable style={styles.newBtn} onPress={() => router.push("/post/new")}>
-                <Text style={styles.newBtnText}>+ Пост</Text>
+            <View style={styles.filters}>
+              <Pressable onPress={() => setFilter("all")}>
+                <Text style={[styles.chip, filter === "all" && styles.chipOn]}>Усі</Text>
               </Pressable>
-            </>
+              <Pressable onPress={() => setFilter("my")}>
+                <Text style={[styles.chip, filter === "my" && styles.chipOn]}>Мої</Text>
+              </Pressable>
+            </View>
           )}
         </View>
       </View>
@@ -399,6 +394,21 @@ export default function Feed() {
           </View>
         </View>
       </Modal>
+
+      {!searching && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.fab,
+            { bottom: Math.max(16, insets.bottom + 12), right: 16 },
+            pressed && styles.fabPressed,
+          ]}
+          onPress={() => router.push("/post/new")}
+          accessibilityRole="button"
+          accessibilityLabel="Створити пост"
+        >
+          <Text style={styles.fabPlus}>+</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -464,11 +474,37 @@ const styles = StyleSheet.create({
   },
   advBtnText: { color: colors.ink, fontWeight: "700", fontSize: 10 },
   clear: { color: colors.stamp, fontWeight: "700" },
-  filters: { flexDirection: "row", gap: 6, marginLeft: "auto" },
+  filters: { flexDirection: "row", gap: 6 },
   chip: { color: colors.muted, fontWeight: "700", paddingHorizontal: 10, paddingVertical: 6 },
   chipOn: { color: colors.ink, backgroundColor: colors.white },
-  newBtn: { backgroundColor: colors.ink, paddingHorizontal: 14, paddingVertical: 8 },
-  newBtnText: { color: colors.white, fontWeight: "700" },
+  fab: {
+    position: "absolute",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.fab,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 40,
+    elevation: 10,
+    shadowColor: colors.fab,
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    borderWidth: 2,
+    borderColor: "#14A3A8",
+  },
+  fabPressed: {
+    backgroundColor: colors.fabPressed,
+  },
+  fabPlus: {
+    color: colors.white,
+    fontSize: 36,
+    fontWeight: "300",
+    lineHeight: 40,
+    includeFontPadding: false,
+    marginTop: -2,
+  },
   section: { color: colors.ink, fontWeight: "800", marginBottom: 10, fontSize: 16 },
   card: {
     borderWidth: 0,
