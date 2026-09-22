@@ -319,4 +319,43 @@
     } else {
         initTitleAutoSearch();
     }
+
+    /**
+     * Navbar height → --site-nav-h; sync advanced form q from navbar search.
+     */
+    function initNavChrome() {
+        var nav = document.querySelector(".site-navbar");
+        if (nav) {
+            function syncNav() {
+                var navH = Math.ceil(nav.getBoundingClientRect().height);
+                document.documentElement.style.setProperty("--site-nav-h", navH + "px");
+            }
+            syncNav();
+            window.addEventListener("resize", syncNav);
+            window.addEventListener("orientationchange", syncNav);
+            if (typeof ResizeObserver !== "undefined") {
+                new ResizeObserver(syncNav).observe(nav);
+            }
+            var collapse = document.getElementById("siteNav");
+            if (collapse) {
+                collapse.addEventListener("shown.bs.collapse", syncNav);
+                collapse.addEventListener("hidden.bs.collapse", syncNav);
+            }
+        }
+
+        var adv = document.getElementById("advancedSearch");
+        var navQ = document.getElementById("siteNavbarSearchQ");
+        var mirror = document.getElementById("advQMirror");
+        if (adv && navQ && mirror) {
+            adv.addEventListener("submit", function () {
+                mirror.value = navQ.value || "";
+            });
+        }
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initNavChrome);
+    } else {
+        initNavChrome();
+    }
 })();

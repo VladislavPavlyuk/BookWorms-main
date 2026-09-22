@@ -5,99 +5,47 @@
 
 {% block content %}
 
-<form class="home-search mb-3" method="get" action="/" role="search">
-    <div class="home-search__bar input-group d-none d-lg-flex">
-        <input type="search"
-               name="q"
-               class="form-control form-control-lg"
-               placeholder="Пошук книги за назвою…"
-               value="{{ q }}"
-               autocomplete="off"
-               aria-label="Пошук книги за назвою"
-               data-title-autosearch>
-        <button type="button"
-                class="btn btn-outline-secondary"
-                data-bs-toggle="collapse"
-                data-bs-target="#advancedSearch"
-                aria-expanded="{% if advanced_open %}true{% else %}false{% endif %}"
-                aria-controls="advancedSearch"
-                aria-label="Фільтр"
-                title="Фільтр">
-            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path fill="currentColor" d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
-            </svg>
-        </button>
-    </div>
-
-    {% if user.is_authenticated %}
-    <div class="home-search__toolbar">
-        <div class="home-search__filters btn-group" role="group" aria-label="Фільтр постів">
-            <a href="/"
-               class="btn btn-sm {% if not filter_type %}btn-dark{% else %}btn-outline-secondary{% endif %}">
-                Все посты
-            </a>
-            <a href="/?filter=my"
-               class="btn btn-sm {% if filter_type == 'my' %}btn-dark{% else %}btn-outline-secondary{% endif %}">
-                Мои посты
-            </a>
-        </div>
-        <div class="dropdown home-search__create">
-            <button class="btn btn-sm btn-success dropdown-toggle"
-                    type="button"
-                    id="createPostMenu"
-                    data-bs-toggle="dropdown"
-                    aria-expanded="false">
-                Створити пост
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="createPostMenu">
-                <li>
-                    <a class="dropdown-item" href="{% url 'create_post' %}?mode=event">
-                        Подія
-                    </a>
-                </li>
-                <li>
-                    <a class="dropdown-item" href="{% url 'create_post' %}?mode=feedback">
-                        Відгук про прочитану книгу
-                    </a>
-                </li>
-            </ul>
-        </div>
-    </div>
+<form class="home-advanced collapse{% if advanced_open %} show{% endif %} mb-3"
+      method="get"
+      action="{% url 'home' %}"
+      id="advancedSearch"
+      accept-charset="UTF-8"
+      role="search">
+    <input type="hidden" name="q" id="advQMirror" value="{{ q }}">
+    {% if filter_type == 'my' %}
+    <input type="hidden" name="filter" value="my">
     {% endif %}
-
-    <div class="collapse{% if advanced_open %} show{% endif %} mt-3 mt-lg-2" id="advancedSearch">
-        <div class="home-search__advanced p-3">
-            <p class="small text-muted mb-3 mb-md-2">Фільтри по полях довідника книг (усі книги в базі).</p>
-            <div class="row g-2">
-                <div class="col-md-4">
-                    <label class="form-label small mb-0" for="adv-isbn">ISBN</label>
-                    <input id="adv-isbn" class="form-control" name="isbn" value="{{ isbn }}" placeholder="978…">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label small mb-0" for="adv-authors">Автори</label>
-                    <input id="adv-authors" class="form-control" name="authors" value="{{ authors }}">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label small mb-0" for="adv-publisher">Видавець</label>
-                    <input id="adv-publisher" class="form-control" name="publisher" value="{{ publisher }}">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label small mb-0" for="adv-publish-date">Дата видання</label>
-                    <input id="adv-publish-date" class="form-control" name="publish_date" value="{{ publish_date }}" placeholder="1980">
-                </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small mb-0" for="adv-age-min">Вік від</label>
-                    <input id="adv-age-min" class="form-control" type="number" min="0" max="18" name="age_min" value="{{ age_min }}">
-                </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small mb-0" for="adv-age-max">Вік до</label>
-                    <input id="adv-age-max" class="form-control" type="number" min="0" max="18" name="age_max" value="{{ age_max }}">
-                </div>
+    <div class="home-advanced__panel p-3">
+        <p class="small text-muted mb-3 mb-md-2">Фільтри по полях довідника книг (усі книги в базі).</p>
+        <div class="row g-2">
+            <div class="col-md-4">
+                <label class="form-label small mb-0" for="adv-isbn">ISBN</label>
+                <input id="adv-isbn" class="form-control" name="isbn" value="{{ isbn }}" placeholder="978…">
             </div>
-            <div class="d-flex flex-wrap gap-2 mt-3">
-                <button type="submit" class="btn btn-dark btn-sm">Застосувати фільтри</button>
-                <a href="/" class="btn btn-outline-secondary btn-sm">Скинути</a>
+            <div class="col-md-4">
+                <label class="form-label small mb-0" for="adv-authors">Автори</label>
+                <input id="adv-authors" class="form-control" name="authors" value="{{ authors }}">
             </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-0" for="adv-publisher">Видавець</label>
+                <input id="adv-publisher" class="form-control" name="publisher" value="{{ publisher }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-0" for="adv-publish-date">Дата видання</label>
+                <input id="adv-publish-date" class="form-control" name="publish_date" value="{{ publish_date }}" placeholder="1980">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-0" for="adv-age-min">Вік від</label>
+                <input id="adv-age-min" class="form-control" type="number" min="0" max="18" name="age_min" value="{{ age_min }}">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-0" for="adv-age-max">Вік до</label>
+                <input id="adv-age-max" class="form-control" type="number" min="0" max="18" name="age_max" value="{{ age_max }}">
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <button type="submit" class="btn btn-dark btn-sm">Застосувати фільтри</button>
+            <a href="{% url 'home' %}" class="btn btn-outline-secondary btn-sm">Скинути</a>
         </div>
     </div>
 </form>

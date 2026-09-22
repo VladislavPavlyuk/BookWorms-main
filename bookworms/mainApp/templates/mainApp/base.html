@@ -16,7 +16,7 @@
 
 <body class="site-body">
 
-{% with un=request.resolver_match.url_name ns=request.resolver_match.namespace %}
+{% with un=request.resolver_match.url_name ns=request.resolver_match.namespace feed_filter=request.GET.filter %}
 
 <div class="site-bg" aria-hidden="true">
     <picture>
@@ -52,9 +52,11 @@
               method="get"
               action="{% url 'home' %}"
               role="search"
-              accept-charset="UTF-8">
+              accept-charset="UTF-8"
+              id="siteNavbarSearch">
             <input type="text"
                    name="q"
+                   id="siteNavbarSearchQ"
                    class="form-control form-control-sm site-navbar-search__input"
                    placeholder="Назва…"
                    value="{{ request.GET.q|default:'' }}"
@@ -67,6 +69,9 @@
                    enterkeyhint="search"
                    aria-label="Пошук книги за назвою"
                    data-title-autosearch>
+            {% if feed_filter == 'my' %}
+            <input type="hidden" name="filter" value="my">
+            {% endif %}
             {% if un == 'home' %}
             <button type="button"
                     class="btn btn-sm btn-outline-light site-navbar-search__btn site-navbar-search__btn--icon"
@@ -123,6 +128,12 @@
                     <a class="nav-link{% if un == 'exchange_requests' or un == 'message_thread' %} active{% endif %}"
                        href="{% url 'exchange_requests' %}">Обміни</a>
                 </li>
+                {% endif %}
+
+            </ul>
+
+            <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+                {% if user.is_authenticated %}
                 <li class="nav-item">
                     <a class="nav-link position-relative d-inline-block{% if un == 'notifications_inbox' %} active{% endif %}"
                        href="{% url 'notifications_inbox' %}"
@@ -136,12 +147,37 @@
                         </span>
                     </a>
                 </li>
-                {% endif %}
 
-            </ul>
+                <li class="nav-item site-navbar-feed">
+                    <div class="feed-switch" role="group" aria-label="All / mine">
+                        <a href="{% url 'home' %}"
+                           class="feed-switch__opt{% if feed_filter != 'my' %} is-on{% endif %}"
+                           {% if feed_filter != 'my' %}aria-current="true"{% endif %}>all</a>
+                        <a href="{% url 'home' %}?filter=my"
+                           class="feed-switch__opt{% if feed_filter == 'my' %} is-on{% endif %}"
+                           {% if feed_filter == 'my' %}aria-current="true"{% endif %}>mine</a>
+                    </div>
+                    <div class="dropdown">
+                        <button class="site-nav-plus"
+                                type="button"
+                                id="navCreatePost"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                                aria-label="Створити пост"
+                                title="Створити пост">
+                            +
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navCreatePost">
+                            <li>
+                                <a class="dropdown-item" href="{% url 'create_post' %}?mode=event">Подія</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'create_post' %}?mode=feedback">Відгук про прочитану книгу</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
 
-            <ul class="navbar-nav ms-auto align-items-lg-center">
-                {% if user.is_authenticated %}
                 <li class="nav-item">
                     {% if ns == 'profile_app' %}
                         {% shelf_user_link user css_class="nav-link text-white active" %}
