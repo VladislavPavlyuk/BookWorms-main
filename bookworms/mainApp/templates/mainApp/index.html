@@ -25,7 +25,25 @@
         </button>
     </div>
 
-    <div class="collapse{% if advanced_open %} show{% endif %} mt-3 mt-lg-3" id="advancedSearch">
+    <div class="home-search__toolbar">
+        <div class="home-search__filters btn-group" role="group" aria-label="Фільтр постів">
+            <a href="/"
+               class="btn btn-sm {% if not filter_type %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+                Все посты
+            </a>
+            {% if user.is_authenticated %}
+            <a href="/?filter=my"
+               class="btn btn-sm {% if filter_type == 'my' %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+                Мои посты
+            </a>
+            {% endif %}
+        </div>
+        {% if user.is_authenticated %}
+        <a href="{% url 'create_post' %}" class="btn btn-sm btn-success home-search__create">Створити пост</a>
+        {% endif %}
+    </div>
+
+    <div class="collapse{% if advanced_open %} show{% endif %} mt-3 mt-lg-2" id="advancedSearch">
         <div class="home-search__advanced p-3">
             <p class="small text-muted mb-3 mb-md-2">Фільтри по полях довідника книг (усі книги в базі).</p>
             <div class="row g-2">
@@ -106,17 +124,6 @@
 </section>
 <hr class="mb-4">
 {% endif %}
-
-{% if user.is_authenticated %}
-    <a href="{% url 'create_post' %}" class="btn btn-success mb-3">Створити пост</a>
-{% endif %}
-
-<div class="mb-3">
-    <a href="/" class="btn btn-secondary btn-sm">Все посты</a>
-    {% if user.is_authenticated %}
-        <a href="/?filter=my" class="btn btn-primary btn-sm">Мои посты</a>
-    {% endif %}
-</div>
 
 {% for post in posts %}
     <div class="card mb-3 shadow-sm" id="post-{{ post.id }}">
