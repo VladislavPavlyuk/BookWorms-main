@@ -235,4 +235,28 @@
     } else {
         initNotifBadgePoll();
     }
+
+    /** Показати / сховати пароль (login + register). */
+    function initPasswordToggles() {
+        document.querySelectorAll("[data-password-toggle]").forEach(function (btn) {
+            if (btn.getAttribute("data-bound") === "1") return;
+            btn.setAttribute("data-bound", "1");
+            btn.addEventListener("click", function () {
+                var group = btn.closest(".password-toggle") || btn.parentElement;
+                var input = group && group.querySelector('input[type="password"], input[type="text"]');
+                if (!input) return;
+                var show = input.getAttribute("type") === "password";
+                input.setAttribute("type", show ? "text" : "password");
+                btn.setAttribute("aria-pressed", show ? "true" : "false");
+                btn.setAttribute("aria-label", show ? "Сховати пароль" : "Показати пароль");
+                btn.classList.toggle("is-visible", show);
+            });
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initPasswordToggles);
+    } else {
+        initPasswordToggles();
+    }
 })();

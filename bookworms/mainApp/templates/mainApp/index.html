@@ -25,23 +25,21 @@
         </button>
     </div>
 
+    {% if user.is_authenticated %}
     <div class="home-search__toolbar">
         <div class="home-search__filters btn-group" role="group" aria-label="Фільтр постів">
             <a href="/"
                class="btn btn-sm {% if not filter_type %}btn-dark{% else %}btn-outline-secondary{% endif %}">
                 Все посты
             </a>
-            {% if user.is_authenticated %}
             <a href="/?filter=my"
                class="btn btn-sm {% if filter_type == 'my' %}btn-dark{% else %}btn-outline-secondary{% endif %}">
                 Мои посты
             </a>
-            {% endif %}
         </div>
-        {% if user.is_authenticated %}
         <a href="{% url 'create_post' %}" class="btn btn-sm btn-success home-search__create">Створити пост</a>
-        {% endif %}
     </div>
+    {% endif %}
 
     <div class="collapse{% if advanced_open %} show{% endif %} mt-3 mt-lg-2" id="advancedSearch">
         <div class="home-search__advanced p-3">
@@ -160,11 +158,11 @@
                     <form method="post" action="{% url 'toggle_like' post.id %}" style="display:inline;">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-outline-primary btn-sm">
-                            Лайк ({{ post.likes.count }})
+                            Вподобайка ({{ post.likes.count }})
                         </button>
                     </form>
                 {% else %}
-                    <span class="badge bg-light text-dark">Лайки: {{ post.likes.count }}</span>
+                    <span class="badge bg-light text-dark">Вподобайки: {{ post.likes.count }}</span>
                 {% endif %}
             </div>
 

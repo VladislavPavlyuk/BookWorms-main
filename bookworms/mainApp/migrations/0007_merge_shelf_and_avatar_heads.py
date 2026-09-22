@@ -1,4 +1,4 @@
-# Злиття двох гілок міграцій: 0006_merge (аватари/лайки) та 0006_shelf_return_pending.
+# Злиття двох гілок міграцій: 0006_merge (аватари/вподобайки) та 0006_shelf_return_pending.
 from django.db import migrations
 
 

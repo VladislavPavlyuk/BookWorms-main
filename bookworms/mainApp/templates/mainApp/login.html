@@ -4,10 +4,46 @@
 
 {% block content %}
 
-<form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Увійти</button>
-</form>
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h4 mb-3">Вхід</h1>
+                <form method="post" class="auth-form">
+                    {% csrf_token %}
+                    {% for field in form %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {% if field.html_name == 'password' or field.html_name == 'password1' or field.html_name == 'password2' %}
+                        <div class="input-group password-toggle">
+                            {{ field }}
+                            <button type="button"
+                                    class="btn btn-outline-secondary password-toggle__btn"
+                                    data-password-toggle
+                                    aria-label="Показати пароль"
+                                    aria-pressed="false">
+                                <span class="password-toggle__icon password-toggle__icon--show" aria-hidden="true"></span>
+                                <span class="password-toggle__icon password-toggle__icon--hide" aria-hidden="true"></span>
+                            </button>
+                        </div>
+                        {% else %}
+                        {{ field }}
+                        {% endif %}
+                        {% if field.errors %}
+                        <div class="text-danger small">{{ field.errors|striptags }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-dark">Увійти</button>
+                    </div>
+                </form>
+                <p class="mt-3 mb-0 small text-center">
+                    Немає акаунта? <a href="{% url 'register' %}">Реєстрація</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}

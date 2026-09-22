@@ -7,11 +7,11 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from "react-native";
 import { Link } from "expo-router";
 import { useAuth } from "../../src/auth";
 import { ApiError } from "../../src/api";
+import { PasswordField } from "../../src/PasswordField";
 import { colors } from "../../src/theme";
 
 export default function Login() {
@@ -46,11 +46,9 @@ export default function Login() {
         value={username}
         onChangeText={setUsername}
       />
-      <TextInput
+      <PasswordField
         placeholder="Пароль"
         placeholderTextColor={colors.muted}
-        secureTextEntry
-        style={styles.input}
         value={password}
         onChangeText={setPassword}
       />

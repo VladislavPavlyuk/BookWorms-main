@@ -13,7 +13,9 @@ class UserLoginForm(AuthenticationForm):
     )
     password = forms.CharField(
         label="Пароль",
-        widget=forms.PasswordInput(attrs={'class': 'form-control'})
+        widget=forms.PasswordInput(
+            attrs={"class": "form-control", "autocomplete": "current-password"}
+        ),
     )
 
 
@@ -47,8 +49,10 @@ class UserRegisterForm(UserCreationForm):
 
         if 'password1' in self.fields:
             self.fields['password1'].label = "Пароль"
+            self.fields["password1"].widget.attrs["autocomplete"] = "new-password"
         if 'password2' in self.fields:
             self.fields['password2'].label = "Повторіть пароль"
+            self.fields["password2"].widget.attrs["autocomplete"] = "new-password"
 
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'

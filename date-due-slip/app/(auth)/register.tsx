@@ -15,6 +15,7 @@ import { Link, useRouter } from "expo-router";
 import { AuthApi, setTokens } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { ApiError } from "../../src/api";
+import { PasswordField } from "../../src/PasswordField";
 import { colors } from "../../src/theme";
 
 export default function Register() {
@@ -124,11 +125,9 @@ export default function Register() {
           value={email}
           onChangeText={setEmail}
         />
-        <TextInput
+        <PasswordField
           placeholder="Пароль (мін. 8)"
           placeholderTextColor={colors.muted}
-          secureTextEntry
-          style={styles.input}
           value={password}
           onChangeText={setPassword}
         />

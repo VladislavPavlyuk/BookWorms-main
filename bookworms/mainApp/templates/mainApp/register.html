@@ -20,8 +20,22 @@
 
                         {% for field in form %}
                             <div class="mb-3">
-                                <label class="form-label font-weight-bold">{{ field.label }}</label>
+                                <label class="form-label font-weight-bold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {% if field.html_name == 'password' or field.html_name == 'password1' or field.html_name == 'password2' %}
+                                <div class="input-group password-toggle">
+                                    {{ field }}
+                                    <button type="button"
+                                            class="btn btn-outline-secondary password-toggle__btn"
+                                            data-password-toggle
+                                            aria-label="Показати пароль"
+                                            aria-pressed="false">
+                                        <span class="password-toggle__icon password-toggle__icon--show" aria-hidden="true"></span>
+                                        <span class="password-toggle__icon password-toggle__icon--hide" aria-hidden="true"></span>
+                                    </button>
+                                </div>
+                                {% else %}
                                 {{ field }}
+                                {% endif %}
                                 {% if field.errors %}
                                     <div class="text-danger small">
                                         {{ field.errors|striptags }}

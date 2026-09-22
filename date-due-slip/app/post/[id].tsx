@@ -46,7 +46,7 @@ export default function PostDetail() {
       const r = await FeedApi.like(post.id);
       setPost({ ...post, liked_by_me: r.liked, likes_count: r.likes_count });
     } catch (e) {
-      Alert.alert("Лайк", e instanceof ApiError ? e.message : String(e));
+      Alert.alert("Вподобайка", e instanceof ApiError ? e.message : String(e));
     }
   };
 

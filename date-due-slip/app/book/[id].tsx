@@ -101,7 +101,7 @@ export default function BookScreen() {
         </View>
       ))}
 
-      <Text style={styles.h}>Пости (лайки й коментарі — до ISBN)</Text>
+      <Text style={styles.h}>Пости (вподобайки й коментарі — до ISBN)</Text>
       {posts.length === 0 ? <Text style={styles.meta}>немає</Text> : null}
       {posts.map((p) => (
         <Pressable key={p.id} style={styles.card} onPress={() => router.push(`/post/${p.id}`)}>

@@ -54,7 +54,7 @@ class Post(models.Model):
         blank=True,
         related_name="posts",
         verbose_name="Книга у пості",
-        help_text="ISBN-каталог (Book), не примірник. Лайки/коментарі — до поста цієї книги.",
+        help_text="ISBN-каталог (Book), не примірник. Вподобайки/коментарі — до поста цієї книги.",
     )
     title = models.CharField(max_length=200, verbose_name="Заголовок")
     text = models.TextField(verbose_name="Текст")
@@ -409,7 +409,7 @@ class Comment(models.Model):
 
 
 class Like(models.Model):
-    """Лайк поста (пост → Book/ISBN). Не залежить від BookCopy."""
+    """Вподобайка поста (пост → Book/ISBN). Не залежить від BookCopy."""
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='likes')
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
 

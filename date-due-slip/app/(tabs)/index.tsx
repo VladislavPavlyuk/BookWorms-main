@@ -161,7 +161,7 @@ export default function Feed() {
         )
       );
     } catch (e) {
-      Alert.alert("Лайк", e instanceof ApiError ? e.message : String(e));
+      Alert.alert("Вподобайка", e instanceof ApiError ? e.message : String(e));
     }
   };
 

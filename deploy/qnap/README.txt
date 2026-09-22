@@ -36,7 +36,7 @@ QNAP TS-233 — Date Due Slip
 React Native клієнт: каталог date-due-slip/
   EXPO_PUBLIC_API_URL=http://192.168.0.213:18088
 
-Бізнес-логіка = BookWorms (полиця, ISBN, обмін/позика, пости, лайки, чат після запиту).
+Бізнес-логіка = BookWorms (полиця, ISBN, обмін/позика, пости, вподобайки, чат після запиту).
 Додано due_date на позику (Date Due Slip), за замовчуванням 14 днів.
 
 Пошта: Web3Forms (WEB3FORMS_ACCESS_KEY + PUBLIC_BASE_URL).

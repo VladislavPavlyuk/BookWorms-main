@@ -111,6 +111,88 @@ export function CloseGlyph({
   );
 }
 
+/** Classic eye (password visible). */
+export function EyeGlyph({
+  color = colors.ink,
+  size = 22,
+}: {
+  color?: string;
+  size?: number;
+}) {
+  const s = size;
+  return (
+    <View style={{ width: s, height: s * 0.65, alignItems: "center", justifyContent: "center" }}>
+      <View
+        style={{
+          width: s * 0.92,
+          height: s * 0.55,
+          borderRadius: s,
+          borderWidth: Math.max(1.5, s * 0.08),
+          borderColor: color,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <View
+          style={{
+            width: s * 0.28,
+            height: s * 0.28,
+            borderRadius: s * 0.14,
+            backgroundColor: color,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+/** Eye with slash (password hidden). */
+export function EyeOffGlyph({
+  color = colors.ink,
+  size = 22,
+}: {
+  color?: string;
+  size?: number;
+}) {
+  const s = size;
+  const t = Math.max(1.5, s * 0.08);
+  return (
+    <View style={{ width: s, height: s * 0.7, alignItems: "center", justifyContent: "center" }}>
+      <View
+        style={{
+          width: s * 0.92,
+          height: s * 0.55,
+          borderRadius: s,
+          borderWidth: t,
+          borderColor: color,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: 0.85,
+        }}
+      >
+        <View
+          style={{
+            width: s * 0.28,
+            height: s * 0.28,
+            borderRadius: s * 0.14,
+            backgroundColor: color,
+          }}
+        />
+      </View>
+      <View
+        style={{
+          position: "absolute",
+          width: s * 0.95,
+          height: t,
+          backgroundColor: color,
+          borderRadius: t,
+          transform: [{ rotate: "-35deg" }],
+        }}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   bar: {
     width: "100%",
