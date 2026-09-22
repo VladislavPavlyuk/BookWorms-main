@@ -51,27 +51,44 @@
         <form class="site-navbar-search"
               method="get"
               action="{% url 'home' %}"
-              role="search">
-            <input type="search"
+              role="search"
+              accept-charset="UTF-8">
+            <input type="text"
                    name="q"
                    class="form-control form-control-sm site-navbar-search__input"
                    placeholder="Назва…"
                    value="{{ request.GET.q|default:'' }}"
                    autocomplete="off"
-                   aria-label="Пошук книги за назвою">
-            <button type="submit" class="btn btn-sm btn-light site-navbar-search__btn">Шукати</button>
+                   autocorrect="off"
+                   autocapitalize="off"
+                   spellcheck="false"
+                   lang="uk"
+                   inputmode="text"
+                   enterkeyhint="search"
+                   aria-label="Пошук книги за назвою"
+                   data-title-autosearch>
             {% if un == 'home' %}
             <button type="button"
-                    class="btn btn-sm btn-outline-light site-navbar-search__btn"
+                    class="btn btn-sm btn-outline-light site-navbar-search__btn site-navbar-search__btn--icon"
                     data-bs-toggle="collapse"
                     data-bs-target="#advancedSearch"
                     aria-expanded="{% if advanced_open %}true{% else %}false{% endif %}"
-                    aria-controls="advancedSearch">
-                Рітельніше
+                    aria-controls="advancedSearch"
+                    aria-label="Фільтр"
+                    title="Фільтр">
+                <svg class="site-filter-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path fill="currentColor" d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
+                </svg>
             </button>
             {% else %}
-            <a class="btn btn-sm btn-outline-light site-navbar-search__btn"
-               href="{% url 'home' %}?adv=1">Рітельніше</a>
+            <a class="btn btn-sm btn-outline-light site-navbar-search__btn site-navbar-search__btn--icon"
+               href="{% url 'home' %}?adv=1"
+               aria-label="Фільтр"
+               title="Фільтр">
+                <svg class="site-filter-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path fill="currentColor" d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
+                </svg>
+            </a>
             {% endif %}
         </form>
 

@@ -99,7 +99,7 @@ export async function api<T>(path: string, opts: Opts = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   let token = opts.auth === false ? null : await getAccess();
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  if (opts.body !== undefined) headers["Content-Type"] = "application/json; charset=utf-8";
 
   const exec = (t: string | null) => {
     const h = { ...headers };

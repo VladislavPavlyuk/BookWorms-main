@@ -259,4 +259,64 @@
     } else {
         initPasswordToggles();
     }
+
+    /**
+     * Пошук за назвою: після ≥3 символів і паузи 1 с — submit форми.
+     * Не чіпаємо value під час composition (IME / мобільні клавіатури).
+     */
+    function initTitleAutoSearch() {
+        var timer = null;
+        document.querySelectorAll("[data-title-autosearch]").forEach(function (input) {
+            if (input.getAttribute("data-autosearch-bound") === "1") return;
+            input.setAttribute("data-autosearch-bound", "1");
+            var composing = false;
+            input.addEventListener("compositionstart", function () {
+                composing = true;
+                clearTimeout(timer);
+            });
+            input.addEventListener("compositionend", function () {
+                composing = false;
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+            });
+            input.addEventListener("input", function () {
+                if (composing) return;
+                clearTimeout(timer);
+                timer = setTimeout(function () {
+                    if (composing) return;
+                    var form = input.closest("form");
+                    if (!form) return;
+                    var v = (input.value || "").trim();
+                    var current = "";
+                    try {
+                        current = (new URL(window.location.href).searchParams.get("q") || "").trim();
+                    } catch (e) {
+                        current = "";
+                    }
+                    var vLen = Array.from(v).length;
+                    var curLen = Array.from(current).length;
+                    if (vLen >= 3) {
+                        if (v === current) return;
+                        if (typeof form.requestSubmit === "function") form.requestSubmit();
+                        else form.submit();
+                        return;
+                    }
+                    if (curLen >= 3 && vLen < 3) {
+                        var url = new URL(window.location.href);
+                        url.searchParams.delete("q");
+                        if (url.pathname === "/" || url.pathname.indexOf("/home") === 0) {
+                            window.location.href = url.pathname + (url.search || "") + (url.hash || "");
+                        } else {
+                            window.location.href = "/";
+                        }
+                    }
+                }, 1000);
+            });
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initTitleAutoSearch);
+    } else {
+        initTitleAutoSearch();
+    }
 })();

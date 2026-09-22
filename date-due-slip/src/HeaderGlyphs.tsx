@@ -75,6 +75,41 @@ export function BellGlyph({
   );
 }
 
+/** Classic funnel filter — no icon font. */
+export function FilterGlyph({
+  color = colors.ink,
+  size = 18,
+}: {
+  color?: string;
+  size?: number;
+}) {
+  const s = size;
+  return (
+    <View style={{ width: s, height: s, alignItems: "center", justifyContent: "center" }}>
+      <View
+        style={{
+          width: 0,
+          height: 0,
+          borderLeftWidth: s * 0.42,
+          borderRightWidth: s * 0.42,
+          borderTopWidth: s * 0.48,
+          borderLeftColor: "transparent",
+          borderRightColor: "transparent",
+          borderTopColor: color,
+        }}
+      />
+      <View
+        style={{
+          width: Math.max(2, Math.round(s * 0.18)),
+          height: s * 0.32,
+          backgroundColor: color,
+          marginTop: -1,
+        }}
+      />
+    </View>
+  );
+}
+
 /** Close ✕ for menu panel. */
 export function CloseGlyph({
   color = colors.ink,

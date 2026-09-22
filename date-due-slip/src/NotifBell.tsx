@@ -10,7 +10,7 @@ type Props = {
 };
 
 /**
- * Дзвіночок у header — paper/line/ink як «Рітельніше».
+ * Дзвіночок у header — paper/line/ink як «Фільтр».
  * Glyph намальований View'ами (без Ionicons — на збірках шрифт інколи дає порожній квадрат).
  */
 export function NotifBell({ variant = "paper" }: Props) {

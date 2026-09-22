@@ -386,6 +386,18 @@
         min-height: 36px;
     }
 
+    .site-navbar-search__btn--icon {
+        width: 36px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .site-navbar-search__btn--icon .site-filter-icon {
+        display: block;
+    }
+
     .site-navbar .navbar-toggler {
         order: 3;
         flex: 0 0 auto;

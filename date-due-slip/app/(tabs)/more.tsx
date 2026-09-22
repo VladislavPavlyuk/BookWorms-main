@@ -56,6 +56,9 @@ export default function More() {
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="default"
+            textContentType="username"
           />
           <Text style={styles.label}>Біографія</Text>
           <TextInput
@@ -63,6 +66,8 @@ export default function More() {
             value={biography}
             onChangeText={setBiography}
             multiline
+            autoCapitalize="sentences"
+            keyboardType="default"
           />
           <Pressable style={styles.btn} onPress={saveProfile}>
             <Text style={styles.btnText}>Зберегти профіль</Text>

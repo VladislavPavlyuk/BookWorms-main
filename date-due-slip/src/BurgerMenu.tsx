@@ -36,7 +36,7 @@ function pathMatch(pathname: string, href: string) {
   return pathname.includes(key) || pathname.includes(href);
 }
 
-/** Shared header control — paper/line/ink (same as «Рітельніше»). */
+/** Shared header control — paper/line/ink (same as «Фільтр»). */
 export function HeaderIconButton({
   onPress,
   accessibilityLabel,

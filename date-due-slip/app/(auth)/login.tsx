@@ -38,14 +38,17 @@ export default function Login() {
     >
       <Text style={styles.stamp}>РЕЧЕНЕЦЬ</Text>
       <Text style={styles.sub}>локальна мережа</Text>
-      <TextInput
-        placeholder="Логін"
-        placeholderTextColor={colors.muted}
-        autoCapitalize="none"
-        style={styles.input}
-        value={username}
-        onChangeText={setUsername}
-      />
+        <TextInput
+          placeholder="Логін"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="default"
+          textContentType="username"
+          style={styles.input}
+          value={username}
+          onChangeText={setUsername}
+        />
       <PasswordField
         placeholder="Пароль"
         placeholderTextColor={colors.muted}

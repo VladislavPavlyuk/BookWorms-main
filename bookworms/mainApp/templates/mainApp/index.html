@@ -13,15 +13,19 @@
                placeholder="Пошук книги за назвою…"
                value="{{ q }}"
                autocomplete="off"
-               aria-label="Пошук книги за назвою">
-        <button type="submit" class="btn btn-dark">Шукати</button>
+               aria-label="Пошук книги за назвою"
+               data-title-autosearch>
         <button type="button"
                 class="btn btn-outline-secondary"
                 data-bs-toggle="collapse"
                 data-bs-target="#advancedSearch"
                 aria-expanded="{% if advanced_open %}true{% else %}false{% endif %}"
-                aria-controls="advancedSearch">
-            Рітельніше
+                aria-controls="advancedSearch"
+                aria-label="Фільтр"
+                title="Фільтр">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
+            </svg>
         </button>
     </div>
 

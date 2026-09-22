@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -8,7 +8,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   ViewToken,
   useWindowDimensions,
   View,
@@ -17,35 +16,25 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError, AuthApi, BooksApi, FeedApi, type FeedSearch } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
-import { HeaderActions } from "../../src/BurgerMenu";
+import { hasFeedSearch, useFeedSearch } from "../../src/feedSearch";
 import { colors } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Book, Post } from "../../src/types";
-
-const EMPTY_ADV: FeedSearch = {
-  isbn: "",
-  authors: "",
-  publisher: "",
-  publish_date: "",
-  age_min: "",
-  age_max: "",
-};
-
-function hasSearch(s: FeedSearch) {
-  return Object.values(s).some((v) => (v || "").trim());
-}
 
 export default function Feed() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
   const landscape = winW > winH;
-  // chrome ≈ safe top + top bar + search row + filters
-  const chromeH = insets.top + (landscape ? 88 : 96);
-  const pageH = Math.max(200, winH - chromeH);
+  const chromeH = landscape ? 52 : 48;
+  const pageH = Math.max(200, winH - chromeH - 56);
   const lastMarked = useRef<number | null>(null);
   const skipResumeRef = useRef(false);
   const resumeFromId = useRef<number | null>(null);
+
+  const { search, clearSearch } = useFeedSearch();
+  const searching = hasFeedSearch(search);
+
   const [posts, setPosts] = useState<Post[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [page, setPage] = useState(1);
@@ -55,18 +44,7 @@ export default function Feed() {
   const [filter, setFilter] = useState<"all" | "my">("all");
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [q, setQ] = useState("");
-  const [appliedQ, setAppliedQ] = useState("");
-  const [adv, setAdv] = useState<FeedSearch>(EMPTY_ADV);
-  const [appliedAdv, setAppliedAdv] = useState<FeedSearch>(EMPTY_ADV);
-  const [advOpen, setAdvOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-
-  const search = useMemo<FeedSearch>(
-    () => ({ q: appliedQ, ...appliedAdv }),
-    [appliedQ, appliedAdv]
-  );
-  const searching = hasSearch(search);
 
   const loadPosts = async (
     p = 1,
@@ -139,20 +117,6 @@ export default function Feed() {
     minimumViewTime: 400,
   }).current;
 
-  const runSearch = () => {
-    setAppliedQ(q.trim());
-    setAppliedAdv({ ...adv });
-  };
-
-  const clearSearch = () => {
-    setQ("");
-    setAppliedQ("");
-    setAdv(EMPTY_ADV);
-    setAppliedAdv(EMPTY_ADV);
-    setAdvOpen(false);
-    setBooks([]);
-  };
-
   const like = async (id: number) => {
     try {
       const r = await FeedApi.like(id);
@@ -166,53 +130,23 @@ export default function Feed() {
     }
   };
 
-  const setAdvField = (key: keyof FeedSearch, value: string) =>
-    setAdv((prev) => ({ ...prev, [key]: value }));
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.screen }}>
-      <View style={[styles.stickyChrome, { paddingTop: insets.top }]}>
-        <View style={styles.searchRow}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Назва…"
-            placeholderTextColor={colors.muted}
-            value={q}
-            onChangeText={setQ}
-            onSubmitEditing={runSearch}
-            returnKeyType="search"
-          />
-          <Pressable style={styles.searchBtn} onPress={runSearch}>
-            <Text style={styles.searchBtnText}>Шукати</Text>
+      <View style={styles.filterBar}>
+        {searching ? (
+          <Pressable onPress={clearSearch}>
+            <Text style={styles.clear}>Скинути пошук</Text>
           </Pressable>
-          <Pressable
-            style={styles.advBtn}
-            onPress={() => setAdvOpen(true)}
-            accessibilityLabel="Рітельніше"
-          >
-            <Text style={styles.advBtnText} numberOfLines={1}>
-              Рітельніше
-            </Text>
-          </Pressable>
-          <HeaderActions />
-        </View>
-        <View style={styles.advRow}>
-          {searching && (
-            <Pressable onPress={clearSearch}>
-              <Text style={styles.clear}>Скинути</Text>
+        ) : (
+          <View style={styles.filters}>
+            <Pressable onPress={() => setFilter("all")}>
+              <Text style={[styles.chip, filter === "all" && styles.chipOn]}>Усі</Text>
             </Pressable>
-          )}
-          {!searching && (
-            <View style={styles.filters}>
-              <Pressable onPress={() => setFilter("all")}>
-                <Text style={[styles.chip, filter === "all" && styles.chipOn]}>Усі</Text>
-              </Pressable>
-              <Pressable onPress={() => setFilter("my")}>
-                <Text style={[styles.chip, filter === "my" && styles.chipOn]}>Мої</Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
+            <Pressable onPress={() => setFilter("my")}>
+              <Text style={[styles.chip, filter === "my" && styles.chipOn]}>Мої</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
 
       {searching ? (
@@ -244,9 +178,7 @@ export default function Feed() {
             }
           }}
           contentContainerStyle={
-            landscape
-              ? { paddingVertical: 8 }
-              : { paddingBottom: 40 }
+            landscape ? { paddingVertical: 8 } : { paddingBottom: 40 }
           }
           ListHeaderComponent={
             landscape ? null : (
@@ -319,7 +251,11 @@ export default function Feed() {
           ListEmptyComponent={<Text style={styles.empty}>Стрічка порожня.</Text>}
           renderItem={({ item }) => (
             <Pressable
-              style={[styles.card, landscape && styles.cardLandscape, landscape && { width: winW, height: pageH }]}
+              style={[
+                styles.card,
+                landscape && styles.cardLandscape,
+                landscape && { width: winW, height: pageH },
+              ]}
               onPress={() => router.push(`/post/${item.id}`)}
             >
               <ScrollView
@@ -353,49 +289,6 @@ export default function Feed() {
         />
       )}
 
-      <Modal visible={advOpen} animationType="slide" onRequestClose={() => setAdvOpen(false)}>
-        <View style={styles.modal}>
-          <Text style={styles.modalTitle}>Рітельніше · книги</Text>
-          <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-            {(
-              [
-                ["isbn", "ISBN"],
-                ["authors", "Автори"],
-                ["publisher", "Видавець"],
-                ["publish_date", "Дата видання"],
-                ["age_min", "Вік від (0–18)"],
-                ["age_max", "Вік до (0–18)"],
-              ] as const
-            ).map(([key, label]) => (
-              <View key={key} style={styles.field}>
-                <Text style={styles.label}>{label}</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholderTextColor={colors.muted}
-                  value={adv[key] || ""}
-                  onChangeText={(t) => setAdvField(key, t)}
-                  keyboardType={key.startsWith("age_") ? "number-pad" : "default"}
-                />
-              </View>
-            ))}
-          </ScrollView>
-          <View style={styles.modalActions}>
-            <Pressable
-              style={styles.searchBtn}
-              onPress={() => {
-                setAdvOpen(false);
-                runSearch();
-              }}
-            >
-              <Text style={styles.searchBtnText}>Застосувати</Text>
-            </Pressable>
-            <Pressable onPress={() => setAdvOpen(false)}>
-              <Text style={styles.clear}>Закрити</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
       {!searching && (
         <>
           <Pressable
@@ -411,7 +304,12 @@ export default function Feed() {
             <Text style={styles.fabPlus}>+</Text>
           </Pressable>
 
-          <Modal visible={createOpen} transparent animationType="fade" onRequestClose={() => setCreateOpen(false)}>
+          <Modal
+            visible={createOpen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setCreateOpen(false)}
+          >
             <View style={styles.createScrim}>
               <Pressable style={StyleSheet.absoluteFill} onPress={() => setCreateOpen(false)} />
               <View style={styles.createSheet}>
@@ -449,65 +347,17 @@ export default function Feed() {
 }
 
 const styles = StyleSheet.create({
-  stickyChrome: {
-    backgroundColor: colors.paperDark,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-    paddingBottom: 8,
-    zIndex: 20,
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  searchRow: {
-    flexDirection: "row",
-    flexWrap: "nowrap",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingTop: 6,
-    alignItems: "center",
-  },
-  searchInput: {
-    flex: 1,
-    minWidth: 0,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    color: colors.ink,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    fontSize: 14,
-    height: 36,
-  },
-  searchBtn: {
-    backgroundColor: colors.ink,
-    paddingHorizontal: 8,
-    height: 36,
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  searchBtnText: { color: colors.white, fontWeight: "700", fontSize: 11 },
-  advRow: {
+  filterBar: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
     gap: 10,
     paddingHorizontal: 12,
-    paddingTop: 6,
+    paddingVertical: 8,
+    backgroundColor: colors.paperDark,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
   },
-  advBtn: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    paddingHorizontal: 5,
-    height: 36,
-    justifyContent: "center",
-    flexShrink: 1,
-    maxWidth: 96,
-  },
-  advBtnText: { color: colors.ink, fontWeight: "700", fontSize: 10 },
   clear: { color: colors.stamp, fontWeight: "700" },
   filters: { flexDirection: "row", gap: 6 },
   chip: { color: colors.muted, fontWeight: "700", paddingHorizontal: 10, paddingVertical: 6 },
@@ -595,7 +445,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     flexGrow: 1,
   },
-  coverFull: {},
   cardPad: { paddingHorizontal: 16, paddingBottom: 14 },
   bookLink: {
     color: colors.stamp,
@@ -618,16 +467,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   empty: { textAlign: "center", color: colors.muted, marginTop: 24 },
-  modal: { flex: 1, backgroundColor: colors.paper, paddingTop: 48, paddingHorizontal: 16 },
-  modalTitle: { fontSize: 20, fontWeight: "800", color: colors.ink, marginBottom: 12 },
-  field: { marginBottom: 10 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 4, fontWeight: "600" },
-  input: {
-    borderBottomWidth: 1,
-    borderColor: colors.line,
-    color: colors.ink,
-    paddingVertical: 8,
-    fontSize: 16,
-  },
-  modalActions: { flexDirection: "row", alignItems: "center", gap: 16, paddingVertical: 16 },
 });

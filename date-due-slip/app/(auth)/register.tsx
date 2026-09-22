@@ -112,6 +112,9 @@ export default function Register() {
           placeholder="Логін"
           placeholderTextColor={colors.muted}
           autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="default"
+          textContentType="username"
           style={styles.input}
           value={username}
           onChangeText={setUsername}
@@ -137,6 +140,9 @@ export default function Register() {
           style={styles.input}
           value={biography}
           onChangeText={setBiography}
+          multiline
+          autoCapitalize="sentences"
+          keyboardType="default"
         />
         <Pressable style={styles.btn} onPress={onSubmit} disabled={busy}>
           <Text style={styles.btnText}>{busy ? "…" : "Зареєструватись"}</Text>
