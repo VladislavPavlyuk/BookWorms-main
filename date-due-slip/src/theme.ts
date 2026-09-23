@@ -15,4 +15,9 @@ export const colors = {
   danger: "#8B1E12",
 };
 
+/** ~+50% UI scale for RN controls/fonts */
+export const U = 1.5;
+export const s = (n: number) => Math.round(n * U);
+export const fs = (n: number) => Math.round(n * U);
+
 export const DEFAULT_API = "http://192.168.0.213:18088";

@@ -11,7 +11,7 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, NotifApi, ShelfApi, type AppNotification } from "../src/api";
 import { formatMsgTime } from "../src/chat";
-import { colors } from "../src/theme";
+import { colors, fs, s } from "../src/theme";
 import { useUnread } from "../src/unread";
 
 export default function NotificationsScreen() {
@@ -209,28 +209,41 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  h: { fontSize: 22, fontWeight: "800", color: colors.ink },
-  hint: { color: colors.muted, marginTop: 6, marginBottom: 12, lineHeight: 18 },
-  actions: { flexDirection: "row", gap: 16, marginBottom: 12 },
-  link: { color: colors.stamp, fontWeight: "800" },
-  empty: { color: colors.muted, marginTop: 24 },
+  h: { fontSize: fs(22), fontWeight: "800", color: colors.ink },
+  hint: {
+    color: colors.muted,
+    marginTop: 6,
+    marginBottom: s(12),
+    lineHeight: fs(18),
+    fontSize: fs(14),
+  },
+  actions: { flexDirection: "row", gap: s(16), marginBottom: s(12) },
+  link: { color: colors.stamp, fontWeight: "800", fontSize: fs(15) },
+  empty: { color: colors.muted, marginTop: s(24), fontSize: fs(15) },
   card: {
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
-    padding: 12,
-    marginBottom: 10,
+    padding: s(12),
+    marginBottom: s(10),
   },
   unread: { borderColor: colors.stamp, backgroundColor: "#FBE9E5" },
-  meta: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  body: { color: colors.ink, lineHeight: 20 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 10, alignItems: "center" },
+  meta: { color: colors.muted, fontSize: fs(12), marginBottom: 6 },
+  body: { color: colors.ink, lineHeight: fs(20), fontSize: fs(15) },
+  row: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: s(12),
+    marginTop: s(10),
+    alignItems: "center",
+  },
   confirmBtn: {
     backgroundColor: colors.stampOk,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: s(10),
+    paddingHorizontal: s(14),
+    minHeight: s(44),
   },
-  confirmBtnText: { color: "#fff", fontWeight: "800" },
-  chat: { color: colors.ink, fontWeight: "800" },
-  ex: { color: colors.stampOk, fontWeight: "800" },
+  confirmBtnText: { color: "#fff", fontWeight: "800", fontSize: fs(14) },
+  chat: { color: colors.ink, fontWeight: "800", fontSize: fs(15) },
+  ex: { color: colors.stampOk, fontWeight: "800", fontSize: fs(15) },
 });

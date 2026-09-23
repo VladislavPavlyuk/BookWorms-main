@@ -325,11 +325,12 @@
      */
     function initNavChrome() {
         var nav = document.querySelector(".site-navbar");
+        var syncNav = function () {
+            if (!nav) return;
+            var navH = Math.ceil(nav.getBoundingClientRect().height);
+            document.documentElement.style.setProperty("--site-nav-h", navH + "px");
+        };
         if (nav) {
-            function syncNav() {
-                var navH = Math.ceil(nav.getBoundingClientRect().height);
-                document.documentElement.style.setProperty("--site-nav-h", navH + "px");
-            }
             syncNav();
             window.addEventListener("resize", syncNav);
             window.addEventListener("orientationchange", syncNav);
@@ -385,6 +386,10 @@
             });
             adv.addEventListener("shown.bs.collapse", function () {
                 if (!isHomePage()) return;
+                /* Mobile panel scrolls itself — don't shove the page */
+                if (window.matchMedia && window.matchMedia("(max-width: 991.98px)").matches) {
+                    return;
+                }
                 var h = Math.ceil(adv.getBoundingClientRect().height);
                 if (h > 0) scrollToY(scrollBeforeAdv + h);
             });
@@ -393,6 +398,9 @@
             });
             adv.addEventListener("hidden.bs.collapse", function () {
                 if (!isHomePage()) return;
+                if (window.matchMedia && window.matchMedia("(max-width: 991.98px)").matches) {
+                    return;
+                }
                 scrollToY(scrollBeforeAdv);
             });
         }
@@ -401,6 +409,33 @@
             form.addEventListener("submit", function () {
                 mirror.value = navQ.value || "";
             });
+        }
+
+        /* Mobile: hide filter / feed / burger while typing; restore after 2s idle */
+        if (navQ) {
+            var chromeIdleTimer = null;
+            var CHROME_IDLE_MS = 2000;
+
+            function setChromeCompact(on) {
+                document.documentElement.classList.toggle("search-chrome-compact", !!on);
+                syncNav();
+            }
+
+            function onSearchTyping() {
+                if (window.matchMedia && !window.matchMedia("(max-width: 991.98px)").matches) {
+                    setChromeCompact(false);
+                    return;
+                }
+                setChromeCompact(true);
+                if (chromeIdleTimer) clearTimeout(chromeIdleTimer);
+                chromeIdleTimer = setTimeout(function () {
+                    setChromeCompact(false);
+                    chromeIdleTimer = null;
+                }, CHROME_IDLE_MS);
+            }
+
+            navQ.addEventListener("input", onSearchTyping);
+            navQ.addEventListener("compositionend", onSearchTyping);
         }
     }
 

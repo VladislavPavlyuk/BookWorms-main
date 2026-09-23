@@ -11,7 +11,122 @@
     <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=m150-7">
+    <style id="chrome-transparent">
+      .site-navbar .navbar-brand,
+      .site-navbar .navbar-brand.active {
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      .site-navbar .navbar-logo {
+        background: transparent !important;
+        border-radius: 0 !important;
+        object-fit: contain !important;
+      }
+      .site-navbar-search__btn--icon {
+        background: transparent !important;
+        border-color: transparent !important;
+        box-shadow: none !important;
+      }
+      .site-navbar .navbar-toggler {
+        background: transparent !important;
+        border-color: transparent !important;
+        box-shadow: none !important;
+      }
+      .site-navbar #nav-notif-link,
+      .site-navbar #nav-notif-link.active {
+        background: transparent !important;
+        box-shadow: none !important;
+        color: rgba(244, 240, 230, 0.92) !important;
+      }
+    </style>
+    <style id="mobile-ui-scale">
+      /* Inline so deploy/cache can't serve a stale style.css without +50% mobile UI */
+      @media (max-width: 991.98px), (max-width: 1200px) and (hover: none) and (pointer: coarse) {
+        html { font-size: 24px !important; }
+        body.site-body { font-size: 24px !important; }
+        .site-navbar .nav-link,
+        .site-navbar .btn.nav-link {
+          min-height: 54px !important;
+          font-size: 24px !important;
+          padding-top: 0.55rem !important;
+          padding-bottom: 0.55rem !important;
+        }
+        .site-navbar .navbar-toggler {
+          min-height: 54px !important;
+          min-width: 54px !important;
+          padding: 0.5rem 0.6rem !important;
+        }
+        .site-navbar .navbar-logo { width: 81px !important; height: 81px !important; }
+        .site-navbar-search__input {
+          height: 54px !important;
+          font-size: 24px !important;
+          padding: 0.4rem 0.7rem !important;
+        }
+        .site-navbar-search__btn {
+          height: 54px !important;
+          min-height: 54px !important;
+          font-size: 20px !important;
+          padding: 0 0.85rem !important;
+        }
+        .site-navbar-search__btn--icon {
+          width: 54px !important;
+          height: 54px !important;
+          min-height: 54px !important;
+        }
+        .site-navbar-search__btn--icon .site-filter-icon {
+          width: 28px !important;
+          height: 28px !important;
+        }
+        .feed-switch__opt {
+          min-width: 3.4rem !important;
+          padding: 0.4rem 0.9rem !important;
+          font-size: 18px !important;
+        }
+        .site-nav-plus {
+          width: 54px !important;
+          height: 54px !important;
+          font-size: 36px !important;
+        }
+        .site-content { font-size: 24px !important; }
+        .btn, .site-content .btn {
+          min-height: 54px !important;
+          font-size: 22px !important;
+          padding: 0.55rem 1rem !important;
+        }
+        .btn-sm, .site-content .btn-sm {
+          min-height: 48px !important;
+          font-size: 20px !important;
+          padding: 0.45rem 0.85rem !important;
+        }
+        .form-control, .form-select,
+        .site-content .form-control, .site-content .form-select,
+        input.form-control, textarea.form-control, select.form-select {
+          font-size: 24px !important;
+          min-height: 54px !important;
+          padding: 0.55rem 0.75rem !important;
+        }
+        textarea.form-control, .site-content textarea { min-height: 9rem !important; }
+        .form-label, label, .site-content .form-label, .site-content label {
+          font-size: 20px !important;
+        }
+        .site-content p, .site-content li { font-size: 22px !important; }
+        .site-content .small, .site-content small, .small { font-size: 18px !important; }
+        .password-toggle__btn {
+          width: 54px !important;
+          min-width: 54px !important;
+          min-height: 54px !important;
+        }
+        #advancedSearch.show {
+          max-height: calc(100vh - var(--site-nav-h, 3.5rem) - 0.75rem) !important;
+          max-height: calc(100dvh - var(--site-nav-h, 3.5rem) - 0.75rem) !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
+        }
+      }
+    </style>
 </head>
 
 <body class="site-body">
@@ -41,7 +156,7 @@
            href="/"
            aria-label="Реченець"
            title="Реченець">
-            <img src="{% static 'img/logo.png' %}"
+            <img src="{% static 'img/logo-transparent.png' %}"
                  alt="Реченець"
                  class="navbar-logo"
                  width="36"
@@ -296,7 +411,7 @@
 {% endwith %}
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="{% static 'js/script.js' %}"></script>
+<script src="{% static 'js/script.js' %}?v=search-chrome-2"></script>
 
 </body>
 </html>

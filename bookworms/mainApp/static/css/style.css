@@ -151,9 +151,10 @@
 .navbar-logo {
     width: 36px;
     height: 36px;
-    object-fit: cover;
-    border-radius: 8px;
+    object-fit: contain;
+    border-radius: 0;
     flex-shrink: 0;
+    background: transparent;
 }
 
 .navbar-brand {
@@ -342,11 +343,54 @@
     border-radius: 10px;
     line-height: 0;
     flex: 0 0 auto;
+    background: transparent !important;
+    box-shadow: none !important;
 }
 
 .site-navbar .navbar-brand.active {
-    background: rgba(244, 240, 230, 0.22);
-    box-shadow: inset 0 0 0 1px rgba(244, 240, 230, 0.55);
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* filter / notif / burger — no filled chip behind icon */
+.site-navbar-search__btn--icon {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
+.site-navbar-search__btn--icon:hover,
+.site-navbar-search__btn--icon:focus,
+.site-navbar-search__btn--icon[aria-expanded="true"] {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: transparent !important;
+    color: #fff;
+}
+
+.site-navbar .navbar-toggler {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
+.site-navbar .navbar-toggler:hover,
+.site-navbar .navbar-toggler:focus,
+.site-navbar .navbar-toggler:not(:disabled):not(.disabled):active {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: transparent !important;
+}
+
+.site-navbar #nav-notif-link,
+.site-navbar #nav-notif-link.active {
+    background: transparent !important;
+    box-shadow: none !important;
+    color: rgba(244, 240, 230, 0.92) !important;
+}
+
+.site-navbar #nav-notif-link:hover,
+.site-navbar #nav-notif-link:focus {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #fff !important;
 }
 
 .site-navbar .nav-link {
@@ -455,6 +499,7 @@
         order: 2;
         max-width: none;
         flex: 1 1 0;
+        transition: flex-basis 0.15s ease;
     }
 
     .site-navbar-feed--bar {
@@ -474,19 +519,44 @@
         flex-basis: 100%;
         flex-grow: 1;
     }
+
+    /* typing: hide filter / feed / burger — search takes freed space */
+    html.search-chrome-compact #siteFilterToggle,
+    html.search-chrome-compact .site-navbar-feed--bar,
+    html.search-chrome-compact .site-navbar .navbar-toggler {
+        display: none !important;
+    }
+
+    html.search-chrome-compact .site-navbar-search {
+        flex: 1 1 auto;
+        max-width: none;
+        min-width: 0;
+    }
+
+    /* Advanced filters: scroll inside viewport under fixed navbar */
+    #advancedSearch.show {
+        max-height: calc(100vh - var(--site-nav-h, 3.5rem) - 0.75rem) !important;
+        max-height: calc(100dvh - var(--site-nav-h, 3.5rem) - 0.75rem) !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+    }
+
+    #advancedSearch.show .site-advanced-collapse__inner,
+    #advancedSearch.show .home-advanced,
+    #advancedSearch.show .home-advanced__panel {
+        overflow: visible;
+    }
+
+    #advancedSearch.show .home-advanced__panel {
+        margin-bottom: 0.5rem;
+    }
 }
 
 @media (max-width: 575.98px) {
-    .site-navbar-search__btn {
-        padding: 0 0.4rem;
-        font-size: 0.72rem;
-    }
-
-    .feed-switch__opt {
-        min-width: 2.2rem;
-        padding: 0.2rem 0.5rem;
-        font-size: 0.68rem;
-    }
+    /* keep touch targets large — sizes come from 991.98px 1.5× scale */
 }
 
 @media (min-width: 992px) {
@@ -544,15 +614,24 @@ html {
     margin-right: -0.25rem;
 }
 
-/* Touch-friendlier controls */
-@media (max-width: 991.98px) {
+/* Mobile: ~+50% fonts / fields / buttons (px + !important so Bootstrap / cache don't win) */
+@media (max-width: 991.98px), (max-width: 1200px) and (hover: none) and (pointer: coarse) {
+    html {
+        font-size: 24px !important; /* 16×1.5 */
+    }
+
+    body.site-body {
+        font-size: 24px !important;
+    }
+
     .site-navbar .nav-link,
     .site-navbar .btn.nav-link {
-        padding-top: 0.65rem;
-        padding-bottom: 0.65rem;
-        min-height: 44px;
+        padding-top: 0.55rem !important;
+        padding-bottom: 0.55rem !important;
+        min-height: 54px !important;
         display: flex;
         align-items: center;
+        font-size: 24px !important;
     }
 
     .site-navbar .navbar-collapse {
@@ -561,16 +640,68 @@ html {
         margin-top: 0.5rem;
     }
 
+    .site-navbar .navbar-toggler {
+        padding: 0.5rem 0.6rem !important;
+        min-height: 54px !important;
+        min-width: 54px !important;
+    }
+
+    .site-navbar .navbar-logo {
+        width: 81px !important;
+        height: 81px !important;
+    }
+
+    .site-navbar-search__input {
+        height: 54px !important;
+        font-size: 24px !important;
+        padding: 0.4rem 0.7rem !important;
+    }
+
+    .site-navbar-search__btn {
+        height: 54px !important;
+        min-height: 54px !important;
+        padding: 0 0.85rem !important;
+        font-size: 20px !important;
+    }
+
+    .site-navbar-search__btn--icon {
+        width: 54px !important;
+        height: 54px !important;
+        min-height: 54px !important;
+    }
+
+    .site-navbar-search__btn--icon .site-filter-icon {
+        width: 28px !important;
+        height: 28px !important;
+    }
+
+    .feed-switch {
+        padding: 3px;
+    }
+
+    .feed-switch__opt {
+        min-width: 3.4rem !important;
+        padding: 0.4rem 0.9rem !important;
+        font-size: 18px !important;
+    }
+
+    .site-nav-plus {
+        width: 54px !important;
+        height: 54px !important;
+        font-size: 36px !important;
+    }
+
     .site-main {
         padding-top: calc(var(--site-nav-h, 3.5rem) + 0.25rem);
     }
 
     .site-content {
         margin-top: 0.75rem;
-        padding: 1rem 0.9rem 1.35rem;
+        padding: 1.1rem 1rem 1.5rem;
         border-radius: 0;
         box-shadow: none;
         background: rgba(247, 241, 230, 0.92);
+        font-size: 24px !important;
     }
 
     .site-bg__img {
@@ -578,16 +709,25 @@ html {
     }
 
     .home-intro__brand {
-        font-size: clamp(1.45rem, 7vw, 1.85rem);
+        font-size: clamp(28px, 8vw, 40px) !important;
     }
 
     .home-intro__tag {
-        font-size: 0.95rem;
+        font-size: 22px !important;
     }
 
-    /* Forms / buttons stack cleanly */
-    .site-content .btn {
-        min-height: 42px;
+    .site-content .btn,
+    .btn {
+        min-height: 54px !important;
+        font-size: 22px !important;
+        padding: 0.55rem 1rem !important;
+    }
+
+    .site-content .btn-sm,
+    .btn-sm {
+        min-height: 48px !important;
+        font-size: 20px !important;
+        padding: 0.45rem 0.85rem !important;
     }
 
     .site-content .form-control,
@@ -595,40 +735,91 @@ html {
     .site-content input[type="text"],
     .site-content input[type="password"],
     .site-content input[type="email"],
-    .site-content textarea {
-        font-size: 16px; /* avoid iOS zoom on focus */
+    .site-content input[type="number"],
+    .site-content input[type="search"],
+    .site-content textarea,
+    .home-advanced__panel .form-control,
+    .form-control,
+    .form-select {
+        font-size: 24px !important;
+        min-height: 54px !important;
+        padding: 0.55rem 0.75rem !important;
+    }
+
+    .site-content textarea,
+    textarea.form-control {
+        min-height: 9rem !important;
+    }
+
+    .site-content .form-label,
+    .site-content label,
+    .home-advanced__panel .form-label,
+    .form-label {
+        font-size: 20px !important;
+    }
+
+    .site-content p,
+    .site-content li,
+    .site-content .card-text {
+        font-size: 22px !important;
+    }
+
+    .site-content .small,
+    .site-content small,
+    .small {
+        font-size: 18px !important;
+    }
+
+    .site-content h1,
+    .site-content h2 {
+        font-size: 32px !important;
+    }
+
+    .site-content h3,
+    .site-content h4,
+    .site-content .h5,
+    .site-content h5 {
+        font-size: 26px !important;
     }
 
     .site-content .card .card-body {
-        padding: 1rem;
+        padding: 1.15rem;
+    }
+
+    .site-content .card-title {
+        font-size: 24px !important;
     }
 
     .site-content .row > [class*="col-"] {
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.35rem;
     }
 
-    /* Post book cards: cover + text wrap */
     .post-book-card__cover,
     .post-book-card__placeholder {
-        width: 72px;
-        height: 106px;
+        width: 108px;
+        height: 159px;
+    }
+
+    .password-toggle__btn {
+        width: 54px !important;
+        min-width: 54px !important;
+        min-height: 54px !important;
+    }
+
+    .home-advanced__panel {
+        padding: 1.15rem !important;
+    }
+
+    .home-advanced__panel .btn {
+        min-height: 54px !important;
+        font-size: 22px !important;
     }
 }
 
 @media (max-width: 575.98px) {
     .site-content {
-        padding-left: 0.75rem;
-        padding-right: 0.75rem;
-    }
-
-    .site-content h1,
-    .site-content h2 {
-        font-size: 1.35rem;
-    }
-
-    .site-content h3,
-    .site-content h4 {
-        font-size: 1.15rem;
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
     }
 
     .site-content .btn-group {

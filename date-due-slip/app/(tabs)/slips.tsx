@@ -13,7 +13,7 @@ import { ApiError, ShelfApi, SlipApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { HistoryLink } from "../../src/HistoryLink";
 import { useAuth } from "../../src/auth";
-import { colors } from "../../src/theme";
+import { colors, fs, s } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Shelf } from "../../src/types";
 
@@ -177,23 +177,30 @@ export default function Slips() {
 }
 
 const styles = StyleSheet.create({
-  hint: { color: colors.muted, marginBottom: 16, fontSize: 13, paddingHorizontal: 16, paddingTop: 12 },
+  hint: {
+    color: colors.muted,
+    marginBottom: s(16),
+    fontSize: fs(13),
+    paddingHorizontal: s(16),
+    paddingTop: s(12),
+  },
   sec: {
     color: colors.ink,
     fontWeight: "800",
     letterSpacing: 1,
     marginBottom: 8,
     marginTop: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: s(16),
+    fontSize: fs(15),
   },
-  empty: { color: colors.muted, marginBottom: 16, paddingHorizontal: 16 },
+  empty: { color: colors.muted, marginBottom: s(16), paddingHorizontal: s(16), fontSize: fs(14) },
   slip: {
     borderWidth: 0,
     borderBottomWidth: 2,
     borderColor: colors.ink,
     backgroundColor: colors.white,
     padding: 0,
-    paddingBottom: 16,
+    paddingBottom: s(16),
     marginBottom: 0,
     borderStyle: "solid",
     overflow: "hidden",
@@ -204,35 +211,53 @@ const styles = StyleSheet.create({
     color: colors.stamp,
     fontWeight: "800",
     letterSpacing: 2,
-    fontSize: 12,
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    fontSize: fs(12),
+    paddingHorizontal: s(16),
+    paddingTop: s(12),
   },
-  title: { color: colors.ink, fontSize: 16, fontWeight: "700", marginTop: 8, paddingHorizontal: 16 },
-  meta: { color: colors.muted, marginTop: 2, paddingHorizontal: 16 },
-  stampBox: { marginTop: 12, alignItems: "flex-end", paddingHorizontal: 16 },
-  days: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  title: {
+    color: colors.ink,
+    fontSize: fs(16),
+    fontWeight: "700",
+    marginTop: 8,
+    paddingHorizontal: s(16),
+  },
+  meta: { color: colors.muted, marginTop: 2, paddingHorizontal: s(16), fontSize: fs(13) },
+  stampBox: { marginTop: s(12), alignItems: "flex-end", paddingHorizontal: s(16) },
+  days: { color: colors.muted, fontSize: fs(12), marginTop: 2 },
   footerRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
-    marginTop: 12,
-    paddingHorizontal: 16,
+    marginTop: s(12),
+    paddingHorizontal: s(16),
     borderTopWidth: 1,
     borderTopColor: colors.line,
     paddingTop: 8,
   },
   footer: {
     color: colors.ink,
-    fontSize: 12,
+    fontSize: fs(12),
   },
-  stamp: { color: colors.stampOk, fontWeight: "900", fontSize: 18, letterSpacing: 1 },
+  stamp: { color: colors.stampOk, fontWeight: "900", fontSize: fs(18), letterSpacing: 1 },
   confirmBtn: {
-    marginTop: 12,
-    marginHorizontal: 16,
+    marginTop: s(12),
+    marginHorizontal: s(16),
     backgroundColor: colors.stampOk,
-    paddingVertical: 12,
+    paddingVertical: s(12),
+    minHeight: s(48),
   },
-  confirmBtnText: { color: "#fff", fontWeight: "800", textAlign: "center" },
-  chat: { color: colors.stamp, fontWeight: "800", marginTop: 10, paddingHorizontal: 16 },
+  confirmBtnText: {
+    color: "#fff",
+    fontWeight: "800",
+    textAlign: "center",
+    fontSize: fs(15),
+  },
+  chat: {
+    color: colors.stamp,
+    fontWeight: "800",
+    marginTop: s(10),
+    paddingHorizontal: s(16),
+    fontSize: fs(15),
+  },
 });

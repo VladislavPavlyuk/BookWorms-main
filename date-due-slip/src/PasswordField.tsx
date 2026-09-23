@@ -7,7 +7,7 @@ import {
   type TextInputProps,
 } from "react-native";
 import { EyeGlyph, EyeOffGlyph } from "./HeaderGlyphs";
-import { colors } from "./theme";
+import { colors, fs, s } from "./theme";
 
 /** Пароль + класичний eye-switch (без icon font). */
 export function PasswordField({
@@ -33,9 +33,9 @@ export function PasswordField({
         accessibilityLabel={visible ? "Сховати пароль" : "Показати пароль"}
       >
         {visible ? (
-          <EyeOffGlyph color={colors.muted} size={22} />
+          <EyeOffGlyph color={colors.muted} size={s(22)} />
         ) : (
-          <EyeGlyph color={colors.muted} size={22} />
+          <EyeGlyph color={colors.muted} size={s(22)} />
         )}
       </Pressable>
     </View>
@@ -48,21 +48,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: 1,
     borderColor: colors.line,
-    marginBottom: 16,
+    marginBottom: s(16),
   },
   input: {
     flex: 1,
     minWidth: 0,
     color: colors.ink,
-    paddingVertical: 10,
-    paddingRight: 8,
-    fontSize: 16,
+    paddingVertical: s(12),
+    paddingRight: s(8),
+    fontSize: fs(16),
     borderBottomWidth: 0,
     marginBottom: 0,
   },
   toggle: {
-    width: 40,
-    height: 36,
+    width: s(40),
+    height: s(36),
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,

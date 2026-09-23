@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { BellGlyph } from "./HeaderGlyphs";
-import { colors } from "./theme";
+import { colors, fs, s } from "./theme";
 import { useUnread } from "./unread";
 
 type Props = {
@@ -34,7 +34,7 @@ export function NotifBell({ variant = "paper" }: Props) {
         unread > 0 ? `Сповіщення, непрочитаних ${unread}` : "Сповіщення"
       }
     >
-      <BellGlyph color={glyphColor} size={20} />
+      <BellGlyph color={glyphColor} size={s(20)} />
       {unread > 0 ? (
         <View
           style={[styles.badge, solid && styles.badgeOnSolid]}
@@ -49,21 +49,20 @@ export function NotifBell({ variant = "paper" }: Props) {
 
 const styles = StyleSheet.create({
   paper: {
-    width: 36,
-    height: 36,
+    width: s(36),
+    height: s(36),
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
+    backgroundColor: "transparent",
+    borderWidth: 0,
     marginLeft: 4,
   },
   paperPressed: {
-    backgroundColor: colors.paperDark,
+    backgroundColor: "rgba(42, 31, 20, 0.08)",
   },
   solid: {
-    width: 36,
-    height: 36,
+    width: s(36),
+    height: s(36),
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.ink,
@@ -76,8 +75,8 @@ const styles = StyleSheet.create({
   },
   plain: {
     marginRight: 8,
-    minWidth: 44,
-    height: 40,
+    minWidth: s(44),
+    height: s(40),
     paddingHorizontal: 6,
     alignItems: "center",
     justifyContent: "center",
@@ -87,9 +86,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 1,
     right: 1,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
+    minWidth: s(16),
+    height: s(16),
+    borderRadius: s(8),
     backgroundColor: colors.stamp,
     alignItems: "center",
     justifyContent: "center",
@@ -104,9 +103,9 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: colors.white,
-    fontSize: 9,
+    fontSize: fs(10),
     fontWeight: "800",
-    lineHeight: 11,
+    lineHeight: fs(12),
     includeFontPadding: false,
   },
 });

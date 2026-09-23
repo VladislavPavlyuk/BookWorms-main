@@ -4,19 +4,20 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { GestureHandlerRootView, ScrollView } from "react-native-gesture-handler";
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { FeedSearch } from "./api";
 import { HeaderActions } from "./BurgerMenu";
 import { EMPTY_FEED_SEARCH, useFeedSearch } from "./feedSearch";
 import { CloseGlyph, FilterGlyph } from "./HeaderGlyphs";
-import { colors } from "./theme";
+import { colors, fs, s } from "./theme";
 
 /**
  * Uncontrolled search field.
@@ -64,13 +65,17 @@ const SearchField = memo(function SearchField({
   );
 });
 
+const CHROME_IDLE_MS = 2000;
+
 /**
  * Спільний хром: [‹] logo | search | ⧩ filter | 🔔 | ☰
+ * While typing: hide filter/notif/burger so search expands; restore after 2s idle.
  */
 export function SiteHeader() {
   const router = useRouter();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
   const { search, setSearch, clearSearch } = useFeedSearch();
 
   const typedQ = useRef(search.q || "");
@@ -84,11 +89,20 @@ export function SiteHeader() {
     age_max: search.age_max || "",
   });
   const [advOpen, setAdvOpen] = useState(false);
+  const [chromeHidden, setChromeHidden] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chromeIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingRef = useRef(false);
 
   const inTabs = segments[0] === "(tabs)";
   const showBack = !inTabs;
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (chromeIdleRef.current) clearTimeout(chromeIdleRef.current);
+    };
+  }, []);
 
   // sync from context only when not typing (Скинути etc.)
   useEffect(() => {
@@ -105,6 +119,15 @@ export function SiteHeader() {
     });
   }, [search]);
 
+  const scheduleChromeRestore = useCallback(() => {
+    setChromeHidden(true);
+    if (chromeIdleRef.current) clearTimeout(chromeIdleRef.current);
+    chromeIdleRef.current = setTimeout(() => {
+      setChromeHidden(false);
+      chromeIdleRef.current = null;
+    }, CHROME_IDLE_MS);
+  }, []);
+
   const applySearch = useCallback(
     (next: FeedSearch) => {
       typingRef.current = false;
@@ -118,6 +141,7 @@ export function SiteHeader() {
     (t: string) => {
       typingRef.current = true;
       typedQ.current = t;
+      scheduleChromeRestore();
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         const trimmed = typedQ.current.trim();
@@ -134,7 +158,7 @@ export function SiteHeader() {
         }
       }, 1000);
     },
-    [adv, applySearch]
+    [adv, applySearch, scheduleChromeRestore]
   );
 
   const runSearch = useCallback(() => {
@@ -160,9 +184,11 @@ export function SiteHeader() {
 
   const resetAll = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (chromeIdleRef.current) clearTimeout(chromeIdleRef.current);
     typingRef.current = false;
     typedQ.current = "";
     setDisplayQ("");
+    setChromeHidden(false);
     setAdv(EMPTY_FEED_SEARCH);
     clearSearch();
   };
@@ -192,7 +218,7 @@ export function SiteHeader() {
           accessibilityLabel="Реченець — головна"
         >
           <Image
-            source={require("../assets/icon.png")}
+            source={require("../assets/logo-transparent.png")}
             style={styles.logo}
             resizeMode="contain"
           />
@@ -204,26 +230,52 @@ export function SiteHeader() {
           onSubmit={runSearch}
         />
 
-        <Pressable
-          style={styles.advBtn}
-          onPress={() => setAdvOpen(true)}
-          accessibilityLabel="Фільтр"
-        >
-          <FilterGlyph color={colors.ink} size={18} />
-        </Pressable>
-
-        <HeaderActions />
+        {!chromeHidden ? (
+          <>
+            <Pressable
+              style={styles.advBtn}
+              onPress={() => setAdvOpen(true)}
+              accessibilityLabel="Фільтр"
+            >
+              <FilterGlyph color={colors.ink} size={s(18)} />
+            </Pressable>
+            <HeaderActions />
+          </>
+        ) : null}
       </View>
 
-      <Modal visible={advOpen} animationType="slide" onRequestClose={() => setAdvOpen(false)}>
-        <View style={[styles.modal, { paddingTop: insets.top + 12 }]}>
+      <Modal
+        visible={advOpen}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setAdvOpen(false)}
+        statusBarTranslucent
+      >
+        <GestureHandlerRootView
+          style={[
+            styles.modalRoot,
+            {
+              height: winH,
+              paddingTop: insets.top + 12,
+              paddingBottom: Math.max(insets.bottom, 12),
+            },
+          ]}
+        >
           <View style={styles.modalHead}>
             <Text style={styles.modalTitle}>Фільтр · книги</Text>
             <Pressable onPress={() => setAdvOpen(false)} hitSlop={8} style={styles.modalClose}>
               <CloseGlyph color={colors.ink} size={18} />
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator
+            bounces
+            nestedScrollEnabled
+          >
             {(
               [
                 ["isbn", "ISBN"],
@@ -242,32 +294,32 @@ export function SiteHeader() {
                   value={adv[key] || ""}
                   onChangeText={(t) => setAdvField(key, t)}
                   keyboardType={key.startsWith("age_") ? "number-pad" : "default"}
-                  autoCapitalize={key === "isbn" ? "none" : "none"}
+                  autoCapitalize="none"
                   autoCorrect={false}
                   spellCheck={false}
                   underlineColorAndroid="transparent"
                 />
               </View>
             ))}
+            <View style={styles.modalActions}>
+              <Pressable style={styles.searchBtnWide} onPress={applyAdvanced}>
+                <Text style={styles.searchBtnText}>Застосувати</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  resetAll();
+                  setAdvOpen(false);
+                  if (!inTabs) router.push("/(tabs)" as never);
+                }}
+              >
+                <Text style={styles.clear}>Скинути</Text>
+              </Pressable>
+              <Pressable onPress={() => setAdvOpen(false)}>
+                <Text style={styles.clear}>Закрити</Text>
+              </Pressable>
+            </View>
           </ScrollView>
-          <View style={styles.modalActions}>
-            <Pressable style={styles.searchBtnWide} onPress={applyAdvanced}>
-              <Text style={styles.searchBtnText}>Застосувати</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                resetAll();
-                setAdvOpen(false);
-                if (!inTabs) router.push("/(tabs)" as never);
-              }}
-            >
-              <Text style={styles.clear}>Скинути</Text>
-            </Pressable>
-            <Pressable onPress={() => setAdvOpen(false)}>
-              <Text style={styles.clear}>Закрити</Text>
-            </Pressable>
-          </View>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </View>
   );
@@ -278,7 +330,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paperDark,
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
-    paddingBottom: 8,
+    paddingBottom: s(8),
     zIndex: 30,
     elevation: 8,
   },
@@ -286,26 +338,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "nowrap",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingTop: 6,
+    gap: s(4),
+    paddingHorizontal: s(8),
+    paddingTop: s(6),
   },
   backBtn: {
-    width: 28,
-    height: 36,
+    width: s(28),
+    height: s(36),
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   backChevron: {
     color: colors.ink,
-    fontSize: 28,
+    fontSize: fs(28),
     fontWeight: "300",
-    lineHeight: 32,
+    lineHeight: s(32),
     marginTop: -2,
   },
   logoHit: { flexShrink: 0, marginRight: 2 },
-  logo: { width: 32, height: 32 },
+  logo: { width: s(48), height: s(48) },
   searchInput: {
     flex: 1,
     minWidth: 0,
@@ -313,59 +365,72 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.white,
     color: colors.ink,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    fontSize: 16,
-    height: 36,
+    paddingHorizontal: s(8),
+    paddingVertical: s(7),
+    fontSize: fs(16),
+    height: s(36),
   },
   searchBtnWide: {
     backgroundColor: colors.ink,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: s(14),
+    paddingVertical: s(10),
   },
-  searchBtnText: { color: colors.white, fontWeight: "700", fontSize: 11 },
+  searchBtnText: { color: colors.white, fontWeight: "700", fontSize: fs(14) },
   advBtn: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    width: 36,
-    height: 36,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    width: s(36),
+    height: s(36),
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  modal: { flex: 1, backgroundColor: colors.paper, paddingHorizontal: 16 },
+  modalRoot: {
+    backgroundColor: colors.paper,
+    paddingHorizontal: s(16),
+    width: "100%",
+  },
   modalHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: s(12),
+    flexShrink: 0,
   },
-  modalTitle: { fontSize: 20, fontWeight: "800", color: colors.ink },
+  modalTitle: { fontSize: fs(20), fontWeight: "800", color: colors.ink },
   modalClose: {
-    width: 36,
-    height: 36,
+    width: s(36),
+    height: s(36),
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
   },
-  field: { marginBottom: 10 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 4, fontWeight: "600" },
+  modalScroll: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    paddingBottom: s(40),
+    flexGrow: 0,
+  },
+  field: { marginBottom: s(10) },
+  label: { color: colors.muted, fontSize: fs(14), marginBottom: 4, fontWeight: "600" },
   modalInput: {
     borderBottomWidth: 1,
     borderColor: colors.line,
     color: colors.ink,
-    paddingVertical: 8,
-    fontSize: 16,
+    paddingVertical: s(10),
+    fontSize: fs(16),
+    minHeight: s(48),
   },
   modalActions: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 16,
-    paddingVertical: 16,
+    gap: s(16),
+    paddingTop: s(20),
+    marginTop: s(8),
   },
-  clear: { color: colors.stamp, fontWeight: "700" },
+  clear: { color: colors.stamp, fontWeight: "700", fontSize: fs(16) },
 });

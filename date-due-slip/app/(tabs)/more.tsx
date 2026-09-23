@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../src/auth";
 import { ApiError, AuthApi, getApiBase, setApiBase } from "../../src/api";
-import { colors } from "../../src/theme";
+import { colors, fs, s } from "../../src/theme";
 import { useUnread } from "../../src/unread";
 
 export default function More() {
@@ -151,31 +151,39 @@ export default function More() {
 }
 
 const styles = StyleSheet.create({
-  name: { fontSize: 22, fontWeight: "800", color: colors.ink },
-  bio: { color: colors.muted, marginTop: 4 },
-  email: { color: colors.muted, fontSize: 12, marginBottom: 16, marginTop: 2 },
-  row: { borderBottomWidth: 1, borderColor: colors.line, paddingVertical: 14 },
+  name: { fontSize: fs(22), fontWeight: "800", color: colors.ink },
+  bio: { color: colors.muted, marginTop: 4, fontSize: fs(15) },
+  email: { color: colors.muted, fontSize: fs(12), marginBottom: s(16), marginTop: 2 },
+  row: { borderBottomWidth: 1, borderColor: colors.line, paddingVertical: s(14) },
   rowInner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  rowText: { color: colors.ink, fontSize: 16, fontWeight: "600" },
+  rowText: { color: colors.ink, fontSize: fs(16), fontWeight: "600" },
   rowBadge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
+    minWidth: s(22),
+    height: s(22),
+    borderRadius: s(11),
     backgroundColor: "#E53935",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 6,
   },
-  rowBadgeText: { color: "#fff", fontSize: 12, fontWeight: "800" },
-  label: { marginTop: 20, color: colors.muted, fontSize: 12 },
-  hint: { color: colors.muted, fontSize: 11, marginTop: 6, lineHeight: 15 },
+  rowBadgeText: { color: "#fff", fontSize: fs(12), fontWeight: "800" },
+  label: { marginTop: s(20), color: colors.muted, fontSize: fs(12) },
+  hint: { color: colors.muted, fontSize: fs(11), marginTop: 6, lineHeight: fs(15) },
   input: {
     borderBottomWidth: 1,
     borderColor: colors.line,
     color: colors.ink,
-    paddingVertical: 8,
+    paddingVertical: s(12),
+    fontSize: fs(16),
+    minHeight: s(48),
   },
-  btn: { backgroundColor: colors.ink, padding: 12, marginTop: 12 },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },
-  cancel: { color: colors.muted, textAlign: "center", marginTop: 12, fontWeight: "700" },
+  btn: { backgroundColor: colors.ink, padding: s(14), marginTop: s(12), minHeight: s(54) },
+  btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(16) },
+  cancel: {
+    color: colors.muted,
+    textAlign: "center",
+    marginTop: s(12),
+    fontWeight: "700",
+    fontSize: fs(16),
+  },
 });

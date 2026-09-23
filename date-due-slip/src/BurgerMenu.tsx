@@ -10,7 +10,7 @@ import { usePathname, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BurgerGlyph, CloseGlyph } from "./HeaderGlyphs";
 import { NotifBell } from "./NotifBell";
-import { colors } from "./theme";
+import { colors, fs, s } from "./theme";
 import { useUnread } from "./unread";
 
 type Link = {
@@ -82,7 +82,7 @@ export function BurgerMenu() {
         accessibilityLabel="Меню"
         badge={unread > 0}
       >
-        <BurgerGlyph color={colors.ink} size={20} />
+        <BurgerGlyph color={colors.ink} size={s(20)} />
       </HeaderIconButton>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -137,21 +137,20 @@ export function HeaderActions() {
 
 const styles = StyleSheet.create({
   hit: {
-    width: 36,
-    height: 36,
+    width: s(36),
+    height: s(36),
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
+    backgroundColor: "transparent",
+    borderWidth: 0,
     marginLeft: 4,
   },
   hitPressed: {
-    backgroundColor: colors.paperDark,
+    backgroundColor: "rgba(42, 31, 20, 0.08)",
   },
   closeHit: {
-    width: 36,
-    height: 36,
+    width: s(36),
+    height: s(36),
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.white,
@@ -162,9 +161,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 3,
     right: 3,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: s(8),
+    height: s(8),
+    borderRadius: s(4),
     backgroundColor: colors.stamp,
     borderWidth: 1.5,
     borderColor: colors.white,
@@ -178,43 +177,43 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     borderLeftWidth: 1,
     borderLeftColor: colors.line,
-    paddingHorizontal: 16,
+    paddingHorizontal: s(16),
     zIndex: 2,
   },
   panelHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
-    paddingBottom: 10,
+    marginBottom: s(12),
+    paddingBottom: s(10),
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   },
-  panelTitle: { fontSize: 18, fontWeight: "800", color: colors.ink },
+  panelTitle: { fontSize: fs(18), fontWeight: "800", color: colors.ink },
   item: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
+    paddingVertical: s(14),
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   },
   itemOn: {
     backgroundColor: colors.paperDark,
     marginHorizontal: -8,
-    paddingHorizontal: 16,
+    paddingHorizontal: s(16),
     borderBottomColor: colors.line,
   },
-  itemText: { color: colors.ink, fontSize: 16, fontWeight: "600" },
+  itemText: { color: colors.ink, fontSize: fs(16), fontWeight: "600" },
   itemTextOn: { color: colors.ink, fontWeight: "800" },
   badge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
+    minWidth: s(22),
+    height: s(22),
+    borderRadius: s(11),
     backgroundColor: colors.stamp,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 6,
   },
-  badgeText: { color: colors.white, fontSize: 11, fontWeight: "800" },
+  badgeText: { color: colors.white, fontSize: fs(11), fontWeight: "800" },
 });

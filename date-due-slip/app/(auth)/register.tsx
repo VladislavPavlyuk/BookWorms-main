@@ -16,7 +16,7 @@ import { AuthApi, setTokens } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { ApiError } from "../../src/api";
 import { PasswordField } from "../../src/PasswordField";
-import { colors } from "../../src/theme";
+import { colors, fs, s } from "../../src/theme";
 
 export default function Register() {
   const router = useRouter();
@@ -156,23 +156,25 @@ export default function Register() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { padding: 28, paddingTop: 80 },
-  title: { fontSize: 24, fontWeight: "800", color: colors.ink, marginBottom: 12 },
+  wrap: { padding: s(28), paddingTop: s(80) },
+  title: { fontSize: fs(24), fontWeight: "800", color: colors.ink, marginBottom: s(12) },
   warn: {
     color: colors.danger,
-    marginBottom: 20,
-    lineHeight: 20,
+    marginBottom: s(20),
+    lineHeight: fs(22),
     fontWeight: "600",
+    fontSize: fs(15),
   },
   input: {
     borderBottomWidth: 1,
     borderColor: colors.line,
     color: colors.ink,
-    paddingVertical: 10,
-    marginBottom: 16,
-    fontSize: 16,
+    paddingVertical: s(12),
+    marginBottom: s(16),
+    fontSize: fs(16),
+    minHeight: s(48),
   },
-  btn: { backgroundColor: colors.stamp, padding: 14, marginTop: 8 },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },
-  link: { color: colors.muted, textAlign: "center", marginTop: 18 },
+  btn: { backgroundColor: colors.stamp, padding: s(14), marginTop: s(8), minHeight: s(54) },
+  btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(18) },
+  link: { color: colors.muted, textAlign: "center", marginTop: s(18), fontSize: fs(16) },
 });

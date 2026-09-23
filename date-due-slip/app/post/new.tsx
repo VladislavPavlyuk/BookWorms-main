@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi, ShelfApi } from "../../src/api";
-import { colors } from "../../src/theme";
+import { colors, fs, s } from "../../src/theme";
 import type { Shelf } from "../../src/types";
 
 type Mode = "event" | "feedback";
@@ -84,7 +84,7 @@ export default function NewPost() {
       <TextInput
         placeholder={mode === "event" ? "Опишіть подію…" : "Ваші враження…"}
         placeholderTextColor={colors.muted}
-        style={[styles.input, { height: 140 }]}
+        style={[styles.input, { height: s(140) }]}
         multiline
         value={text}
         onChangeText={setText}
@@ -121,27 +121,34 @@ export default function NewPost() {
 }
 
 const styles = StyleSheet.create({
-  heading: { fontSize: 20, fontWeight: "800", color: colors.ink, marginBottom: 6 },
-  hint: { color: colors.muted, marginBottom: 16, lineHeight: 20 },
+  heading: { fontSize: fs(20), fontWeight: "800", color: colors.ink, marginBottom: 6 },
+  hint: { color: colors.muted, marginBottom: s(16), lineHeight: fs(20), fontSize: fs(14) },
   input: {
     borderBottomWidth: 1,
     borderColor: colors.line,
     color: colors.ink,
-    paddingVertical: 10,
-    marginBottom: 16,
+    paddingVertical: s(12),
+    marginBottom: s(16),
+    fontSize: fs(16),
+    minHeight: s(48),
   },
-  sec: { fontWeight: "700", color: colors.ink, marginBottom: 8 },
-  empty: { color: colors.muted, marginBottom: 12 },
+  sec: { fontWeight: "700", color: colors.ink, marginBottom: 8, fontSize: fs(16) },
+  empty: { color: colors.muted, marginBottom: 12, fontSize: fs(14) },
   opt: {
     borderWidth: 1,
     borderColor: colors.line,
-    padding: 10,
+    padding: s(12),
     marginBottom: 6,
     backgroundColor: colors.white,
   },
   optOn: { borderColor: colors.stamp, backgroundColor: colors.paperDark },
-  optText: { color: colors.ink },
-  btn: { backgroundColor: colors.ink, padding: 14, marginTop: 16 },
+  optText: { color: colors.ink, fontSize: fs(16) },
+  btn: {
+    backgroundColor: colors.ink,
+    padding: s(14),
+    marginTop: s(16),
+    minHeight: s(54),
+  },
   btnDisabled: { opacity: 0.45 },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },
+  btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(16) },
 });

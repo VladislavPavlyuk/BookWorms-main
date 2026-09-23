@@ -12,7 +12,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, ExchangeApi, MsgApi } from "../src/api";
 import { useAuth } from "../src/auth";
 import { exchangeChatPartnerId } from "../src/chat";
-import { colors } from "../src/theme";
+import { colors, fs, s } from "../src/theme";
 import { UserNameLink } from "../src/UserNameLink";
 import type { Exchange, User } from "../src/types";
 
@@ -264,30 +264,32 @@ export default function Exchanges() {
 }
 
 const styles = StyleSheet.create({
-  lead: { color: colors.muted, marginBottom: 12, lineHeight: 18, fontSize: 13 },
+  lead: { color: colors.muted, marginBottom: s(12), lineHeight: fs(18), fontSize: fs(13) },
   warn: {
     color: colors.stamp,
     backgroundColor: "#FBE9E5",
     borderColor: colors.stamp,
     borderWidth: 1,
-    padding: 10,
-    marginBottom: 12,
-    lineHeight: 18,
+    padding: s(10),
+    marginBottom: s(12),
+    lineHeight: fs(18),
+    fontSize: fs(14),
   },
   h: {
     fontWeight: "800",
     color: colors.ink,
-    marginTop: 14,
+    marginTop: s(14),
     marginBottom: 8,
     letterSpacing: 0.5,
+    fontSize: fs(16),
   },
-  empty: { color: colors.muted, marginBottom: 8, lineHeight: 18 },
+  empty: { color: colors.muted, marginBottom: 8, lineHeight: fs(18), fontSize: fs(14) },
   card: {
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
-    padding: 12,
-    marginBottom: 10,
+    padding: s(12),
+    marginBottom: s(10),
   },
   cardFocus: {
     borderColor: colors.stamp,
@@ -298,31 +300,39 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: colors.stamp,
     color: "#fff",
-    fontSize: 10,
+    fontSize: fs(10),
     fontWeight: "800",
     paddingHorizontal: 8,
     paddingVertical: 2,
     marginBottom: 6,
     overflow: "hidden",
   },
-  kind: { color: colors.stamp, fontSize: 11, fontWeight: "800" },
-  title: { color: colors.ink, fontWeight: "700", marginTop: 4, fontSize: 16 },
-  meta: { color: colors.muted, marginTop: 4, fontSize: 13 },
-  cond: { color: colors.ink, marginTop: 8, lineHeight: 18, fontSize: 13 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12, alignItems: "center" },
+  kind: { color: colors.stamp, fontSize: fs(11), fontWeight: "800" },
+  title: { color: colors.ink, fontWeight: "700", marginTop: 4, fontSize: fs(16) },
+  meta: { color: colors.muted, marginTop: 4, fontSize: fs(13) },
+  cond: { color: colors.ink, marginTop: 8, lineHeight: fs(18), fontSize: fs(13) },
+  row: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: s(10),
+    marginTop: s(12),
+    alignItems: "center",
+  },
   btnOk: {
     backgroundColor: colors.stampOk,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: s(14),
+    paddingVertical: s(10),
+    minHeight: s(44),
   },
   btnGhost: {
     borderWidth: 1,
     borderColor: colors.line,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: s(14),
+    paddingVertical: s(10),
     backgroundColor: colors.paper,
+    minHeight: s(44),
   },
-  chat: { color: colors.ink, fontWeight: "800" },
-  ok: { color: "#fff", fontWeight: "800" },
-  no: { color: colors.stamp, fontWeight: "800" },
+  chat: { color: colors.ink, fontWeight: "800", fontSize: fs(14) },
+  ok: { color: "#fff", fontWeight: "800", fontSize: fs(14) },
+  no: { color: colors.stamp, fontWeight: "800", fontSize: fs(14) },
 });

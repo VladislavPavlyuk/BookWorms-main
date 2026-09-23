@@ -12,7 +12,7 @@ import { Link } from "expo-router";
 import { useAuth } from "../../src/auth";
 import { ApiError } from "../../src/api";
 import { PasswordField } from "../../src/PasswordField";
-import { colors } from "../../src/theme";
+import { colors, fs, s } from "../../src/theme";
 
 export default function Login() {
   const { login } = useAuth();
@@ -66,24 +66,31 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.screen, padding: 28, justifyContent: "center" },
+  wrap: { flex: 1, backgroundColor: colors.screen, padding: s(28), justifyContent: "center" },
   stamp: {
     color: colors.stamp,
-    fontSize: 28,
+    fontSize: fs(28),
     fontWeight: "800",
     letterSpacing: 2,
     textAlign: "center",
   },
-  sub: { color: colors.muted, textAlign: "center", marginBottom: 28, marginTop: 6 },
+  sub: {
+    color: colors.muted,
+    textAlign: "center",
+    marginBottom: s(28),
+    marginTop: s(6),
+    fontSize: fs(16),
+  },
   input: {
     borderBottomWidth: 1,
     borderColor: colors.line,
     color: colors.ink,
-    paddingVertical: 10,
-    marginBottom: 16,
-    fontSize: 16,
+    paddingVertical: s(12),
+    marginBottom: s(16),
+    fontSize: fs(16),
+    minHeight: s(48),
   },
-  btn: { backgroundColor: colors.ink, padding: 14, marginTop: 8 },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },
-  link: { color: colors.stamp, textAlign: "center", marginTop: 18 },
+  btn: { backgroundColor: colors.ink, padding: s(14), marginTop: s(8), minHeight: s(54) },
+  btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(18) },
+  link: { color: colors.stamp, textAlign: "center", marginTop: s(18), fontSize: fs(16) },
 });
