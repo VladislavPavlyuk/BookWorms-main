@@ -5,9 +5,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
@@ -99,8 +99,8 @@ export default function PostDetail() {
 
       {editing ? (
         <>
-          <TextInput style={styles.input} value={title} onChangeText={setTitle} />
-          <TextInput style={[styles.input, { minHeight: 120 }]} multiline value={text} onChangeText={setText} />
+          <CyrillicTextInput style={styles.input} value={title} onChangeText={setTitle} />
+          <CyrillicTextInput style={[styles.input, { minHeight: 120 }]} multiline value={text} onChangeText={setText} />
           <Pressable style={styles.btn} onPress={saveEdit}>
             <Text style={styles.btnText}>Зберегти</Text>
           </Pressable>
@@ -139,7 +139,7 @@ export default function PostDetail() {
           <Text style={styles.body}>{c.text}</Text>
         </View>
       ))}
-      <TextInput
+      <CyrillicTextInput
         style={styles.input}
         placeholder="Новий коментар"
         placeholderTextColor={colors.muted}

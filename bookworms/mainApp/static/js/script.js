@@ -260,6 +260,17 @@
         initPasswordToggles();
     }
 
+    /** Cyrillic allowed in all fields — latin-auth strip disabled. */
+    function initLatinAuthFields() {
+        /* no-op: product requires Cyrillic everywhere including login/password */
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initLatinAuthFields);
+    } else {
+        initLatinAuthFields();
+    }
+
     /**
      * Пошук за назвою: після ≥3 символів і паузи 1 с — submit форми.
      * Не чіпаємо value під час composition (IME / мобільні клавіатури).

@@ -139,11 +139,25 @@ export default function Feed() {
           </Pressable>
         ) : (
           <View style={styles.filters}>
-            <Pressable onPress={() => setFilter("all")}>
-              <Text style={[styles.chip, filter === "all" && styles.chipOn]}>Усі</Text>
+            <Pressable
+              onPress={() => setFilter("all")}
+              style={[styles.switchOpt, filter === "all" && styles.switchOptOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: filter === "all" }}
+            >
+              <Text style={[styles.switchOptText, filter === "all" && styles.switchOptTextOn]}>
+                усі
+              </Text>
             </Pressable>
-            <Pressable onPress={() => setFilter("my")}>
-              <Text style={[styles.chip, filter === "my" && styles.chipOn]}>Мої</Text>
+            <Pressable
+              onPress={() => setFilter("my")}
+              style={[styles.switchOpt, filter === "my" && styles.switchOptOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: filter === "my" }}
+            >
+              <Text style={[styles.switchOptText, filter === "my" && styles.switchOptTextOn]}>
+                мої
+              </Text>
             </Pressable>
           </View>
         )}
@@ -359,15 +373,37 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
   },
   clear: { color: colors.stamp, fontWeight: "700", fontSize: fs(16) },
-  filters: { flexDirection: "row", gap: s(6) },
-  chip: {
-    color: colors.muted,
-    fontWeight: "700",
-    paddingHorizontal: s(10),
-    paddingVertical: s(8),
-    fontSize: fs(16),
+  filters: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: "rgba(42, 31, 20, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(42, 31, 20, 0.18)",
+    borderRadius: 999,
+    padding: 3,
+    gap: 0,
   },
-  chipOn: { color: colors.ink, backgroundColor: colors.white },
+  switchOpt: {
+    minWidth: s(52),
+    paddingHorizontal: s(14),
+    paddingVertical: s(8),
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  switchOptOn: {
+    backgroundColor: colors.white,
+  },
+  switchOptText: {
+    color: colors.muted,
+    fontSize: fs(13),
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "lowercase",
+  },
+  switchOptTextOn: {
+    color: colors.ink,
+  },
   fab: {
     position: "absolute",
     width: s(64),

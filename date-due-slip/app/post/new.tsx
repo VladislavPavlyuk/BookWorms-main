@@ -5,10 +5,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi, ShelfApi } from "../../src/api";
+import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { colors, fs, s } from "../../src/theme";
 import type { Shelf } from "../../src/types";
 
@@ -74,14 +74,14 @@ export default function NewPost() {
           : "Анонс або новина без прив’язки до книги."}
       </Text>
 
-      <TextInput
+      <CyrillicTextInput
         placeholder="Заголовок"
         placeholderTextColor={colors.muted}
         style={styles.input}
         value={title}
         onChangeText={setTitle}
       />
-      <TextInput
+      <CyrillicTextInput
         placeholder={mode === "event" ? "Опишіть подію…" : "Ваші враження…"}
         placeholderTextColor={colors.muted}
         style={[styles.input, { height: s(140) }]}

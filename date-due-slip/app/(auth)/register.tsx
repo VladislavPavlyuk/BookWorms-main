@@ -9,13 +9,13 @@ import {
   Share,
   StyleSheet,
   Text,
-  TextInput,
 } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { AuthApi, setTokens } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { ApiError } from "../../src/api";
 import { PasswordField } from "../../src/PasswordField";
+import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { colors, fs, s } from "../../src/theme";
 
 export default function Register() {
@@ -108,22 +108,22 @@ export default function Register() {
           Підтвердіть email протягом 5 хвилин після реєстрації. Інакше акаунт буде
           автоматично видалено з бази — доведеться реєструватися знову.
         </Text>
-        <TextInput
+        <CyrillicTextInput
           placeholder="Логін"
           placeholderTextColor={colors.muted}
           autoCapitalize="none"
-          autoCorrect={false}
           keyboardType="default"
           textContentType="username"
           style={styles.input}
           value={username}
           onChangeText={setUsername}
         />
-        <TextInput
+        <CyrillicTextInput
           placeholder="Email"
           placeholderTextColor={colors.muted}
           autoCapitalize="none"
-          keyboardType="email-address"
+          keyboardType="default"
+          textContentType="emailAddress"
           style={styles.input}
           value={email}
           onChangeText={setEmail}
@@ -134,7 +134,7 @@ export default function Register() {
           value={password}
           onChangeText={setPassword}
         />
-        <TextInput
+        <CyrillicTextInput
           placeholder="Біографія"
           placeholderTextColor={colors.muted}
           style={styles.input}

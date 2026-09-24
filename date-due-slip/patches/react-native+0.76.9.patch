@@ -1,0 +1,26 @@
+diff --git a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/textinput/ReactTextInputManager.java b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/textinput/ReactTextInputManager.java
+index c65955f..177fdc4 100644
+--- a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/textinput/ReactTextInputManager.java
++++ b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/textinput/ReactTextInputManager.java
+@@ -856,12 +856,18 @@ public class ReactTextInputManager extends BaseViewManager<ReactEditText, Layout
+ 
+   @ReactProp(name = "secureTextEntry", defaultBoolean = false)
+   public void setSecureTextEntry(ReactEditText view, boolean password) {
++    // BookWorms: do NOT set TYPE_TEXT_VARIATION_PASSWORD — that forces Latin IME
++    // (Gboard shows locale layout but inserts Latin). Mask via transformation only.
+     updateStagedInputTypeFlag(
+         view,
++        InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
++            | InputType.TYPE_NUMBER_VARIATION_PASSWORD
++            | InputType.TYPE_TEXT_VARIATION_PASSWORD,
++        0);
++    view.setTransformationMethod(
+         password
+-            ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+-            : InputType.TYPE_NUMBER_VARIATION_PASSWORD | InputType.TYPE_TEXT_VARIATION_PASSWORD,
+-        password ? InputType.TYPE_TEXT_VARIATION_PASSWORD : 0);
++            ? android.text.method.PasswordTransformationMethod.getInstance()
++            : null);
+     checkPasswordType(view);
+   }
+ 

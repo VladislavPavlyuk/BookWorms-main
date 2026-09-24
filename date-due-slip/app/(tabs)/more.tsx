@@ -1,8 +1,9 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../src/auth";
 import { ApiError, AuthApi, getApiBase, setApiBase } from "../../src/api";
+import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { colors, fs, s } from "../../src/theme";
 import { useUnread } from "../../src/unread";
 
@@ -51,17 +52,16 @@ export default function More() {
       {editing ? (
         <>
           <Text style={styles.label}>Логін</Text>
-          <TextInput
+          <CyrillicTextInput
             style={styles.input}
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
-            autoCorrect={false}
             keyboardType="default"
             textContentType="username"
           />
           <Text style={styles.label}>Біографія</Text>
-          <TextInput
+          <CyrillicTextInput
             style={styles.input}
             value={biography}
             onChangeText={setBiography}
@@ -126,12 +126,12 @@ export default function More() {
       </Pressable>
 
       <Text style={styles.label}>API (NAS)</Text>
-      <TextInput
+      <CyrillicTextInput
         style={styles.input}
         value={api}
         onChangeText={setApi}
         autoCapitalize="none"
-        autoCorrect={false}
+        keyboardType="default"
       />
       <Text style={styles.hint}>
         Має бути http://192.168.0.213:18088 (та сама Wi‑Fi, що NAS). Unread: {unread}

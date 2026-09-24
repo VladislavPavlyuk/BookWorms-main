@@ -2,14 +2,14 @@ import { useState } from "react";
 import {
   Pressable,
   StyleSheet,
-  TextInput,
   View,
   type TextInputProps,
 } from "react-native";
+import { CyrillicTextInput } from "./CyrillicTextInput";
 import { EyeGlyph, EyeOffGlyph } from "./HeaderGlyphs";
 import { colors, fs, s } from "./theme";
 
-/** Пароль + класичний eye-switch (без icon font). */
+/** Пароль + eye-switch. Cyrillic allowed (same IME rules as other fields). */
 export function PasswordField({
   style,
   ...props
@@ -17,12 +17,12 @@ export function PasswordField({
   const [visible, setVisible] = useState(false);
   return (
     <View style={styles.wrap}>
-      <TextInput
+      <CyrillicTextInput
         {...props}
         style={[styles.input, style]}
         secureTextEntry={!visible}
         autoCapitalize="none"
-        autoCorrect={false}
+        keyboardType="default"
         textContentType="password"
       />
       <Pressable

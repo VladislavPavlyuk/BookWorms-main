@@ -9,12 +9,24 @@ User = get_user_model()
 class UserLoginForm(AuthenticationForm):
     username = forms.CharField(
         label="Логін",
-        widget=forms.TextInput(attrs={'class': 'form-control'})
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "autocomplete": "username",
+                "lang": "uk",
+                "spellcheck": "false",
+            }
+        ),
     )
     password = forms.CharField(
         label="Пароль",
         widget=forms.PasswordInput(
-            attrs={"class": "form-control", "autocomplete": "current-password"}
+            attrs={
+                "class": "form-control",
+                "autocomplete": "current-password",
+                "lang": "uk",
+                "spellcheck": "false",
+            }
         ),
     )
 
@@ -50,9 +62,15 @@ class UserRegisterForm(UserCreationForm):
         if 'password1' in self.fields:
             self.fields['password1'].label = "Пароль"
             self.fields["password1"].widget.attrs["autocomplete"] = "new-password"
+            self.fields["password1"].widget.attrs["lang"] = "uk"
         if 'password2' in self.fields:
             self.fields['password2'].label = "Повторіть пароль"
             self.fields["password2"].widget.attrs["autocomplete"] = "new-password"
+            self.fields["password2"].widget.attrs["lang"] = "uk"
+        if "username" in self.fields:
+            self.fields["username"].widget.attrs["lang"] = "uk"
+        if "email" in self.fields:
+            self.fields["email"].widget.attrs["lang"] = "uk"
 
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'
@@ -85,9 +103,8 @@ class UserUpdateForm(forms.ModelForm):
 
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'
-
-
-class AddIsbnForm(forms.Form):
+        if "username" in self.fields:
+            self.fields["username"].widget.attrs["lang"] = "uk"
     """Поле ISBN для сторінки "Моя полиця"; вікові групи задаються окремо на картці книги."""
     isbn = forms.CharField(
         label="ISBN (10 або 13)",

@@ -1,5 +1,10 @@
+PC:
+rsync -av --delete --exclude .git --exclude date-due-slip --exclude .env \
+  ~/BookWorms-main/ admin@192.168.0.213:/share/Container/BookWorms-main/
 
 NAS:
+ssh admin@192.168.0.213
+
 cd /share/Container/BookWorms-main && sh deploy/qnap/rebuild-api.sh
 
 PC run Expo
@@ -9,14 +14,20 @@ npx expo start -c
 npx expo run:android
 npx expo run:android --device emulator-5554
 
+cd ~/BookWorms-main/date-due-slip
+./scripts/run-emulator.sh
+# or: emulator -avd Pixel_8 -gpu swiftshader_indirect
 
 emulator -avd Pixel_8 -wipe-data
+Or one-shot without editing config:
+emulator -avd Pixel_8 -gpu swiftshader_indirect -wipe-data
 
 adb devices
 
 # sync + rebuild api на NAS
 # потім APK:
 cd ~/BookWorms-main/date-due-slip/android && ./gradlew assembleDebug
+adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
 adb -s 38210DLJH000NW install -r app/build/outputs/apk/debug/app-debug.apk
 
-adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
+

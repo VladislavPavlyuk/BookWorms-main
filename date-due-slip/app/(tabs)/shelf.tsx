@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, ShelfApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
@@ -122,7 +123,7 @@ export default function ShelfScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.screen }}>
       <View style={styles.row}>
-        <TextInput
+        <CyrillicTextInput
           placeholder="ISBN 10/13"
           placeholderTextColor={colors.muted}
           style={styles.input}
@@ -254,7 +255,7 @@ export default function ShelfScreen() {
         <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ padding: 20, paddingTop: 56 }}>
           <Text style={styles.modalH}>Додати книгу вручну</Text>
           {(["isbn", "title", "authors", "publisher", "publish_date"] as const).map((k) => (
-            <TextInput
+            <CyrillicTextInput
               key={k}
               placeholder={k}
               placeholderTextColor={colors.muted}

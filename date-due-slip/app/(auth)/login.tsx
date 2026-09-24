@@ -6,11 +6,11 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
 } from "react-native";
 import { Link } from "expo-router";
 import { useAuth } from "../../src/auth";
 import { ApiError } from "../../src/api";
+import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { PasswordField } from "../../src/PasswordField";
 import { colors, fs, s } from "../../src/theme";
 
@@ -38,17 +38,16 @@ export default function Login() {
     >
       <Text style={styles.stamp}>РЕЧЕНЕЦЬ</Text>
       <Text style={styles.sub}>локальна мережа</Text>
-        <TextInput
-          placeholder="Логін"
-          placeholderTextColor={colors.muted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="default"
-          textContentType="username"
-          style={styles.input}
-          value={username}
-          onChangeText={setUsername}
-        />
+      <CyrillicTextInput
+        placeholder="Логін"
+        placeholderTextColor={colors.muted}
+        autoCapitalize="none"
+        keyboardType="default"
+        textContentType="username"
+        style={styles.input}
+        value={username}
+        onChangeText={setUsername}
+      />
       <PasswordField
         placeholder="Пароль"
         placeholderTextColor={colors.muted}

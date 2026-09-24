@@ -9,13 +9,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, MsgApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { formatMsgTime, otherPartners } from "../../src/chat";
+import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { colors } from "../../src/theme";
 import type { Message, User } from "../../src/types";
 
@@ -159,7 +159,7 @@ export default function Chat() {
       />
 
       <View style={styles.bar}>
-        <TextInput
+        <CyrillicTextInput
           style={styles.input}
           value={body}
           onChangeText={setBody}

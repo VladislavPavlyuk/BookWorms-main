@@ -1,12 +1,10 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import {
   Image,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -17,11 +15,20 @@ import type { FeedSearch } from "./api";
 import { HeaderActions } from "./BurgerMenu";
 import { EMPTY_FEED_SEARCH, useFeedSearch } from "./feedSearch";
 import { CloseGlyph, FilterGlyph } from "./HeaderGlyphs";
+import { CyrillicTextInput } from "./CyrillicTextInput";
 import { colors, fs, s } from "./theme";
 
+const CHROME_IDLE_MS = 2000;
+
+type ChromeApi = {
+  onTyping: () => void;
+  reset: () => void;
+};
+
 /**
- * Uncontrolled search field.
- * Controlled TextInput + parent re-renders (unread poll / layout) drops Cyrillic on Android IME.
+ * Uncontrolled search — remounting / parent setState during IME composition
+ * drops Cyrillic on Android (esp. emulator). Never remount while focused;
+ * chrome hide lives in a sibling so typing does not re-render this input.
  */
 const SearchField = memo(function SearchField({
   initialQ,
@@ -34,16 +41,21 @@ const SearchField = memo(function SearchField({
 }) {
   const [nonce, setNonce] = useState(0);
   const lastExternal = useRef(initialQ);
+  const focusedRef = useRef(false);
 
-  // external clear / reset only — never while user is typing
   useEffect(() => {
     if (initialQ === lastExternal.current) return;
+    if (focusedRef.current) {
+      // Autosearch updated context to the same typed string — absorb, do not remount.
+      lastExternal.current = initialQ;
+      return;
+    }
     lastExternal.current = initialQ;
     setNonce((n) => n + 1);
   }, [initialQ]);
 
   return (
-    <TextInput
+    <CyrillicTextInput
       key={`search-${nonce}`}
       style={styles.searchInput}
       placeholder="Назва…"
@@ -51,25 +63,67 @@ const SearchField = memo(function SearchField({
       defaultValue={initialQ}
       onChangeText={onQueryChange}
       onSubmitEditing={onSubmit}
+      onFocus={() => {
+        focusedRef.current = true;
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+      }}
       returnKeyType="search"
-      autoCorrect={false}
-      spellCheck={false}
       autoCapitalize="none"
-      autoComplete="off"
-      textContentType="none"
-      importantForAutofill="no"
-      // Android: visible-password disables suggestion strip that eats Cyrillic IME
-      keyboardType={Platform.OS === "android" ? "visible-password" : "default"}
-      underlineColorAndroid="transparent"
+      keyboardType="default"
+      showSoftInputOnFocus
     />
   );
 });
 
-const CHROME_IDLE_MS = 2000;
+/** Filter + bell + burger — own state so search IME is not interrupted. */
+const HeaderTrailing = memo(function HeaderTrailing({
+  apiRef,
+  onOpenFilter,
+}: {
+  apiRef: MutableRefObject<ChromeApi | null>;
+  onOpenFilter: () => void;
+}) {
+  const [hidden, setHidden] = useState(false);
+  const idleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    apiRef.current = {
+      onTyping: () => {
+        setHidden(true);
+        if (idleRef.current) clearTimeout(idleRef.current);
+        idleRef.current = setTimeout(() => {
+          setHidden(false);
+          idleRef.current = null;
+        }, CHROME_IDLE_MS);
+      },
+      reset: () => {
+        if (idleRef.current) clearTimeout(idleRef.current);
+        idleRef.current = null;
+        setHidden(false);
+      },
+    };
+    return () => {
+      if (idleRef.current) clearTimeout(idleRef.current);
+      apiRef.current = null;
+    };
+  }, [apiRef]);
+
+  if (hidden) return null;
+
+  return (
+    <>
+      <Pressable style={styles.advBtn} onPress={onOpenFilter} accessibilityLabel="Фільтр">
+        <FilterGlyph color={colors.ink} size={s(18)} />
+      </Pressable>
+      <HeaderActions />
+    </>
+  );
+});
 
 /**
  * Спільний хром: [‹] logo | search | ⧩ filter | 🔔 | ☰
- * While typing: hide filter/notif/burger so search expands; restore after 2s idle.
  */
 export function SiteHeader() {
   const router = useRouter();
@@ -89,10 +143,10 @@ export function SiteHeader() {
     age_max: search.age_max || "",
   });
   const [advOpen, setAdvOpen] = useState(false);
-  const [chromeHidden, setChromeHidden] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const chromeIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingRef = useRef(false);
+  const chromeApi = useRef<ChromeApi | null>(null);
+  const advDraft = useRef(adv);
 
   const inTabs = segments[0] === "(tabs)";
   const showBack = !inTabs;
@@ -100,7 +154,6 @@ export function SiteHeader() {
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (chromeIdleRef.current) clearTimeout(chromeIdleRef.current);
     };
   }, []);
 
@@ -109,28 +162,21 @@ export function SiteHeader() {
     if (typingRef.current) return;
     typedQ.current = search.q || "";
     setDisplayQ(search.q || "");
-    setAdv({
+    const next = {
       isbn: search.isbn || "",
       authors: search.authors || "",
       publisher: search.publisher || "",
       publish_date: search.publish_date || "",
       age_min: search.age_min || "",
       age_max: search.age_max || "",
-    });
+    };
+    setAdv(next);
+    advDraft.current = next;
   }, [search]);
-
-  const scheduleChromeRestore = useCallback(() => {
-    setChromeHidden(true);
-    if (chromeIdleRef.current) clearTimeout(chromeIdleRef.current);
-    chromeIdleRef.current = setTimeout(() => {
-      setChromeHidden(false);
-      chromeIdleRef.current = null;
-    }, CHROME_IDLE_MS);
-  }, []);
 
   const applySearch = useCallback(
     (next: FeedSearch) => {
-      typingRef.current = false;
+      // Keep typingRef true while the user is still in the field — avoids remount/IME kill.
       setSearch(next);
       if (!inTabs) router.push("/(tabs)" as never);
     },
@@ -141,55 +187,61 @@ export function SiteHeader() {
     (t: string) => {
       typingRef.current = true;
       typedQ.current = t;
-      scheduleChromeRestore();
+      chromeApi.current?.onTyping();
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         const trimmed = typedQ.current.trim();
         if (Array.from(trimmed).length >= 3) {
+          const a = advDraft.current;
           applySearch({
             q: trimmed,
-            isbn: adv.isbn,
-            authors: adv.authors,
-            publisher: adv.publisher,
-            publish_date: adv.publish_date,
-            age_min: adv.age_min,
-            age_max: adv.age_max,
+            isbn: a.isbn,
+            authors: a.authors,
+            publisher: a.publisher,
+            publish_date: a.publish_date,
+            age_min: a.age_min,
+            age_max: a.age_max,
           });
         }
       }, 1000);
     },
-    [adv, applySearch, scheduleChromeRestore]
+    [applySearch]
   );
 
   const runSearch = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    typingRef.current = false;
+    const a = advDraft.current;
     applySearch({
       q: typedQ.current.trim(),
-      isbn: adv.isbn,
-      authors: adv.authors,
-      publisher: adv.publisher,
-      publish_date: adv.publish_date,
-      age_min: adv.age_min,
-      age_max: adv.age_max,
+      isbn: a.isbn,
+      authors: a.authors,
+      publisher: a.publisher,
+      publish_date: a.publish_date,
+      age_min: a.age_min,
+      age_max: a.age_max,
     });
-  }, [adv, applySearch]);
+  }, [applySearch]);
 
   const applyAdvanced = () => {
     setAdvOpen(false);
+    typingRef.current = false;
     runSearch();
   };
 
-  const setAdvField = (key: keyof FeedSearch, value: string) =>
-    setAdv((prev) => ({ ...prev, [key]: value }));
+  const setAdvField = (key: keyof FeedSearch, value: string) => {
+    advDraft.current = { ...advDraft.current, [key]: value };
+    setAdv(advDraft.current);
+  };
 
   const resetAll = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (chromeIdleRef.current) clearTimeout(chromeIdleRef.current);
     typingRef.current = false;
     typedQ.current = "";
     setDisplayQ("");
-    setChromeHidden(false);
+    chromeApi.current?.reset();
     setAdv(EMPTY_FEED_SEARCH);
+    advDraft.current = EMPTY_FEED_SEARCH;
     clearSearch();
   };
 
@@ -224,24 +276,9 @@ export function SiteHeader() {
           />
         </Pressable>
 
-        <SearchField
-          initialQ={displayQ}
-          onQueryChange={onQueryChange}
-          onSubmit={runSearch}
-        />
+        <SearchField initialQ={displayQ} onQueryChange={onQueryChange} onSubmit={runSearch} />
 
-        {!chromeHidden ? (
-          <>
-            <Pressable
-              style={styles.advBtn}
-              onPress={() => setAdvOpen(true)}
-              accessibilityLabel="Фільтр"
-            >
-              <FilterGlyph color={colors.ink} size={s(18)} />
-            </Pressable>
-            <HeaderActions />
-          </>
-        ) : null}
+        <HeaderTrailing apiRef={chromeApi} onOpenFilter={() => setAdvOpen(true)} />
       </View>
 
       <Modal
@@ -286,20 +323,13 @@ export function SiteHeader() {
                 ["age_max", "Вік до (0–18)"],
               ] as const
             ).map(([key, label]) => (
-              <View key={key} style={styles.field}>
-                <Text style={styles.label}>{label}</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholderTextColor={colors.muted}
-                  value={adv[key] || ""}
-                  onChangeText={(t) => setAdvField(key, t)}
-                  keyboardType={key.startsWith("age_") ? "number-pad" : "default"}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  spellCheck={false}
-                  underlineColorAndroid="transparent"
-                />
-              </View>
+              <AdvField
+                key={`${key}-${advOpen}`}
+                label={label}
+                initial={adv[key] || ""}
+                keyboardType={key.startsWith("age_") ? "number-pad" : "default"}
+                onChange={(t) => setAdvField(key, t)}
+              />
             ))}
             <View style={styles.modalActions}>
               <Pressable style={styles.searchBtnWide} onPress={applyAdvanced}>
@@ -324,6 +354,34 @@ export function SiteHeader() {
     </View>
   );
 }
+
+/** Uncontrolled adv field — avoids Android IME drop from controlled setState. */
+const AdvField = memo(function AdvField({
+  label,
+  initial,
+  keyboardType,
+  onChange,
+}: {
+  label: string;
+  initial: string;
+  keyboardType: "default" | "number-pad";
+  onChange: (t: string) => void;
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <CyrillicTextInput
+        style={styles.modalInput}
+        placeholderTextColor={colors.muted}
+        defaultValue={initial}
+        onChangeText={onChange}
+        keyboardType={keyboardType}
+        autoCapitalize="none"
+        showSoftInputOnFocus
+      />
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   wrap: {
@@ -365,10 +423,11 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.white,
     color: colors.ink,
-    paddingHorizontal: s(8),
+    paddingHorizontal: s(14),
     paddingVertical: s(7),
     fontSize: fs(16),
     height: s(36),
+    borderRadius: 999,
   },
   searchBtnWide: {
     backgroundColor: colors.ink,
