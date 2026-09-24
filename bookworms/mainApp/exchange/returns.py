@@ -1,0 +1,126 @@
+"""Borrow return request / confirm (SRP)."""
+from __future__ import annotations
+
+from django.db import transaction
+
+from .. import message_service
+from .. import ops_log
+from ..copy_events import log_copy_event
+from ..models import BookCopy, CopyEvent, CustomUser, Shelf
+from .handoff import active_handoff_for_copy
+
+@transaction.atomic
+def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, str | None]:
+    """
+    Позичальник повідомляє, що повертає книгу. Рядок лишається на його полиці до підтвердження позикодавцем.
+    """
+    shelf = (
+        Shelf.objects.select_for_update(of=("self",))
+        .select_related("borrowed_from", "book", "copy")
+        .filter(pk=shelf_id, user=borrower)
+        .first()
+    )
+    if not shelf:
+        return False, "Запис на полиці не знайдено."
+    if not shelf.borrowed_from_id:
+        return False, "Ця книга не позичена - її можна просто прибрати з полиці."
+    if shelf.return_pending:
+        return False, "Повернення вже очікує підтвердження позикодавця."
+    if active_handoff_for_copy(shelf.copy_id):
+        ops_log.warning(
+            "return.blocked_by_handoff",
+            shelf_id=shelf_id,
+            user_id=borrower.id,
+            copy_id=shelf.copy_id,
+        )
+        return (
+            False,
+            "Для цього примірника схвалено передачу наступному читачу. "
+            "Не «Повернути власнику», а в чаті натисніть «Я віддав книгу».",
+        )
+
+    Shelf.objects.filter(pk=shelf.pk).update(return_pending=True)
+    shelf.return_pending = True
+    log_copy_event(
+        shelf.copy_id,
+        CopyEvent.Code.RETURN_REQUESTED,
+        actor=borrower,
+        holder=borrower,
+        legal_owner=shelf.borrowed_from,
+        counterparty=shelf.borrowed_from,
+    )
+    message_service.notify_borrow_return_requested(shelf)
+    return True, None
+
+
+@transaction.atomic
+def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str | None]:
+    """
+    Позикодавець підтверджує отримання: видаляємо рядок позичальника.
+    Рядок власника вже має бути на його полиці (після фіксу позики); якщо ні — відновлюємо.
+    """
+    shelf = (
+        Shelf.objects.select_for_update(of=("self",))
+        .select_related("book", "user", "copy")
+        .filter(
+            pk=shelf_id,
+            borrowed_from=lender,
+            return_pending=True,
+        )
+        .first()
+    )
+    if not shelf:
+        return False, "Немає запису з очікуванням вашого підтвердження повернення."
+    if active_handoff_for_copy(shelf.copy_id):
+        return False, "Спочатку скасуйте активну фізичну передачу цього примірника."
+
+    owner_id = lender.id
+    copy_id = shelf.copy_id
+    borrower = shelf.user
+    book_title = shelf.book.title
+    shelf_pk = shelf.pk
+
+    message_service.mark_return_notifications_read(
+        lender,
+        shelf_id=shelf_pk,
+        borrower_id=borrower.id,
+        book_title=book_title,
+    )
+
+    owner_row = (
+        Shelf.objects.select_for_update(of=("self",))
+        .filter(user_id=owner_id, copy_id=copy_id, borrowed_from__isnull=True)
+        .first()
+    )
+    if not owner_row:
+        Shelf.objects.filter(pk=shelf.pk).update(
+            user_id=owner_id,
+            borrowed_from_id=None,
+            return_pending=False,
+            due_date=None,
+        )
+        if copy_id:
+            BookCopy.objects.filter(pk=copy_id).update(owner_id=owner_id)
+    else:
+        shelf.delete()
+
+    log_copy_event(
+        copy_id,
+        CopyEvent.Code.RETURNED,
+        actor=lender,
+        holder=lender,
+        legal_owner=lender,
+        previous_holder=borrower,
+        counterparty=borrower,
+    )
+    message_service.notify_borrow_return_confirmed(lender, borrower, book_title)
+
+    if copy_id:
+        try:
+            from .. import queue_service
+
+            queue_service.offer_next_after_return(copy_id, lender)
+        except Exception:
+            # Черга не повинна валити підтвердження повернення
+            pass
+    return True, None

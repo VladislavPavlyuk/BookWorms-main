@@ -13,7 +13,7 @@ import traceback
 import uuid
 from typing import Any
 
-logger = logging.getLogger("minApp.ops")
+logger = logging.getLogger("mainApp.ops")
 
 
 def new_cid() -> str:
@@ -69,4 +69,3 @@ def handoff_snapshot(handoff) -> dict[str, Any]:
         "from_shelf_id": getattr(handoff, "from_shelf_id", None),
         "exchange_request_id": getattr(handoff, "exchange_request_id", None),
     }
-a
