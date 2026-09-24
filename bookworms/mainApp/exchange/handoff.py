@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .. import message_service
+from .deps import get_notifier, get_queue
 from .. import ops_log
 from ..copy_events import log_copy_event
 from ..error_handling import domain_guard
@@ -164,7 +164,7 @@ def approve_loan_handoff(
         counterparty=requester,
         exchange_request=req,
     )
-    message_service.notify_handoff_approved(handoff)
+    get_notifier().notify_handoff_approved(handoff)
     ops_log.info("handoff.approve.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
     return handoff
 
@@ -200,8 +200,6 @@ def _finalize_completed_handoff(
     book_title: str,
     cid: str,
 ) -> None:
-    from .. import queue_service
-
     copy_id = handoff.copy_id
     req = handoff.exchange_request
     handoff.status = LoanHandoff.Status.COMPLETED
@@ -218,11 +216,11 @@ def _finalize_completed_handoff(
         counterparty=requester,
         exchange_request=req,
     )
-    message_service.notify_loan_transmitted(
+    get_notifier().notify_loan_transmitted(
         owner, previous_holder, requester, book_title, exchange_request=req
     )
     try:
-        queue_service.after_copy_loaned_or_transmitted(copy_id, requester.id)
+        get_queue().after_copy_loaned_or_transmitted(copy_id, requester.id)
     except Exception as exc:
         ops_log.exception("handoff.complete.queue_fail", exc, cid=cid, copy_id=copy_id)
     ops_log.info("handoff.complete.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
@@ -339,7 +337,7 @@ def confirm_handoff_give(handoff_id: int, acting_user: CustomUser) -> None:
         counterparty=handoff.to_user,
         exchange_request=handoff.exchange_request,
     )
-    message_service.notify_handoff_given(handoff)
+    get_notifier().notify_handoff_given(handoff)
     ops_log.info("handoff.give.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
 
 
@@ -389,7 +387,7 @@ def cancel_loan_handoff(handoff_id: int, acting_user: CustomUser) -> None:
     handoff.status = LoanHandoff.Status.CANCELLED
     handoff.resolved_at = timezone.now()
     handoff.save(update_fields=["status", "resolved_at"])
-    message_service.notify_handoff_cancelled(handoff)
+    get_notifier().notify_handoff_cancelled(handoff)
     ops_log.info("handoff.cancel.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
 
 

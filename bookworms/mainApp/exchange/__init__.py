@@ -10,15 +10,39 @@ SRP modules:
   handoff.py  — third-party physical transfer (approve → give → receive)
   returns.py  — borrow return request / confirm
 
-DIP: HTTP (api/views, mainApp/views) depends on this package facade,
-not the other way around. Notifiers/queue stay as application services
-imported at call sites (Django style); Protocols in ports.py document
-the boundaries.
+DIP: HTTP depends on this facade.
+  service_ports (I*Service) → services (*Service impl) → deps
+  ports (INotifier/IQueue) → Abstract* → adapters → deps
 
-Compat: ``mainApp.exchange_service`` re-exports this public API.
+Compat: ``mainApp.exchange_service`` re-exports function API; prefer
+``deps.get_request_service()`` etc. when injecting.
 """
 from __future__ import annotations
 
+from .deps import (
+    get_catalog_service,
+    get_copy_service,
+    get_handoff_service,
+    get_request_service,
+    get_return_service,
+    get_shelf_query_service,
+)
+from .service_ports import (
+    ICatalogService,
+    ICopyService,
+    IHandoffService,
+    IRequestService,
+    IReturnService,
+    IShelfQueryService,
+)
+from .services import (
+    CatalogService,
+    CopyService,
+    HandoffService,
+    RequestService,
+    ReturnService,
+    ShelfQueryService,
+)
 from .catalog import (
     get_or_create_book_from_payload,
     resolve_and_sync_book_by_isbn,
@@ -66,6 +90,24 @@ _approve_loan_handoff = approve_loan_handoff
 _transmit_loan_to_requester = transmit_loan_to_requester
 
 __all__ = [
+    "ICatalogService",
+    "ICopyService",
+    "IHandoffService",
+    "IRequestService",
+    "IReturnService",
+    "IShelfQueryService",
+    "CatalogService",
+    "CopyService",
+    "HandoffService",
+    "RequestService",
+    "ReturnService",
+    "ShelfQueryService",
+    "get_catalog_service",
+    "get_copy_service",
+    "get_handoff_service",
+    "get_request_service",
+    "get_return_service",
+    "get_shelf_query_service",
     "accept_exchange_request",
     "active_handoff_for_copy",
     "add_owned_copy",

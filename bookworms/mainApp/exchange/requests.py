@@ -4,7 +4,7 @@ from __future__ import annotations
 from django.db import transaction
 from django.utils import timezone
 
-from .. import message_service
+from .deps import get_notifier, get_queue
 from ..copy_events import log_copy_event
 from ..error_handling import domain_guard
 from ..exceptions import (
@@ -84,17 +84,15 @@ def _enqueue_after_create(
     from_queue: bool,
     join_queue_if_busy: bool,
 ) -> None:
-    from .. import queue_service
-
     if not from_queue:
         if lent and offer_shelf is None:
-            message_service.notify_transmission_request_created(req)
+            get_notifier().notify_transmission_request_created(req)
         else:
-            message_service.notify_exchange_request_created(req)
+            get_notifier().notify_exchange_request_created(req)
 
     if lent and offer_shelf is None:
         if join_queue_if_busy and target_shelf.copy_id:
-            queue_service.join_queue(
+            get_queue().join_queue(
                 requester,
                 target_shelf.copy,
                 notify=not from_queue,
@@ -120,7 +118,7 @@ def _enqueue_after_create(
         .exists()
     )
     if other_pending:
-        queue_service.join_queue(
+        get_queue().join_queue(
             requester, target_shelf.copy, notify=True, exchange_request=req
         )
 
@@ -316,8 +314,6 @@ def _accept_as_loan(
     target: Shelf,
     requester: CustomUser,
 ) -> None:
-    from .. import queue_service
-
     Shelf.objects.create(
         user_id=requester.id,
         book_id=target.book_id,
@@ -336,7 +332,7 @@ def _accept_as_loan(
         counterparty=requester,
         exchange_request=req,
     )
-    queue_service.after_copy_loaned_or_transmitted(target.copy_id, requester.id)
+    get_queue().after_copy_loaned_or_transmitted(target.copy_id, requester.id)
 
 
 @domain_guard("exchange.accept")
@@ -367,7 +363,7 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> None:
         _accept_as_loan(req, acting_user, target, requester)
 
     _mark_request_accepted(req)
-    message_service.notify_exchange_request_accepted(req)
+    get_notifier().notify_exchange_request_accepted(req)
 
 
 @domain_guard("exchange.reject")
@@ -386,14 +382,12 @@ def reject_exchange_request(request_id: int, acting_user: CustomUser) -> None:
     req.status = BookExchangeRequest.Status.REJECTED
     req.resolved_at = timezone.now()
     req.save(update_fields=["status", "resolved_at"])
-    message_service.notify_exchange_request_rejected(req)
+    get_notifier().notify_exchange_request_rejected(req)
 
 
 @domain_guard("exchange.cancel")
 def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> None:
     """Той, хто надсилав запит, передумав - скасування до відповіді власника."""
-    from .. import queue_service
-
     try:
         req = BookExchangeRequest.objects.get(
             pk=request_id,
@@ -409,6 +403,6 @@ def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> None:
     req.status = BookExchangeRequest.Status.CANCELLED
     req.resolved_at = timezone.now()
     req.save(update_fields=["status", "resolved_at"])
-    message_service.notify_exchange_request_cancelled(req)
+    get_notifier().notify_exchange_request_cancelled(req)
     if copy_id:
-        queue_service.leave_queue(acting_user, copy_id)
+        get_queue().leave_queue(acting_user, copy_id)

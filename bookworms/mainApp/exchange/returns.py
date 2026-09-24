@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from django.db import transaction
 
-from .. import message_service
+from .deps import get_notifier, get_queue
 from .. import ops_log
 from ..copy_events import log_copy_event
 from ..error_handling import domain_guard
@@ -83,9 +83,7 @@ def _restore_or_delete_loan_shelf(shelf: Shelf, lender: CustomUser) -> None:
 
 def _offer_queue_after_return(copy_id: int, lender: CustomUser) -> None:
     try:
-        from .. import queue_service
-
-        queue_service.offer_next_after_return(copy_id, lender)
+        get_queue().offer_next_after_return(copy_id, lender)
     except Exception:
         # Черга не повинна валити підтвердження повернення
         pass
@@ -106,7 +104,7 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> None:
         legal_owner=shelf.borrowed_from,
         counterparty=shelf.borrowed_from,
     )
-    message_service.notify_borrow_return_requested(shelf)
+    get_notifier().notify_borrow_return_requested(shelf)
 
 
 @domain_guard("exchange.return_confirm")
@@ -119,7 +117,7 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> None:
     copy_id = shelf.copy_id
     shelf_pk = shelf.pk
 
-    message_service.mark_return_notifications_read(
+    get_notifier().mark_return_notifications_read(
         lender,
         shelf_id=shelf_pk,
         borrower_id=borrower.id,
@@ -135,6 +133,6 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> None:
         previous_holder=borrower,
         counterparty=borrower,
     )
-    message_service.notify_borrow_return_confirmed(lender, borrower, book_title)
+    get_notifier().notify_borrow_return_confirmed(lender, borrower, book_title)
     if copy_id:
         _offer_queue_after_return(copy_id, lender)
