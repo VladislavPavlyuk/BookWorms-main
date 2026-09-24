@@ -1,12 +1,14 @@
 """Composition root for exchange ports + services (DIP).
 
 Outbound: ``IExchangeNotifier`` / ``ICopyQueue``
+Persistence: ``IShelfRepository``
 Application: ``IRequestService`` / ``IHandoffService`` / …
 """
 from __future__ import annotations
 
 from .adapters import MessageServiceNotifier, QueueServiceAdapter
 from .ports import ICopyQueue, IExchangeNotifier
+from .repositories import IShelfRepository, ShelfRepository
 from .service_ports import (
     ICatalogService,
     ICopyService,
@@ -26,6 +28,7 @@ from .services import (
 
 _notifier: IExchangeNotifier = MessageServiceNotifier()
 _queue: ICopyQueue = QueueServiceAdapter()
+_shelf_repo: IShelfRepository = ShelfRepository()
 
 _requests: IRequestService = RequestService()
 _handoff: IHandoffService = HandoffService()
@@ -43,6 +46,10 @@ def get_queue() -> ICopyQueue:
     return _queue
 
 
+def get_shelf_repository() -> IShelfRepository:
+    return _shelf_repo
+
+
 def set_notifier(notifier: IExchangeNotifier) -> None:
     global _notifier
     _notifier = notifier
@@ -51,6 +58,11 @@ def set_notifier(notifier: IExchangeNotifier) -> None:
 def set_queue(queue: ICopyQueue) -> None:
     global _queue
     _queue = queue
+
+
+def set_shelf_repository(repo: IShelfRepository) -> None:
+    global _shelf_repo
+    _shelf_repo = repo
 
 
 def get_request_service() -> IRequestService:
@@ -110,6 +122,7 @@ def set_shelf_query_service(svc: IShelfQueryService) -> None:
 def reset_defaults() -> None:
     set_notifier(MessageServiceNotifier())
     set_queue(QueueServiceAdapter())
+    set_shelf_repository(ShelfRepository())
     set_request_service(RequestService())
     set_handoff_service(HandoffService())
     set_return_service(ReturnService())

@@ -52,12 +52,9 @@ def ensure_shelves_have_copies(shelves: list[Shelf]) -> list[Shelf]:
 
 def is_copy_lent_out(copy_id: int | None) -> bool:
     """Чи є активна позика цього примірника."""
-    if not copy_id:
-        return False
-    return Shelf.objects.filter(
-        copy_id=copy_id,
-        borrowed_from__isnull=False,
-    ).exists()
+    from .deps import get_shelf_repository
+
+    return get_shelf_repository().exists_active_loan_for_copy(copy_id)
 
 
 def is_book_lent_out(owner_id: int, book_id: int) -> bool:

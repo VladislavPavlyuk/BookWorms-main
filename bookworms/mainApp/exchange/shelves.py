@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.db.models import Exists, OuterRef, QuerySet
+from django.db.models import QuerySet
 from django.utils import timezone
 
 from ..models import Book, BookCopy, CustomUser, Shelf
@@ -13,14 +13,9 @@ _SHELF_RELATED = ("user", "book", "copy", "borrowed_from")
 
 def available_owned_shelves_qs(exclude_user_id: int | None = None) -> QuerySet[Shelf]:
     """Вільні власні примірники (для обміну / миттєвої позики)."""
-    active_loan = Shelf.objects.filter(
-        copy_id=OuterRef("copy_id"),
-        borrowed_from__isnull=False,
-    ).exclude(copy_id__isnull=True)
-    qs = Shelf.objects.filter(borrowed_from__isnull=True).exclude(Exists(active_loan))
-    if exclude_user_id is not None:
-        qs = qs.exclude(user_id=exclude_user_id)
-    return qs
+    from .deps import get_shelf_repository
+
+    return get_shelf_repository().find_available_owned(exclude_user_id)
 
 
 def physical_presence_shelves_qs(exclude_user_id: int | None = None) -> QuerySet[Shelf]:
@@ -29,28 +24,17 @@ def physical_presence_shelves_qs(exclude_user_id: int | None = None) -> QuerySet
     - власний рядок, якщо не в позиці;
     - рядок позичальника, якщо видано.
     """
-    active_loan = Shelf.objects.filter(
-        copy_id=OuterRef("copy_id"),
-        borrowed_from__isnull=False,
-    ).exclude(copy_id__isnull=True)
-    at_owner = Shelf.objects.filter(borrowed_from__isnull=True).exclude(Exists(active_loan))
-    at_borrower = Shelf.objects.filter(borrowed_from__isnull=False)
-    qs = (at_owner | at_borrower).distinct()
-    if exclude_user_id is not None:
-        qs = qs.exclude(user_id=exclude_user_id)
-    return qs
+    from .deps import get_shelf_repository
+
+    return get_shelf_repository().find_physical_presence(exclude_user_id)
 
 
 def attach_loan_info(shelves: list[Shelf]) -> list[Shelf]:
     """Проставляє is_lent_out + loan_row на власні рядки."""
+    from .deps import get_shelf_repository
+
     copy_ids = [s.copy_id for s in shelves if s.copy_id and not s.borrowed_from_id]
-    loan_by_copy: dict[int, Shelf] = {}
-    if copy_ids:
-        for row in (
-            Shelf.objects.filter(copy_id__in=copy_ids, borrowed_from__isnull=False)
-            .select_related("user", "book", "copy", "borrowed_from")
-        ):
-            loan_by_copy[row.copy_id] = row
+    loan_by_copy = get_shelf_repository().find_loan_rows_by_copy_ids(copy_ids)
     today = timezone.now().date()
     for s in shelves:
         if s.borrowed_from_id:
@@ -81,14 +65,10 @@ def attach_loan_info(shelves: list[Shelf]) -> list[Shelf]:
 
 def attach_request_targets(shelves: list[Shelf]) -> list[Shelf]:
     """Для позики — id полиці власника; для вільного — сам рядок."""
+    from .deps import get_shelf_repository
+
     need = [s.copy_id for s in shelves if s.borrowed_from_id and s.copy_id]
-    owner_by_copy: dict[int, int] = {}
-    if need:
-        for row in Shelf.objects.filter(
-            copy_id__in=need, borrowed_from__isnull=True
-        ).only("id", "copy_id"):
-            if row.copy_id:
-                owner_by_copy[row.copy_id] = row.id
+    owner_by_copy = get_shelf_repository().find_owner_shelf_ids_by_copy_ids(need)
     for s in shelves:
         if s.borrowed_from_id:
             s.request_shelf_id = owner_by_copy.get(s.copy_id)
