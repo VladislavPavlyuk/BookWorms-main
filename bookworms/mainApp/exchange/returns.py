@@ -12,13 +12,7 @@ from ..models import BookCopy, CopyEvent, CustomUser, Shelf
 from .handoff import active_handoff_for_copy
 
 
-@domain_guard("exchange.return_request")
-@transaction.atomic
-def request_borrow_return(shelf_id: int, borrower: CustomUser) -> None:
-    """
-    Позичальник повідомляє, що повертає книгу. Рядок лишається на його полиці
-    до підтвердження позикодавцем.
-    """
+def _lock_borrower_return_shelf(shelf_id: int, borrower: CustomUser) -> Shelf:
     shelf = (
         Shelf.objects.select_for_update(of=("self",))
         .select_related("borrowed_from", "book", "copy")
@@ -44,35 +38,14 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> None:
             "Для цього примірника схвалено передачу наступному читачу. "
             "Не «Повернути власнику», а в чаті натисніть «Я віддав книгу»."
         )
-
-    Shelf.objects.filter(pk=shelf.pk).update(return_pending=True)
-    shelf.return_pending = True
-    log_copy_event(
-        shelf.copy_id,
-        CopyEvent.Code.RETURN_REQUESTED,
-        actor=borrower,
-        holder=borrower,
-        legal_owner=shelf.borrowed_from,
-        counterparty=shelf.borrowed_from,
-    )
-    message_service.notify_borrow_return_requested(shelf)
+    return shelf
 
 
-@domain_guard("exchange.return_confirm")
-@transaction.atomic
-def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> None:
-    """
-    Позикодавець підтверджує отримання: видаляємо рядок позичальника.
-    Рядок власника вже має бути на його полиці (після фіксу позики); якщо ні — відновлюємо.
-    """
+def _lock_pending_return_shelf(shelf_id: int, lender: CustomUser) -> Shelf:
     shelf = (
         Shelf.objects.select_for_update(of=("self",))
         .select_related("book", "user", "copy")
-        .filter(
-            pk=shelf_id,
-            borrowed_from=lender,
-            return_pending=True,
-        )
+        .filter(pk=shelf_id, borrowed_from=lender, return_pending=True)
         .first()
     )
     if not shelf:
@@ -83,20 +56,13 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> None:
         raise ExchangeConflict(
             "Спочатку скасуйте активну фізичну передачу цього примірника."
         )
+    return shelf
 
+
+def _restore_or_delete_loan_shelf(shelf: Shelf, lender: CustomUser) -> None:
+    """Owner row missing → convert borrower row back to owner; else delete loan row."""
     owner_id = lender.id
     copy_id = shelf.copy_id
-    borrower = shelf.user
-    book_title = shelf.book.title
-    shelf_pk = shelf.pk
-
-    message_service.mark_return_notifications_read(
-        lender,
-        shelf_id=shelf_pk,
-        borrower_id=borrower.id,
-        book_title=book_title,
-    )
-
     owner_row = (
         Shelf.objects.select_for_update(of=("self",))
         .filter(user_id=owner_id, copy_id=copy_id, borrowed_from__isnull=True)
@@ -114,6 +80,52 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> None:
     else:
         shelf.delete()
 
+
+def _offer_queue_after_return(copy_id: int, lender: CustomUser) -> None:
+    try:
+        from .. import queue_service
+
+        queue_service.offer_next_after_return(copy_id, lender)
+    except Exception:
+        # Черга не повинна валити підтвердження повернення
+        pass
+
+
+@domain_guard("exchange.return_request")
+@transaction.atomic
+def request_borrow_return(shelf_id: int, borrower: CustomUser) -> None:
+    """Позичальник повідомляє про повернення; рядок лишається до confirm."""
+    shelf = _lock_borrower_return_shelf(shelf_id, borrower)
+    Shelf.objects.filter(pk=shelf.pk).update(return_pending=True)
+    shelf.return_pending = True
+    log_copy_event(
+        shelf.copy_id,
+        CopyEvent.Code.RETURN_REQUESTED,
+        actor=borrower,
+        holder=borrower,
+        legal_owner=shelf.borrowed_from,
+        counterparty=shelf.borrowed_from,
+    )
+    message_service.notify_borrow_return_requested(shelf)
+
+
+@domain_guard("exchange.return_confirm")
+@transaction.atomic
+def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> None:
+    """Позикодавець підтверджує отримання: знімає позику з полиці позичальника."""
+    shelf = _lock_pending_return_shelf(shelf_id, lender)
+    borrower = shelf.user
+    book_title = shelf.book.title
+    copy_id = shelf.copy_id
+    shelf_pk = shelf.pk
+
+    message_service.mark_return_notifications_read(
+        lender,
+        shelf_id=shelf_pk,
+        borrower_id=borrower.id,
+        book_title=book_title,
+    )
+    _restore_or_delete_loan_shelf(shelf, lender)
     log_copy_event(
         copy_id,
         CopyEvent.Code.RETURNED,
@@ -124,12 +136,5 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> None:
         counterparty=borrower,
     )
     message_service.notify_borrow_return_confirmed(lender, borrower, book_title)
-
     if copy_id:
-        try:
-            from .. import queue_service
-
-            queue_service.offer_next_after_return(copy_id, lender)
-        except Exception:
-            # Черга не повинна валити підтвердження повернення
-            pass
+        _offer_queue_after_return(copy_id, lender)
