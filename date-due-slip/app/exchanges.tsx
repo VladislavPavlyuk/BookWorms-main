@@ -22,6 +22,11 @@ function conditionText(e: Exchange, asOwner: boolean): string {
       ? `Обмін: пропонує «${e.offer_shelf.book.title}» замість вашої книги (повна передача).`
       : `Обмін: ви пропонуєте «${e.offer_shelf.book.title}» (повна передача).`;
   }
+  if (e.is_transmission) {
+    return asOwner
+      ? "Передача третій особі: примірник зараз у позиці. Після згоди його знімуть з поточного позичальника і видадуть цьому запитувачу."
+      : "Передача: примірник зараз у когось у позиці. Власник може схвалити передачу вам (або ви в черзі до повернення).";
+  }
   return asOwner
     ? "Позика: без книги взамін. Після згоди позичальник триматиме книгу й зможе лише повернути її вам."
     : "Позика: без вашої книги взамін. Після згоди книга з’явиться у вас на полиці з терміном повернення.";
@@ -96,15 +101,18 @@ export default function Exchanges() {
 
   const confirmAccept = (e: Exchange) => {
     const swap = e.kind === "exchange" && !!e.offer_shelf;
+    const transmit = !!e.is_transmission;
     Alert.alert(
-      swap ? "Прийняти обмін?" : "Прийняти позику?",
-      swap
-        ? `Книга «${e.target_shelf.book.title}» перейде до ${e.requester.username}, а «${e.offer_shelf!.book.title}» — до вас.`
-        : `Книгу «${e.target_shelf.book.title}» буде видано в позику користувачу ${e.requester.username}.`,
+      transmit ? "Схвалити передачу?" : swap ? "Прийняти обмін?" : "Прийняти позику?",
+      transmit
+        ? `Схвалити передачу «${e.target_shelf.book.title}» → ${e.requester.username}? Книга лишиться у поточного позичальника, доки обидва не підтвердять фізичну передачу в чаті.`
+        : swap
+          ? `Книга «${e.target_shelf.book.title}» перейде до ${e.requester.username}, а «${e.offer_shelf!.book.title}» — до вас.`
+          : `Книгу «${e.target_shelf.book.title}» буде видано в позику користувачу ${e.requester.username}.`,
       [
         { text: "Скасувати", style: "cancel" },
         {
-          text: "Прийняти",
+          text: transmit ? "Схвалити" : "Прийняти",
           style: "default",
           onPress: () => run(() => ExchangeApi.accept(e.id)),
         },
@@ -145,7 +153,12 @@ export default function Exchanges() {
       >
         {isFocus ? <Text style={styles.focusTag}>з сповіщення</Text> : null}
         <Text style={styles.kind}>
-          {e.kind === "borrow" ? "ПОЗИКА" : "ОБМІН"} · {e.status}
+          {e.is_transmission
+            ? "ПЕРЕДАЧА"
+            : e.kind === "borrow"
+              ? "ПОЗИКА"
+              : "ОБМІН"}{" "}
+          · {e.status}
         </Text>
         <Text style={styles.title}>{e.target_shelf.book.title}</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>

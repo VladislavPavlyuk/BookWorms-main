@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Modal,
@@ -19,23 +19,41 @@ type Props = {
   onDone?: () => void;
 };
 
-/** Позика або обмін з вибором своєї книги. */
+/** Позика / передача / обмін з вибором своєї книги. */
 export function RequestModal({ target, myOwned, onClose, onDone }: Props) {
   const [offerId, setOfferId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (!target) return null;
+  const lent = !!(
+    target &&
+    (target.is_lent_out || target.lent_to || target.borrowed_from)
+  );
+  const targetShelfId = target?.request_shelf_id ?? target?.id ?? null;
+
+  useEffect(() => {
+    setOfferId(null);
+  }, [target?.id, target?.request_shelf_id]);
+
+  if (!target || targetShelfId == null) return null;
 
   const submit = async () => {
+    if (lent && offerId != null) {
+      Alert.alert("Запит", "Поки примірник у позиці — лише запит на передачу (без обміну).");
+      return;
+    }
     setBusy(true);
     try {
-      const res = await ExchangeApi.create(target.id, offerId);
+      const res = await ExchangeApi.create(targetShelfId, offerId);
       if (res.errors?.length) {
         Alert.alert("Запит", res.errors.join("\n"));
       } else {
         Alert.alert(
           "Запит",
-          offerId ? "Запит на обмін надіслано." : "Запит на позику надіслано."
+          lent
+            ? "Запит на передачу надіслано власнику."
+            : offerId
+              ? "Запит на обмін надіслано."
+              : "Запит на позику надіслано."
         );
         onDone?.();
         onClose();
@@ -54,32 +72,55 @@ export function RequestModal({ target, myOwned, onClose, onDone }: Props) {
         <View style={styles.sheet}>
           <Text style={styles.h}>Запит щодо книги</Text>
           <Text style={styles.title}>{target.book.title}</Text>
-          <Text style={styles.meta}>власник: {target.user.username}</Text>
+          <Text style={styles.meta}>
+            власник:{" "}
+            {target.borrowed_from?.username || target.user.username}
+          </Text>
+          {lent ? (
+            <Text style={styles.warn}>
+              Зараз у позиці
+              {target.lent_to
+                ? ` у ${target.lent_to.username}`
+                : target.user && target.borrowed_from
+                  ? ` у ${target.user.username}`
+                  : ""}
+              {target.loan_due_date || target.due_date
+                ? ` · до ${target.loan_due_date || target.due_date}`
+                : ""}
+              . Власник може схвалити передачу вам.
+            </Text>
+          ) : null}
 
           <Text style={styles.sec}>Тип</Text>
           <Pressable
             style={[styles.opt, offerId === null && styles.optOn]}
             onPress={() => setOfferId(null)}
           >
-            <Text style={styles.optText}>Лише позика (без обміну)</Text>
+            <Text style={styles.optText}>
+              {lent ? "Запит на передачу (з дозволу власника)" : "Лише позика (без обміну)"}
+            </Text>
           </Pressable>
 
-          <Text style={styles.sec}>Або обмін — ваша книга</Text>
-          <ScrollView style={{ maxHeight: 220 }}>
-            {myOwned.length === 0 ? (
-              <Text style={styles.meta}>Немає власних книг для обміну</Text>
-            ) : (
-              myOwned.map((s) => (
-                <Pressable
-                  key={s.id}
-                  style={[styles.opt, offerId === s.id && styles.optOn]}
-                  onPress={() => setOfferId(s.id)}
-                >
-                  <Text style={styles.optText}>{s.book.title}</Text>
-                </Pressable>
-              ))
-            )}
-          </ScrollView>
+          {!lent ? (
+            <>
+              <Text style={styles.sec}>Або обмін — ваша книга</Text>
+              <ScrollView style={{ maxHeight: 220 }}>
+                {myOwned.length === 0 ? (
+                  <Text style={styles.meta}>Немає власних книг для обміну</Text>
+                ) : (
+                  myOwned.map((s) => (
+                    <Pressable
+                      key={s.id}
+                      style={[styles.opt, offerId === s.id && styles.optOn]}
+                      onPress={() => setOfferId(s.id)}
+                    >
+                      <Text style={styles.optText}>{s.book.title}</Text>
+                    </Pressable>
+                  ))
+                )}
+              </ScrollView>
+            </>
+          ) : null}
 
           <View style={styles.row}>
             <Pressable style={styles.cancel} onPress={onClose} disabled={busy}>
@@ -101,6 +142,7 @@ const styles = StyleSheet.create({
   h: { fontWeight: "800", color: colors.stamp, letterSpacing: 1, fontSize: 12 },
   title: { fontSize: 18, fontWeight: "800", color: colors.ink, marginTop: 6 },
   meta: { color: colors.muted, marginTop: 4, marginBottom: 8 },
+  warn: { color: colors.stamp, fontWeight: "700", marginBottom: 8, lineHeight: 18 },
   sec: { fontWeight: "700", color: colors.ink, marginTop: 12, marginBottom: 6 },
   opt: { borderWidth: 1, borderColor: colors.line, padding: 10, marginBottom: 6, backgroundColor: colors.white },
   optOn: { borderColor: colors.stamp, backgroundColor: colors.paperDark },

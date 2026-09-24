@@ -12,12 +12,12 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { ApiError, MsgApi } from "../../src/api";
+import { ApiError, ExchangeApi, HandoffApi, MsgApi, ShelfApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { formatMsgTime, otherPartners } from "../../src/chat";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { colors } from "../../src/theme";
-import type { Message, User } from "../../src/types";
+import type { Exchange, LoanHandoff, Message, Shelf, User } from "../../src/types";
 
 export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -28,6 +28,10 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [partner, setPartner] = useState<User | null>(null);
   const [partners, setPartners] = useState<User[]>([]);
+  const [pendingIn, setPendingIn] = useState<Exchange[]>([]);
+  const [pendingOut, setPendingOut] = useState<Exchange[]>([]);
+  const [pendingReturns, setPendingReturns] = useState<Shelf[]>([]);
+  const [handoffs, setHandoffs] = useState<LoanHandoff[]>([]);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,6 +44,10 @@ export default function Chat() {
     setMessages(thread.messages);
     setPartner(thread.partner);
     setPartners(plist);
+    setPendingIn(thread.pending_in || []);
+    setPendingOut(thread.pending_out || []);
+    setPendingReturns(thread.pending_returns || []);
+    setHandoffs(thread.handoffs || []);
     requestAnimationFrame(() => {
       if (thread.messages.length) {
         listRef.current?.scrollToEnd({ animated: false });
@@ -56,7 +64,6 @@ export default function Chat() {
           { text: "OK" },
         ])
       );
-      // легкий polling як на десктопі немає WS — раз на 8с поки екран у фокусі
       const t = setInterval(() => {
         load().catch(() => undefined);
       }, 8000);
@@ -80,7 +87,39 @@ export default function Chat() {
     }
   };
 
+  const runAction = async (fn: () => Promise<unknown>, label: string) => {
+    try {
+      await fn();
+      await load();
+    } catch (e) {
+      Alert.alert(label, e instanceof ApiError ? e.message : String(e));
+    }
+  };
+
+  const acceptReq = (e: Exchange) => {
+    const transmit = !!e.is_transmission;
+    Alert.alert(
+      transmit ? "Схвалити передачу?" : e.kind === "exchange" ? "Прийняти обмін?" : "Прийняти позику?",
+      transmit
+        ? `Схвалити передачу «${e.target_shelf.book.title}» → ${e.requester.username}? Книга лишиться у поточного позичальника, доки обидва не підтвердять фізичну передачу в чаті.`
+        : `Підтвердити запит щодо «${e.target_shelf.book.title}»?`,
+      [
+        { text: "Скасувати", style: "cancel" },
+        {
+          text: transmit ? "Схвалити" : "Прийняти",
+          onPress: () => runAction(() => ExchangeApi.accept(e.id), "Обміни"),
+        },
+      ]
+    );
+  };
+
   const others = partner ? otherPartners(partners, partner.id) : [];
+  const handoffParticipants = handoffs.flatMap((h) => h.participants || []);
+  const triangle = [
+    ...new Map(
+      [...handoffParticipants, ...others].filter((p) => p.id !== partner?.id).map((p) => [p.id, p])
+    ).values(),
+  ];
 
   return (
     <KeyboardAvoidingView
@@ -91,22 +130,130 @@ export default function Chat() {
       <View style={styles.head}>
         <Text style={styles.headTitle}>{partner?.username || "…"}</Text>
         <Text style={styles.headHint}>
-          Діалог лише зі спільним запитом на позику/обмін. Вхідні зліва, ваші — справа.
+          Чат за активною позикою / передачею. Під час фізичної передачі власник і обидва
+          позичальники в чаті; після підтвердження отримання попередній позичальник виходить.
         </Text>
         <Pressable onPress={() => router.push("/exchanges")}>
           <Text style={styles.back}>← До обмінів</Text>
         </Pressable>
       </View>
 
-      {others.length > 0 && (
+      {pendingReturns.length > 0 && (
+        <View style={styles.actionBox}>
+          <Text style={styles.actionTitle}>Підтвердити повернення</Text>
+          {pendingReturns.map((s) => (
+            <View key={s.id} style={styles.actionRow}>
+              <Text style={styles.actionText} numberOfLines={2}>
+                {s.book.title}
+              </Text>
+              <Pressable
+                onPress={() =>
+                  runAction(() => ShelfApi.confirmReturn(s.id), "Повернення")
+                }
+              >
+                <Text style={styles.accept}>Підтвердити</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {handoffs.length > 0 && (
+        <View style={styles.actionBox}>
+          <Text style={styles.actionTitle}>Фізична передача</Text>
+          {handoffs.map((h) => (
+            <View key={h.id} style={styles.actionRow}>
+              <Text style={styles.actionText} numberOfLines={3}>
+                {h.book_title}
+                {"\n"}
+                {h.owner.username} · {h.from_user.username} → {h.to_user.username}
+                {" · "}
+                {h.status === "awaiting_give" ? "очікує віддачі" : "очікує отримання"}
+              </Text>
+              <View style={styles.actionBtns}>
+                {h.can_confirm_give ? (
+                  <Pressable
+                    onPress={() =>
+                      runAction(() => HandoffApi.confirmGive(h.id), "Віддача")
+                    }
+                  >
+                    <Text style={styles.accept}>Я віддав</Text>
+                  </Pressable>
+                ) : null}
+                {h.can_confirm_receive ? (
+                  <Pressable
+                    onPress={() =>
+                      runAction(() => HandoffApi.confirmReceive(h.id), "Отримання")
+                    }
+                  >
+                    <Text style={styles.accept}>Я отримав</Text>
+                  </Pressable>
+                ) : null}
+                {h.can_cancel ? (
+                  <Pressable
+                    onPress={() => runAction(() => HandoffApi.cancel(h.id), "Скасування")}
+                  >
+                    <Text style={styles.reject}>Скасувати</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {pendingIn.length > 0 && (
+        <View style={styles.actionBox}>
+          <Text style={styles.actionTitle}>Вхідні запити</Text>
+          {pendingIn.map((e) => (
+            <View key={e.id} style={styles.actionRow}>
+              <Text style={styles.actionText} numberOfLines={2}>
+                {e.is_transmission ? "Передача: " : e.kind === "exchange" ? "Обмін: " : "Позика: "}
+                {e.target_shelf.book.title}
+              </Text>
+              <View style={styles.actionBtns}>
+                <Pressable onPress={() => acceptReq(e)}>
+                  <Text style={styles.accept}>
+                    {e.is_transmission ? "Схвалити" : "Прийняти"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => runAction(() => ExchangeApi.reject(e.id), "Обміни")}
+                >
+                  <Text style={styles.reject}>Відхилити</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {pendingOut.length > 0 && (
+        <View style={styles.actionBox}>
+          <Text style={styles.actionTitle}>Ваші запити</Text>
+          {pendingOut.map((e) => (
+            <View key={e.id} style={styles.actionRow}>
+              <Text style={styles.actionText} numberOfLines={2}>
+                {e.is_transmission ? "Очікує передачі: " : "Очікує: "}
+                {e.target_shelf.book.title}
+              </Text>
+              <Pressable onPress={() => runAction(() => ExchangeApi.cancel(e.id), "Обміни")}>
+                <Text style={styles.reject}>Скасувати</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {triangle.length > 0 && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.othersBar}
           contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}
         >
-          <Text style={styles.othersLabel}>Інші:</Text>
-          {others.map((p) => (
+          <Text style={styles.othersLabel}>Учасники:</Text>
+          {triangle.map((p) => (
             <Pressable key={p.id} onPress={() => router.replace(`/chat/${p.id}`)}>
               <Text style={styles.otherChip}>{p.username}</Text>
             </Pressable>
@@ -190,6 +337,19 @@ const styles = StyleSheet.create({
   headTitle: { fontWeight: "800", color: colors.ink, fontSize: 18 },
   headHint: { color: colors.muted, fontSize: 12, marginTop: 4, lineHeight: 16 },
   back: { color: colors.stamp, fontWeight: "700", marginTop: 6, fontSize: 13 },
+  actionBox: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.paper,
+    borderBottomWidth: 1,
+    borderColor: colors.line,
+  },
+  actionTitle: { fontWeight: "800", color: colors.ink, fontSize: 13, marginBottom: 6 },
+  actionRow: { marginBottom: 8 },
+  actionText: { color: colors.ink, fontSize: 13, marginBottom: 4 },
+  actionBtns: { flexDirection: "row", gap: 16 },
+  accept: { color: colors.stamp, fontWeight: "800", fontSize: 14 },
+  reject: { color: colors.muted, fontWeight: "700", fontSize: 14 },
   othersBar: { maxHeight: 40, borderBottomWidth: 1, borderColor: colors.line },
   othersLabel: { color: colors.muted, alignSelf: "center", marginRight: 4, fontSize: 12 },
   otherChip: {
@@ -199,36 +359,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     fontSize: 13,
   },
-  empty: { color: colors.muted, textAlign: "center", marginTop: 48 },
-  bubble: { maxWidth: "82%", padding: 10, marginBottom: 10 },
-  mine: { alignSelf: "flex-end", backgroundColor: colors.ink },
-  theirs: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.white,
+  empty: { color: colors.muted, textAlign: "center", marginTop: 40 },
+  bubble: {
+    maxWidth: "88%",
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: colors.line,
   },
-  meta: { fontSize: 11, marginBottom: 4, color: colors.muted },
-  metaStrong: { fontWeight: "700", color: colors.muted },
+  mine: { alignSelf: "flex-end", backgroundColor: colors.paper },
+  theirs: { alignSelf: "flex-start", backgroundColor: "#fff" },
+  meta: { color: colors.muted, fontSize: 11, marginBottom: 4 },
+  metaStrong: { fontWeight: "700", color: colors.ink },
   msg: { color: colors.ink, fontSize: 15, lineHeight: 20 },
-  msgMine: { color: colors.white },
-  exLink: { marginTop: 8, fontSize: 12, fontWeight: "700", color: colors.stampOk },
+  msgMine: { color: colors.ink },
+  exLink: { color: colors.stamp, fontWeight: "700", marginTop: 6, fontSize: 12 },
   bar: {
     flexDirection: "row",
     alignItems: "flex-end",
     padding: 10,
     borderTopWidth: 1,
     borderColor: colors.line,
-    gap: 8,
     backgroundColor: colors.paper,
+    gap: 8,
   },
   input: {
     flex: 1,
-    color: colors.ink,
-    borderBottomWidth: 1,
+    minHeight: 40,
+    maxHeight: 120,
+    borderWidth: 1,
     borderColor: colors.line,
-    paddingVertical: 6,
-    maxHeight: 100,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: colors.ink,
+    backgroundColor: "#fff",
   },
-  send: { color: colors.stamp, fontWeight: "800", paddingBottom: 6 },
+  send: { color: colors.stamp, fontWeight: "800", paddingVertical: 10, paddingHorizontal: 4 },
 });

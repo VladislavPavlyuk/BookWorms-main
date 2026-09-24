@@ -7,6 +7,7 @@ from .models import (
     BookExchangeRequest,
     CopyEvent,
     CustomUser,
+    LoanHandoff,
     Post,
     PrivateMessage,
     Shelf,
@@ -104,6 +105,29 @@ class BookExchangeRequestAdmin(admin.ModelAdmin):
     list_display = ("id", "requester", "shelf_owner", "target_shelf", "offer_shelf", "status", "created_at")
     list_filter = ("status", "created_at")
     raw_id_fields = ("target_shelf", "offer_shelf", "requester")
+
+
+@admin.register(LoanHandoff)
+class LoanHandoffAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "copy",
+        "owner",
+        "from_user",
+        "to_user",
+        "status",
+        "created_at",
+    )
+    list_filter = ("status", "created_at")
+    raw_id_fields = (
+        "copy",
+        "owner",
+        "from_user",
+        "to_user",
+        "exchange_request",
+        "from_shelf",
+    )
+
 
 @admin.register(AvatarCollection)
 class AvatarCollectionAdmin(admin.ModelAdmin):

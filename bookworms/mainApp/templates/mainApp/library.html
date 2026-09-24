@@ -7,8 +7,12 @@
 {# Сторінка view my_library: shelves - записи Shelf з вкладеними book та borrowed_from. #}
 
 <p class="text-muted small mb-3">
-    Власні книги можна прибрати з полиці. Позичені: «Повернути власнику» — книга лишається у вас,
-    доки позикодавець не натисне <strong>Підтвердити повернення</strong>.
+    На полиці — лише те, що <strong>фізично у вас</strong>: власні вільні примірники та позичені книги
+    (з власником і терміном). Видані вами в позику з’являються на полиці позичальника, доки не повернуться.
+    {% if lent_out_count %}
+    Зараз у позиці з ваших: <strong>{{ lent_out_count }}</strong>
+    — див. <a href="{% url 'due_slips' %}">Date Due Slip</a> / підтвердження повернення нижче.
+    {% endif %}
 </p>
 
 {% if messages %}
@@ -185,7 +189,19 @@
                         </p>
                         {# Позичена книга: не показуємо "Видалити", лише форму на return_borrowed_shelf_book. #}
                         {% if shelf.borrowed_from_id %}
-                            <p class="small text-warning mb-2">Позичено у <strong>{% shelf_user_link shelf.borrowed_from %}</strong></p>
+                            <p class="small text-warning mb-1">
+                                Позичено у <strong>{% shelf_user_link shelf.borrowed_from %}</strong>
+                            </p>
+                            {% if shelf.due_date %}
+                            <p class="small mb-2 {% if shelf.is_overdue %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                                Термін повернення: <strong>{{ shelf.due_date|date:"d.m.Y" }}</strong>
+                                {% if shelf.is_overdue %}
+                                    · прострочено
+                                {% elif shelf.days_left is not None %}
+                                    · ще {{ shelf.days_left }} дн.
+                                {% endif %}
+                            </p>
+                            {% endif %}
                             <a href="{% url 'message_thread' shelf.borrowed_from_id %}" class="btn btn-outline-secondary btn-sm mb-2">Чат з власником</a>
                             {% if shelf.return_pending %}
                                 <p class="small text-info mb-0">Очікується підтвердження повернення позикодавцем.</p>
@@ -204,12 +220,10 @@
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-success btn-sm">Підтвердити повернення</button>
                             </form>
-                            {% elif shelf.is_lent_out %}
-                            <p class="small text-info mb-2">Зараз у позиці в іншого читача — книга лишається на вашій полиці.</p>
                             {% endif %}
                             <form method="post" action="{% url 'remove_shelf_entry' shelf.id %}">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline-danger btn-sm" {% if shelf.is_lent_out %}disabled title="Спочатку повернення"{% endif %}>Видалити з полиці</button>
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Видалити з полиці</button>
                             </form>
                         {% endif %}
                     </div>

@@ -105,6 +105,9 @@ class UserUpdateForm(forms.ModelForm):
             field.widget.attrs['class'] = 'form-control'
         if "username" in self.fields:
             self.fields["username"].widget.attrs["lang"] = "uk"
+
+
+class AddIsbnForm(forms.Form):
     """Поле ISBN для сторінки "Моя полиця"; вікові групи задаються окремо на картці книги."""
     isbn = forms.CharField(
         label="ISBN (10 або 13)",

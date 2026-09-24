@@ -28,13 +28,19 @@ export type Shelf = {
   /** Physical copy id — same ISBN can have many copies. */
   copy_id?: number | null;
   borrowed_from: User | null;
+  /** When this is your owned copy currently lent out. */
+  lent_to?: User | null;
   return_pending: boolean;
   due_date: string | null;
+  /** Due date from the active loan row (owned + lent out). */
+  loan_due_date?: string | null;
   is_overdue: boolean;
   days_left: number | null;
   is_lent_out?: boolean;
   /** Id рядка позичальника з return_pending — для кнопки підтвердження у власника. */
   pending_return_shelf_id?: number | null;
+  /** Id полиці власника для ExchangeApi.create (для позики на чужій полиці). */
+  request_shelf_id?: number | null;
   added_at: string;
 };
 
@@ -94,8 +100,39 @@ export type Exchange = {
   offer_shelf: Shelf | null;
   status: string;
   kind: "borrow" | "exchange";
+  /** Pending borrow while copy is lent — accepting transmits to requester. */
+  is_transmission?: boolean;
   created_at: string;
   resolved_at: string | null;
+};
+
+export type QueueEntry = {
+  id: number;
+  user_id: number;
+  username: string;
+  status: string;
+  position: number;
+  exchange_request_id: number | null;
+  created_at: string;
+};
+
+export type LoanHandoff = {
+  id: number;
+  copy_id: number;
+  book_title: string;
+  owner: User;
+  from_user: User;
+  to_user: User;
+  status: "awaiting_give" | "awaiting_receive" | "completed" | "cancelled";
+  giver_confirmed_at: string | null;
+  receiver_confirmed_at: string | null;
+  exchange_request_id: number | null;
+  created_at: string;
+  my_role: "owner" | "giver" | "receiver" | null;
+  can_confirm_give: boolean;
+  can_confirm_receive: boolean;
+  can_cancel: boolean;
+  participants: User[];
 };
 
 export type Message = {

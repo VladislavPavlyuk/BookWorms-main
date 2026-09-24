@@ -29,9 +29,14 @@ function groupShelvesByBook(others: Shelf[]): BookBrowseGroup[] {
       order.push(s.book.id);
     }
     g.copies.push(s);
-    if (!g.owners.some((o) => o.id === s.user.id)) g.owners.push(s.user);
+    const legal = s.borrowed_from || s.user;
+    if (!g.owners.some((o) => o.id === legal.id)) g.owners.push(legal);
   }
   return order.map((id) => map.get(id)!);
+}
+
+function isHeldLoan(c: Shelf) {
+  return !!(c.borrowed_from || c.is_lent_out || c.lent_to);
 }
 
 export default function Browse() {
@@ -57,22 +62,40 @@ export default function Browse() {
     }, [])
   );
 
-  const requestFrom = (g: BookBrowseGroup, ownerId?: number) => {
-    const copies = ownerId
-      ? g.copies.filter((c) => c.user.id === ownerId)
-      : g.copies;
+  const openRequest = (c: Shelf) => {
+    const rid = c.request_shelf_id ?? c.id;
+    if (c.borrowed_from) {
+      setTarget({
+        ...c,
+        id: rid,
+        user: c.borrowed_from,
+        borrowed_from: null,
+        is_lent_out: true,
+        lent_to: c.user,
+        loan_due_date: c.due_date,
+        request_shelf_id: rid,
+      });
+      return;
+    }
+    setTarget(c);
+  };
+
+  const requestFrom = (g: BookBrowseGroup) => {
+    const copies = g.copies || [];
     if (copies.length === 1) {
-      setTarget(copies[0]);
+      openRequest(copies[0]);
       return;
     }
     if (copies.length === 0) return;
     Alert.alert(
-      "Власник",
-      "Оберіть у кого позичити",
+      "Примірник",
+      "Оберіть у кого зараз книга",
       [
         ...copies.map((c) => ({
-          text: c.user.username,
-          onPress: () => setTarget(c),
+          text: isHeldLoan(c)
+            ? `${c.user.username} (позика · ${c.borrowed_from?.username || "власник"})`
+            : c.user.username,
+          onPress: () => openRequest(c),
         })),
         { text: "Скасувати", style: "cancel" as const },
       ]
@@ -93,6 +116,12 @@ export default function Browse() {
               setRefreshing(false);
             }}
           />
+        }
+        ListHeaderComponent={
+          <Text style={styles.hint}>
+            Каталог = фізична наявність. Позичена книга на полиці позичальника (власник і термін);
+            запит іде власнику.
+          </Text>
         }
         contentContainerStyle={{ paddingBottom: 24 }}
         ListEmptyComponent={<Text style={styles.empty}>Немає чужих книг</Text>}
@@ -124,13 +153,26 @@ export default function Browse() {
                     {c.copy_id ? (
                       <Text style={styles.ownersLabel}>{` · #${c.copy_id}`}</Text>
                     ) : null}
+                    {c.borrowed_from ? (
+                      <Text style={styles.lent}>
+                        {` · позика · власник ${c.borrowed_from.username}`}
+                        {c.due_date ? ` · до ${c.due_date}` : ""}
+                      </Text>
+                    ) : (
+                      <Text style={styles.free}> · вільний</Text>
+                    )}
                   </View>
+                  <Pressable onPress={() => openRequest(c)}>
+                    <Text style={styles.miniAct}>
+                      {c.borrowed_from ? "Передача" : "Позичити"}
+                    </Text>
+                  </Pressable>
                   <HistoryLink copyId={c.copy_id} />
                 </View>
               ))}
             </View>
             <Pressable style={[styles.btn, styles.cardBody]} onPress={() => requestFrom(g)}>
-              <Text style={styles.btnText}>Позичити / обмін</Text>
+              <Text style={styles.btnText}>Позичити / передача / обмін</Text>
             </Pressable>
           </View>
         )}
@@ -146,6 +188,14 @@ export default function Browse() {
 }
 
 const styles = StyleSheet.create({
+  hint: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
   empty: { color: colors.muted, textAlign: "center", marginTop: 40 },
   card: {
     borderWidth: 0,
@@ -171,6 +221,9 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4 },
+  lent: { color: colors.stamp, fontWeight: "700", fontSize: 12 },
+  free: { color: colors.muted, fontSize: 12 },
+  miniAct: { color: colors.stamp, fontWeight: "800", fontSize: 12 },
   btn: { marginTop: 10, alignSelf: "flex-start", backgroundColor: colors.ink, paddingHorizontal: 12, paddingVertical: 6 },
   btnText: { color: colors.white, fontWeight: "700" },
 });

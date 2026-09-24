@@ -76,7 +76,7 @@ export default function BookScreen() {
         </Pressable>
       )}
 
-      <Text style={styles.h}>Примірники на полицях</Text>
+      <Text style={styles.h}>Де зараз (фізично)</Text>
       {holders.map((s) => (
         <View key={s.id} style={styles.card}>
           <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
@@ -93,9 +93,29 @@ export default function BookScreen() {
             {!!s.due_date && <Text style={styles.row}>{` до ${s.due_date}`}</Text>}
           </View>
           <HistoryLink copyId={s.copy_id} style={styles.act} />
-          {user && s.user.id !== user.id && !s.borrowed_from && (
-            <Pressable onPress={() => setTarget(s)}>
-              <Text style={styles.act}>Позичити / обмін</Text>
+          {user && s.user.id !== user.id && (
+            <Pressable
+              onPress={() => {
+                const rid = s.request_shelf_id ?? s.id;
+                if (s.borrowed_from) {
+                  setTarget({
+                    ...s,
+                    id: rid,
+                    user: s.borrowed_from,
+                    borrowed_from: null,
+                    is_lent_out: true,
+                    lent_to: s.user,
+                    loan_due_date: s.due_date,
+                    request_shelf_id: rid,
+                  });
+                } else {
+                  setTarget(s);
+                }
+              }}
+            >
+              <Text style={styles.act}>
+                {s.borrowed_from ? "Просити передачу" : "Позичити / обмін"}
+              </Text>
             </Pressable>
           )}
         </View>

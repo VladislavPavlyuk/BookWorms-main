@@ -165,6 +165,9 @@ class CopyEvent(models.Model):
         RETURN_REQUESTED = "return_requested", "Ініційовано повернення"
         RETURNED = "returned", "Повернено власнику"
         EXCHANGED = "exchanged", "Обмін (передача власності)"
+        TRANSMITTED = "transmitted", "Передано третій особі (з дозволу власника)"
+        HANDOFF_APPROVED = "handoff_approved", "Власник схвалив передачу (очікує фізичну передачу)"
+        HANDOFF_GIVEN = "handoff_given", "Попередній позичальник підтвердив віддачу"
 
     copy = models.ForeignKey(
         BookCopy,
@@ -397,6 +400,155 @@ class PrivateMessage(models.Model):
 
     def __str__(self):
         return f"{self.sender} → {self.recipient}: {self.body[:40]}"
+
+
+class CopyQueueEntry(models.Model):
+    """
+    Черга інтересу до конкретного примірника (BookCopy).
+
+    Коли примірник у позиці або на нього вже є запити — користувачі
+    стають у чергу FIFO. Після повернення / передачі наступний отримує
+    сповіщення й (за можливості) автозапит на позику.
+    """
+
+    class Status(models.TextChoices):
+        WAITING = "waiting", "У черзі"
+        OFFERED = "offered", "Запропоновано (ваша черга)"
+        FULFILLED = "fulfilled", "Отримано"
+        CANCELLED = "cancelled", "Скасовано"
+
+    copy = models.ForeignKey(
+        BookCopy,
+        on_delete=models.CASCADE,
+        related_name="queue_entries",
+        verbose_name="Примірник",
+    )
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="copy_queue_entries",
+        verbose_name="Хто чекає",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.WAITING,
+        db_index=True,
+    )
+    exchange_request = models.ForeignKey(
+        BookExchangeRequest,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="queue_entries",
+        verbose_name="Пов’язаний запит",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "запис черги примірника"
+        verbose_name_plural = "черга примірників"
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["copy", "user"],
+                condition=models.Q(status__in=["waiting", "offered"]),
+                name="unique_active_copy_queue_user",
+            ),
+        ]
+
+    def __str__(self):
+        return f"queue copy#{self.copy_id} {self.user} ({self.status})"
+
+
+class LoanHandoff(models.Model):
+    """
+    Фізична передача примірника між позичальниками після схвалення власником.
+
+    user1 (owner) схвалив запит user3, книга ще у user2:
+      AWAITING_GIVE → user2 підтвердив «віддав»
+      AWAITING_RECEIVE → user3 підтвердив «отримав» → COMPLETED (полиця переїздить).
+    Поки handoff активний — усі троє в чаті; після COMPLETED user2 від’єднується.
+    """
+
+    class Status(models.TextChoices):
+        AWAITING_GIVE = "awaiting_give", "Очікує віддачі"
+        AWAITING_RECEIVE = "awaiting_receive", "Очікує отримання"
+        COMPLETED = "completed", "Завершено"
+        CANCELLED = "cancelled", "Скасовано"
+
+    copy = models.ForeignKey(
+        BookCopy,
+        on_delete=models.CASCADE,
+        related_name="handoffs",
+        verbose_name="Примірник",
+    )
+    owner = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="owned_handoffs",
+        verbose_name="Власник",
+    )
+    from_user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="handoffs_as_giver",
+        verbose_name="Від кого (поточний тримач)",
+    )
+    to_user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="handoffs_as_receiver",
+        verbose_name="Кому (наступний позичальник)",
+    )
+    exchange_request = models.ForeignKey(
+        BookExchangeRequest,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="handoffs",
+        verbose_name="Запит",
+    )
+    from_shelf = models.ForeignKey(
+        Shelf,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="outgoing_handoffs",
+        verbose_name="Рядок полиці поточного тримача",
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.AWAITING_GIVE,
+        db_index=True,
+    )
+    giver_confirmed_at = models.DateTimeField(null=True, blank=True)
+    receiver_confirmed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "фізична передача позики"
+        verbose_name_plural = "фізичні передачі позик"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["copy"],
+                condition=models.Q(
+                    status__in=["awaiting_give", "awaiting_receive"]
+                ),
+                name="unique_active_loan_handoff_per_copy",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"handoff copy#{self.copy_id} {self.from_user}→{self.to_user} ({self.status})"
+        )
+
+
 class Comment(models.Model):
     """Коментар до поста (пост → Book/ISBN). Не залежить від BookCopy."""
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')

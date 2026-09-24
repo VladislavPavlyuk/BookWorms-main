@@ -7,9 +7,11 @@ import {
   Comment,
   CopyEvent,
   Exchange,
+  LoanHandoff,
   Message,
   Paginated,
   Post,
+  QueueEntry,
   Shelf,
   User,
 } from "./types";
@@ -210,7 +212,10 @@ export const BooksApi = {
 };
 
 export const ShelfApi = {
-  mine: () => api<{ shelves: Shelf[]; pending_returns: Shelf[] }>("/api/shelf/"),
+  mine: () =>
+    api<{ shelves: Shelf[]; pending_returns: Shelf[]; lent_out_count?: number }>(
+      "/api/shelf/"
+    ),
   addIsbn: (isbn: string) => api<Shelf>("/api/shelf/isbn/", { method: "POST", body: { isbn } }),
   addManual: (body: {
     isbn: string;
@@ -238,7 +243,14 @@ export const BrowseApi = {
       "/api/browse/"
     ),
   user: (id: number) =>
-    api<{ user: User; is_own: boolean; shelves: Shelf[] }>(`/api/users/${id}/shelf/`),
+    api<{
+      user: User;
+      is_own: boolean;
+      shelves: Shelf[];
+      /** @deprecated physical presence is a single shelves list */
+      borrowed?: Shelf[];
+      borrowed_request_targets?: Record<string, number>;
+    }>(`/api/users/${id}/shelf/`),
   book: (id: number) =>
     api<{ book: Book; owners: User[]; holders: Shelf[]; posts: Post[] }>(
       `/api/books/${id}/`
@@ -251,7 +263,42 @@ export const CopyApi = {
       copy: BookCopyDetail;
       holders: Shelf[];
       events: CopyEvent[];
+      queue: QueueEntry[];
+      queue_length: number;
+      my_queue_position: number | null;
+      is_lent_out: boolean;
     }>(`/api/copies/${copyId}/history/`),
+  queue: (copyId: number) =>
+    api<{
+      queue: QueueEntry[];
+      my_queue_position: number | null;
+      is_lent_out: boolean;
+    }>(`/api/copies/${copyId}/queue/`),
+  joinQueue: (copyId: number) =>
+    api<{ ok: boolean; position: number; queue: QueueEntry[] }>(
+      `/api/copies/${copyId}/queue/join/`,
+      { method: "POST" }
+    ),
+  leaveQueue: (copyId: number) =>
+    api<{ ok: boolean; queue: QueueEntry[] }>(`/api/copies/${copyId}/queue/leave/`, {
+      method: "POST",
+    }),
+};
+
+export const QueueApi = {
+  mine: () =>
+    api<{
+      results: {
+        id: number;
+        copy_id: number;
+        book_title: string;
+        owner_id: number;
+        owner_username: string;
+        status: string;
+        position: number;
+        created_at: string;
+      }[];
+    }>("/api/queue/mine/"),
 };
 
 export const ExchangeApi = {
@@ -267,9 +314,23 @@ export const ExchangeApi = {
   cancel: (id: number) => api(`/api/exchanges/${id}/cancel/`, { method: "POST" }),
 };
 
+export const HandoffApi = {
+  confirmGive: (id: number) => api(`/api/handoffs/${id}/give/`, { method: "POST" }),
+  confirmReceive: (id: number) => api(`/api/handoffs/${id}/receive/`, { method: "POST" }),
+  cancel: (id: number) => api(`/api/handoffs/${id}/cancel/`, { method: "POST" }),
+};
+
 export const MsgApi = {
   partners: () => api<User[]>("/api/messages/partners/"),
-  thread: (id: number) => api<{ partner: User; messages: Message[] }>(`/api/messages/${id}/`),
+  thread: (id: number) =>
+    api<{
+      partner: User;
+      messages: Message[];
+      pending_in: Exchange[];
+      pending_out: Exchange[];
+      pending_returns: Shelf[];
+      handoffs: LoanHandoff[];
+    }>(`/api/messages/${id}/`),
   send: (id: number, body: string) =>
     api<Message>(`/api/messages/${id}/`, { method: "POST", body: { body } }),
 };

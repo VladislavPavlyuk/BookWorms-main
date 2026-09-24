@@ -15,12 +15,82 @@ from django.utils import timezone
 
 from . import message_service
 from .copy_events import log_copy_event
-from .models import Book, BookCopy, BookExchangeRequest, CopyEvent, CustomUser, Shelf
+from .models import (
+    Book,
+    BookCopy,
+    BookExchangeRequest,
+    CopyEvent,
+    CustomUser,
+    LoanHandoff,
+    Shelf,
+)
 
 
 def _loan_due_date():
     days = int(getattr(settings, "DEFAULT_LOAN_DAYS", 14))
     return timezone.now().date() + timedelta(days=days)
+
+
+def active_handoff_for_copy(copy_id: int | None) -> LoanHandoff | None:
+    if not copy_id:
+        return None
+    try:
+        return (
+            LoanHandoff.objects.filter(
+                copy_id=copy_id,
+                status__in=(
+                    LoanHandoff.Status.AWAITING_GIVE,
+                    LoanHandoff.Status.AWAITING_RECEIVE,
+                ),
+            )
+            .select_related("owner", "from_user", "to_user", "copy__book", "exchange_request")
+            .first()
+        )
+    except Exception:
+        # Таблиця ще не заmigрена / тимчасова помилка БД — не валимо confirm/accept.
+        return None
+
+
+def handoffs_involving(*user_ids: int) -> list[LoanHandoff]:
+    """
+    Активні handoff для панелі в чаті.
+    Якщо передано ≥2 id — лише ті, де *всі* ці юзери серед owner/from/to.
+    """
+    from django.db.models import Q
+
+    ids = [i for i in user_ids if i]
+    if not ids:
+        return []
+    try:
+        qs = (
+            LoanHandoff.objects.filter(
+                status__in=(
+                    LoanHandoff.Status.AWAITING_GIVE,
+                    LoanHandoff.Status.AWAITING_RECEIVE,
+                )
+            )
+            .filter(Q(owner_id__in=ids) | Q(from_user_id__in=ids) | Q(to_user_id__in=ids))
+            .select_related(
+                "owner",
+                "from_user",
+                "to_user",
+                "copy__book",
+                "exchange_request",
+                "from_shelf",
+            )
+            .order_by("-created_at")
+        )
+        rows = list(qs)
+    except Exception:
+        return []
+    if len(ids) >= 2:
+        need = set(ids)
+        rows = [
+            h
+            for h in rows
+            if need.issubset({h.owner_id, h.from_user_id, h.to_user_id})
+        ]
+    return rows
 
 
 def add_owned_copy(user: CustomUser, book: Book) -> Shelf:
@@ -94,7 +164,8 @@ def is_book_lent_out(owner_id: int, book_id: int) -> bool:
 
 def available_owned_shelves_qs(exclude_user_id: int | None = None) -> QuerySet[Shelf]:
     """
-    Полиці, доступні для запиту: власні (не borrowed), і цей примірник зараз не в позиці.
+    Полиці для *обміну* (своя книга в пропозиції) або «вільні» для миттєвої позики:
+    власні (не borrowed), і цей примірник зараз не в позиці.
     """
     active_loan = Shelf.objects.filter(
         copy_id=OuterRef("copy_id"),
@@ -104,6 +175,96 @@ def available_owned_shelves_qs(exclude_user_id: int | None = None) -> QuerySet[S
     if exclude_user_id is not None:
         qs = qs.exclude(user_id=exclude_user_id)
     return qs
+
+
+def physical_presence_shelves_qs(exclude_user_id: int | None = None) -> QuerySet[Shelf]:
+    """
+    Полиці, де примірник *фізично* зараз:
+    - власний рядок, якщо копія не в позиці;
+    - рядок позичальника, якщо копія видана.
+
+    Власний рядок під час активної позики сюди НЕ входить — книга на полиці позичальника.
+    """
+    active_loan = Shelf.objects.filter(
+        copy_id=OuterRef("copy_id"),
+        borrowed_from__isnull=False,
+    ).exclude(copy_id__isnull=True)
+    at_owner = Shelf.objects.filter(borrowed_from__isnull=True).exclude(Exists(active_loan))
+    at_borrower = Shelf.objects.filter(borrowed_from__isnull=False)
+    qs = (at_owner | at_borrower).distinct()
+    if exclude_user_id is not None:
+        qs = qs.exclude(user_id=exclude_user_id)
+    return qs
+
+
+def attach_loan_info(shelves: list[Shelf]) -> list[Shelf]:
+    """Проставляє is_lent_out + loan_row на власні рядки (для внутрішньої логіки / pending)."""
+    copy_ids = [s.copy_id for s in shelves if s.copy_id and not s.borrowed_from_id]
+    loan_by_copy: dict[int, Shelf] = {}
+    if copy_ids:
+        for row in (
+            Shelf.objects.filter(copy_id__in=copy_ids, borrowed_from__isnull=False)
+            .select_related("user", "book", "copy", "borrowed_from")
+        ):
+            loan_by_copy[row.copy_id] = row
+    today = timezone.now().date()
+    for s in shelves:
+        if s.borrowed_from_id:
+            s.is_lent_out = False
+            s.loan_row = None
+            s.request_shelf_id = None  # потрібен рядок власника — див. attach_request_targets
+            if s.due_date:
+                s.is_overdue = s.due_date < today
+                s.days_left = (s.due_date - today).days
+            else:
+                s.is_overdue = False
+                s.days_left = None
+            continue
+        loan = loan_by_copy.get(s.copy_id) if s.copy_id else None
+        s.loan_row = loan
+        s.is_lent_out = loan is not None
+        s.request_shelf_id = s.pk
+        if loan and loan.due_date:
+            s._loan_due = loan.due_date
+            s._loan_overdue = loan.due_date < today
+            s._loan_days_left = (loan.due_date - today).days
+        else:
+            s._loan_due = None
+            s._loan_overdue = False
+            s._loan_days_left = None
+    return shelves
+
+
+def attach_request_targets(shelves: list[Shelf]) -> list[Shelf]:
+    """
+    Для рядків позичальника — id полиці власника (куди слати запит на передачу).
+    Для вільних власних — сам рядок.
+    """
+    need = [s.copy_id for s in shelves if s.borrowed_from_id and s.copy_id]
+    owner_by_copy: dict[int, int] = {}
+    if need:
+        for row in Shelf.objects.filter(
+            copy_id__in=need, borrowed_from__isnull=True
+        ).only("id", "copy_id"):
+            if row.copy_id:
+                owner_by_copy[row.copy_id] = row.id
+    for s in shelves:
+        if s.borrowed_from_id:
+            s.request_shelf_id = owner_by_copy.get(s.copy_id)
+        else:
+            s.request_shelf_id = s.pk
+    return shelves
+
+
+def filter_physically_present(shelves: list[Shelf]) -> list[Shelf]:
+    """Прибрати з відображення власні рядки, чиї примірники зараз у когось у позиці."""
+    shelves = attach_loan_info(shelves)
+    return [s for s in shelves if not getattr(s, "is_lent_out", False)]
+
+
+# Back-compat alias (каталог тепер = фізична наявність)
+def browsable_owned_shelves_qs(exclude_user_id: int | None = None) -> QuerySet[Shelf]:
+    return physical_presence_shelves_qs(exclude_user_id=exclude_user_id)
 
 
 def group_shelves_by_book(shelves) -> list[dict]:
@@ -125,9 +286,10 @@ def group_shelves_by_book(shelves) -> list[dict]:
             order.append(bid)
         g = groups[bid]
         g["shelves"].append(s)
-        if s.user_id not in g["_owner_ids"]:
-            g["_owner_ids"].add(s.user_id)
-            g["owners"].append(s.user)
+        legal = s.borrowed_from if s.borrowed_from_id else s.user
+        if legal.id not in g["_owner_ids"]:
+            g["_owner_ids"].add(legal.id)
+            g["owners"].append(legal)
     out = []
     for bid in order:
         g = groups[bid]
@@ -229,20 +391,33 @@ def create_exchange_request(
     requester: CustomUser,
     target_shelf: Shelf,
     offer_shelf: Shelf | None = None,
+    *,
+    from_queue: bool = False,
+    join_queue_if_busy: bool = True,
 ) -> tuple[BookExchangeRequest | None, str | None]:
     """
     Створює запит. Помилка - (None, текст).
     Без offer_shelf: після прийняття - позика (borrowed_from = власник).
     З offer_shelf: обмін двома примірниками (повна передача, без позики).
+
+    Якщо примірник уже в позиці і це запит на позику — створюємо запит на
+    *передачу третій особі* (власник може прийняти) і ставимо в чергу.
     """
+    from . import queue_service
+
     if target_shelf.user_id == requester.id:
         return None, "Не можна запитувати власну книгу."
 
     if target_shelf.borrowed_from_id:
         return None, "Неможливо запитувати позичену в іншого користувача книгу."
 
-    if is_copy_lent_out(target_shelf.copy_id):
-        return None, "Цей примірник зараз у когось у позиці - запит недоступний."
+    lent = is_copy_lent_out(target_shelf.copy_id)
+
+    if lent and offer_shelf is not None:
+        return None, "Неможливо обміняти примірник, який зараз у позиці."
+
+    if lent and active_handoff_for_copy(target_shelf.copy_id):
+        return None, "Для цього примірника вже схвалено передачу — дочекайтесь фізичної передачі."
 
     if offer_shelf is not None:
         if offer_shelf.user_id != requester.id:
@@ -273,7 +448,42 @@ def create_exchange_request(
         offer_shelf=offer_shelf,
         status=pending,
     )
-    message_service.notify_exchange_request_created(req)
+
+    if not from_queue:
+        if lent and offer_shelf is None:
+            message_service.notify_transmission_request_created(req)
+        else:
+            message_service.notify_exchange_request_created(req)
+
+    if lent and offer_shelf is None:
+        if join_queue_if_busy and target_shelf.copy_id:
+            queue_service.join_queue(
+                requester,
+                target_shelf.copy,
+                notify=not from_queue,
+                exchange_request=req,
+            )
+    elif (
+        join_queue_if_busy
+        and offer_shelf is None
+        and target_shelf.copy_id
+        and not from_queue
+    ):
+        # Кілька охочих на вільний примірник — теж ставимо в чергу (крім першого запиту).
+        other_pending = (
+            BookExchangeRequest.objects.filter(
+                target_shelf__copy_id=target_shelf.copy_id,
+                status=pending,
+                offer_shelf__isnull=True,
+            )
+            .exclude(pk=req.pk)
+            .exists()
+        )
+        if other_pending:
+            queue_service.join_queue(
+                requester, target_shelf.copy, notify=True, exchange_request=req
+            )
+
     return req, None
 
 
@@ -321,7 +531,12 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
     Позика: власник ЗБЕРІГАЄ свій рядок Shelf; позичальнику створюється окремий рядок
     з borrowed_from на той самий BookCopy.
     Обмін: обидва рядки міняють user_id і owner на BookCopy (повна передача).
+
+    Якщо примірник уже в позиці — *передача третій особі*: знімаємо з поточного
+    позичальника і видаємо запитувачу (лише для позики, не обміну).
     """
+    from . import queue_service
+
     try:
         req = BookExchangeRequest.objects.select_for_update().get(
             pk=request_id,
@@ -346,8 +561,6 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
         return False, "Книги вже немає на вашій полиці."
     if target.borrowed_from_id:
         return False, "Не можна віддати позичену книгу."
-    if is_copy_lent_out(target.copy_id):
-        return False, "Примірник вже виданий в позику."
 
     requester = CustomUser.objects.select_for_update().get(pk=req.requester_id)
 
@@ -366,6 +579,20 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
 
     if Shelf.objects.filter(user=requester, copy_id=target.copy_id).exists():
         return False, "У користувача вже є цей примірник - неможливо завершити обмін."
+
+    # --- Передача третій особі: схвалення ≠ фізичний перенос ---
+    if is_copy_lent_out(target.copy_id):
+        if offer is not None:
+            return False, "Неможливо обміняти примірник, який зараз у позиці."
+        if active_handoff_for_copy(target.copy_id):
+            return False, "Для цього примірника вже є активна фізична передача."
+        ok, err = _approve_loan_handoff(req, acting_user, target, requester)
+        if not ok:
+            return False, err
+        req.status = BookExchangeRequest.Status.ACCEPTED
+        req.resolved_at = timezone.now()
+        req.save(update_fields=["status", "resolved_at"])
+        return True, None
 
     if offer:
         if (
@@ -431,12 +658,212 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
             counterparty=requester,
             exchange_request=req,
         )
+        queue_service.after_copy_loaned_or_transmitted(target.copy_id, requester.id)
 
     req.status = BookExchangeRequest.Status.ACCEPTED
     req.resolved_at = timezone.now()
     req.save(update_fields=["status", "resolved_at"])
     message_service.notify_exchange_request_accepted(req)
     return True, None
+
+
+def _approve_loan_handoff(
+    req: BookExchangeRequest,
+    owner: CustomUser,
+    owner_shelf: Shelf,
+    requester: CustomUser,
+) -> tuple[bool, str | None]:
+    """
+    Власник схвалив передачу: книга лишається у поточного позичальника,
+    створюється LoanHandoff. Полиця переїде лише після confirm give + receive.
+    """
+    borrower_shelf = (
+        Shelf.objects.select_for_update(of=("self",))
+        .filter(copy_id=owner_shelf.copy_id, borrowed_from__isnull=False)
+        .select_related("user", "book")
+        .first()
+    )
+    if not borrower_shelf:
+        return False, "Активну позику не знайдено — спробуйте ще раз."
+
+    previous_holder = borrower_shelf.user
+    if previous_holder.id == requester.id:
+        return False, "Цей користувач уже тримає примірник."
+    if borrower_shelf.return_pending:
+        return False, "Спочатку завершіть повернення від поточного позичальника."
+
+    copy_id = owner_shelf.copy_id
+    handoff = LoanHandoff.objects.create(
+        copy_id=copy_id,
+        owner_id=owner.id,
+        from_user_id=previous_holder.id,
+        to_user_id=requester.id,
+        exchange_request=req,
+        from_shelf=borrower_shelf,
+        status=LoanHandoff.Status.AWAITING_GIVE,
+    )
+    log_copy_event(
+        copy_id,
+        CopyEvent.Code.HANDOFF_APPROVED,
+        actor=owner,
+        holder=previous_holder,
+        legal_owner=owner,
+        previous_holder=previous_holder,
+        counterparty=requester,
+        exchange_request=req,
+    )
+    message_service.notify_handoff_approved(handoff)
+    return True, None
+
+
+def _complete_loan_handoff_transfer(handoff: LoanHandoff) -> tuple[bool, str | None]:
+    """Зняти позику з from_user і видати to_user (після обох підтверджень)."""
+    from . import queue_service
+
+    owner = handoff.owner
+    requester = handoff.to_user
+    previous_holder = handoff.from_user
+    copy_id = handoff.copy_id
+    req = handoff.exchange_request
+
+    borrower_shelf = (
+        Shelf.objects.select_for_update(of=("self",))
+        .filter(copy_id=copy_id, borrowed_from__isnull=False, user_id=previous_holder.id)
+        .select_related("user", "book")
+        .first()
+    )
+    if not borrower_shelf:
+        return False, "Позику вже знято — передачу не завершено."
+
+    book_title = borrower_shelf.book.title
+    book_id = borrower_shelf.book_id
+    borrower_shelf.delete()
+    Shelf.objects.create(
+        user_id=requester.id,
+        book_id=book_id,
+        copy_id=copy_id,
+        borrowed_from_id=owner.id,
+        due_date=_loan_due_date(),
+        return_pending=False,
+    )
+    handoff.status = LoanHandoff.Status.COMPLETED
+    handoff.resolved_at = timezone.now()
+    handoff.from_shelf = None
+    handoff.save(update_fields=["status", "resolved_at", "from_shelf"])
+    log_copy_event(
+        copy_id,
+        CopyEvent.Code.TRANSMITTED,
+        actor=owner,
+        holder=requester,
+        legal_owner=owner,
+        previous_holder=previous_holder,
+        counterparty=requester,
+        exchange_request=req,
+    )
+    message_service.notify_loan_transmitted(
+        owner, previous_holder, requester, book_title, exchange_request=req
+    )
+    queue_service.after_copy_loaned_or_transmitted(copy_id, requester.id)
+    return True, None
+
+
+@transaction.atomic
+def confirm_handoff_give(
+    handoff_id: int, acting_user: CustomUser
+) -> tuple[bool, str | None]:
+    """Поточний позичальник підтверджує, що фізично віддав книгу наступному."""
+    try:
+        handoff = (
+            LoanHandoff.objects.select_for_update()
+            .select_related("owner", "from_user", "to_user", "copy__book", "exchange_request")
+            .get(pk=handoff_id)
+        )
+    except LoanHandoff.DoesNotExist:
+        return False, "Передачу не знайдено."
+
+    if handoff.status != LoanHandoff.Status.AWAITING_GIVE:
+        return False, "Зараз не чекається підтвердження віддачі."
+    if acting_user.id != handoff.from_user_id:
+        return False, "Підтвердити віддачу може лише поточний тримач книги."
+
+    handoff.status = LoanHandoff.Status.AWAITING_RECEIVE
+    handoff.giver_confirmed_at = timezone.now()
+    handoff.save(update_fields=["status", "giver_confirmed_at"])
+    log_copy_event(
+        handoff.copy_id,
+        CopyEvent.Code.HANDOFF_GIVEN,
+        actor=acting_user,
+        holder=acting_user,
+        legal_owner=handoff.owner,
+        previous_holder=acting_user,
+        counterparty=handoff.to_user,
+        exchange_request=handoff.exchange_request,
+    )
+    message_service.notify_handoff_given(handoff)
+    return True, None
+
+
+@transaction.atomic
+def confirm_handoff_receive(
+    handoff_id: int, acting_user: CustomUser
+) -> tuple[bool, str | None]:
+    """Наступний позичальник підтверджує отримання — полиця переїздить, попередній виходить з чату."""
+    try:
+        handoff = (
+            LoanHandoff.objects.select_for_update()
+            .select_related("owner", "from_user", "to_user", "copy__book", "exchange_request")
+            .get(pk=handoff_id)
+        )
+    except LoanHandoff.DoesNotExist:
+        return False, "Передачу не знайдено."
+
+    if handoff.status != LoanHandoff.Status.AWAITING_RECEIVE:
+        if handoff.status == LoanHandoff.Status.AWAITING_GIVE:
+            return False, "Спочатку поточний тримач має підтвердити віддачу."
+        return False, "Зараз не чекається підтвердження отримання."
+    if acting_user.id != handoff.to_user_id:
+        return False, "Підтвердити отримання може лише наступний позичальник."
+
+    handoff.receiver_confirmed_at = timezone.now()
+    handoff.save(update_fields=["receiver_confirmed_at"])
+    return _complete_loan_handoff_transfer(handoff)
+
+
+@transaction.atomic
+def cancel_loan_handoff(
+    handoff_id: int, acting_user: CustomUser
+) -> tuple[bool, str | None]:
+    """Власник скасовує схвалену, але ще не завершену фізичну передачу."""
+    try:
+        handoff = LoanHandoff.objects.select_for_update().select_related(
+            "owner", "from_user", "to_user", "copy__book", "exchange_request"
+        ).get(pk=handoff_id)
+    except LoanHandoff.DoesNotExist:
+        return False, "Передачу не знайдено."
+
+    if handoff.status not in (
+        LoanHandoff.Status.AWAITING_GIVE,
+        LoanHandoff.Status.AWAITING_RECEIVE,
+    ):
+        return False, "Цю передачу вже завершено або скасовано."
+    if acting_user.id != handoff.owner_id:
+        return False, "Скасувати може лише власник примірника."
+
+    handoff.status = LoanHandoff.Status.CANCELLED
+    handoff.resolved_at = timezone.now()
+    handoff.save(update_fields=["status", "resolved_at"])
+    message_service.notify_handoff_cancelled(handoff)
+    return True, None
+
+
+def _transmit_loan_to_requester(
+    req: BookExchangeRequest,
+    owner: CustomUser,
+    owner_shelf: Shelf,
+    requester: CustomUser,
+) -> tuple[bool, str | None]:
+    """Legacy alias — тепер схвалення створює handoff, не миттєвий перенос."""
+    return _approve_loan_handoff(req, owner, owner_shelf, requester)
 
 
 def reject_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[bool, str | None]:
@@ -460,6 +887,8 @@ def reject_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
 
 def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[bool, str | None]:
     """Той, хто надсилав запит, передумав - скасування до відповіді власника."""
+    from . import queue_service
+
     try:
         req = BookExchangeRequest.objects.get(
             pk=request_id,
@@ -471,10 +900,13 @@ def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
     if req.requester_id != acting_user.id:
         return False, "Скасувати може лише той, хто надіслав запит."
 
+    copy_id = req.target_shelf.copy_id
     req.status = BookExchangeRequest.Status.CANCELLED
     req.resolved_at = timezone.now()
     req.save(update_fields=["status", "resolved_at"])
     message_service.notify_exchange_request_cancelled(req)
+    if copy_id:
+        queue_service.leave_queue(acting_user, copy_id)
     return True, None
 
 
@@ -485,7 +917,7 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
     """
     shelf = (
         Shelf.objects.select_related("borrowed_from", "book", "copy")
-        .select_for_update(of=("self",))
+        .select_for_update()
         .filter(pk=shelf_id, user=borrower)
         .first()
     )
@@ -495,6 +927,8 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
         return False, "Ця книга не позичена - її можна просто прибрати з полиці."
     if shelf.return_pending:
         return False, "Повернення вже очікує підтвердження позикодавця."
+    if active_handoff_for_copy(shelf.copy_id):
+        return False, "Спочатку завершіть або скасуйте фізичну передачу наступному читачу."
 
     Shelf.objects.filter(pk=shelf.pk).update(return_pending=True)
     shelf.return_pending = True
@@ -518,7 +952,7 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
     """
     shelf = (
         Shelf.objects.select_related("book", "user", "copy")
-        .select_for_update(of=("self",))
+        .select_for_update()
         .filter(
             pk=shelf_id,
             borrowed_from=lender,
@@ -528,6 +962,8 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
     )
     if not shelf:
         return False, "Немає запису з очікуванням вашого підтвердження повернення."
+    if active_handoff_for_copy(shelf.copy_id):
+        return False, "Спочатку скасуйте активну фізичну передачу цього примірника."
 
     owner_id = lender.id
     copy_id = shelf.copy_id
@@ -543,7 +979,7 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
     )
 
     owner_row = (
-        Shelf.objects.select_for_update(of=("self",))
+        Shelf.objects.select_for_update()
         .filter(user_id=owner_id, copy_id=copy_id, borrowed_from__isnull=True)
         .first()
     )
@@ -554,7 +990,8 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
             return_pending=False,
             due_date=None,
         )
-        BookCopy.objects.filter(pk=copy_id).update(owner_id=owner_id)
+        if copy_id:
+            BookCopy.objects.filter(pk=copy_id).update(owner_id=owner_id)
     else:
         shelf.delete()
 
@@ -568,4 +1005,13 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
         counterparty=borrower,
     )
     message_service.notify_borrow_return_confirmed(lender, borrower, book_title)
+
+    if copy_id:
+        try:
+            from . import queue_service
+
+            queue_service.offer_next_after_return(copy_id, lender)
+        except Exception:
+            # Черга не повинна валити підтвердження повернення
+            pass
     return True, None

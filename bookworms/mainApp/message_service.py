@@ -147,17 +147,281 @@ def notify_exchange_request_cancelled(req: BookExchangeRequest) -> PrivateMessag
     )
 
 
+def notify_transmission_request_created(req: BookExchangeRequest) -> PrivateMessage:
+    """Запит на позику, коли примірник уже в когось — власник може схвалити передачу третій особі."""
+    req = BookExchangeRequest.objects.select_related(
+        "requester",
+        "shelf_owner",
+        "target_shelf__book",
+        "target_shelf__copy",
+    ).get(pk=req.pk)
+    holder = (
+        Shelf.objects.filter(copy_id=req.target_shelf.copy_id, borrowed_from__isnull=False)
+        .select_related("user")
+        .first()
+    )
+    holder_name = holder.user.username if holder else "позичальника"
+    body = (
+        f'Запит на передачу: {req.requester.username} просить примірник "{req.target_shelf.book.title}", '
+        f"який зараз у {holder_name}. "
+        f"Після вашого схвалення {holder_name} і {req.requester.username} підтвердять фізичну передачу вручну; "
+        f"до підтвердження отримання книга лишається у {holder_name}."
+    )
+    return _create_message(
+        req.requester,
+        req.shelf_owner,
+        body,
+        exchange_request=req,
+        is_system=True,
+    )
+
+
+def notify_handoff_approved(handoff) -> None:
+    """Власник схвалив — усі троє в чаті; книга ще у from_user."""
+    from .models import LoanHandoff
+
+    handoff = LoanHandoff.objects.select_related(
+        "owner", "from_user", "to_user", "copy__book", "exchange_request"
+    ).get(pk=handoff.pk)
+    title = handoff.copy.book.title
+    req = handoff.exchange_request
+    to_from = (
+        f'{handoff.owner.username} схвалив передачу "{title}" користувачу {handoff.to_user.username}. '
+        f"Підтвердіть у чаті, коли фізично віддасте книгу. "
+        f"{handoff.to_user.username} тепер у спільному чаті з вами та власником."
+    )
+    to_to = (
+        f'{handoff.owner.username} схвалив передачу вам "{title}" (зараз у {handoff.from_user.username}). '
+        f"Дочекайтесь віддачі й підтвердіть отримання в чаті — лише тоді книга з’явиться на вашій полиці. "
+        f"Ви в чаті з власником і {handoff.from_user.username}."
+    )
+    to_owner = (
+        f'Ви схвалили передачу "{title}" від {handoff.from_user.username} до {handoff.to_user.username}. '
+        f"Полиця оновиться після підтвердження віддачі та отримання. "
+        f"Усі троє можуть писати в чаті, доки передача не завершиться."
+    )
+    _create_message(
+        handoff.owner, handoff.from_user, to_from, exchange_request=req, is_system=True
+    )
+    _create_message(
+        handoff.owner, handoff.to_user, to_to, exchange_request=req, is_system=True
+    )
+    # Дзеркально — щоб у треді owner↔from було видно «додано to_user»
+    _create_message(
+        handoff.from_user,
+        handoff.owner,
+        to_owner,
+        exchange_request=req,
+        is_system=True,
+    )
+    # Зв’язок from↔to: системне від власника обом через прямий канал
+    bridge = (
+        f'Фізична передача "{title}": {handoff.from_user.username} → {handoff.to_user.username} '
+        f"(схвалив {handoff.owner.username}). Узгодьте зустріч у цьому чаті."
+    )
+    _create_message(
+        handoff.owner, handoff.to_user, bridge, exchange_request=req, is_system=True
+    )
+    _create_message(
+        handoff.from_user,
+        handoff.to_user,
+        bridge,
+        exchange_request=req,
+        is_system=True,
+    )
+
+
+def notify_handoff_given(handoff) -> None:
+    from .models import LoanHandoff
+
+    handoff = LoanHandoff.objects.select_related(
+        "owner", "from_user", "to_user", "copy__book", "exchange_request"
+    ).get(pk=handoff.pk)
+    title = handoff.copy.book.title
+    req = handoff.exchange_request
+    body_to = (
+        f'{handoff.from_user.username} підтвердив віддачу "{title}". '
+        f"Підтвердіть отримання в чаті — тоді книга з’явиться на вашій полиці, "
+        f"а {handoff.from_user.username} вийде з цього чату."
+    )
+    body_owner = (
+        f'{handoff.from_user.username} віддав "{title}" — очікуємо підтвердження від {handoff.to_user.username}.'
+    )
+    _create_message(
+        handoff.from_user, handoff.to_user, body_to, exchange_request=req, is_system=True
+    )
+    _create_message(
+        handoff.from_user, handoff.owner, body_owner, exchange_request=req, is_system=True
+    )
+
+
+def notify_handoff_cancelled(handoff) -> None:
+    from .models import LoanHandoff
+
+    handoff = LoanHandoff.objects.select_related(
+        "owner", "from_user", "to_user", "copy__book", "exchange_request"
+    ).get(pk=handoff.pk)
+    title = handoff.copy.book.title
+    req = handoff.exchange_request
+    body = (
+        f'{handoff.owner.username} скасував фізичну передачу "{title}" '
+        f"({handoff.from_user.username} → {handoff.to_user.username}). "
+        f"Книга лишається у {handoff.from_user.username}."
+    )
+    _create_message(
+        handoff.owner, handoff.from_user, body, exchange_request=req, is_system=True
+    )
+    _create_message(
+        handoff.owner, handoff.to_user, body, exchange_request=req, is_system=True
+    )
+
+
+def notify_loan_transmitted(
+    owner: CustomUser,
+    previous_holder: CustomUser,
+    new_holder: CustomUser,
+    book_title: str,
+    exchange_request: BookExchangeRequest | None = None,
+) -> None:
+    """Після підтвердження отримання: полиця у new_holder; previous_holder виходить з чату."""
+    to_prev = (
+        f'{new_holder.username} підтвердив отримання "{book_title}". '
+        f"Книгу знято з вашої полиці; ви більше не в чаті щодо цієї позики. "
+        f"Власник {owner.username} лишається в чаті з {new_holder.username} до підтвердження повернення."
+    )
+    to_new = (
+        f'Ви підтвердили отримання "{book_title}". Книга на вашій полиці. '
+        f"{previous_holder.username} вийшов з чату. "
+        f"Власник {owner.username} лишається з вами до підтвердження повернення."
+    )
+    to_owner = (
+        f'Передачу "{book_title}" завершено: {previous_holder.username} → {new_holder.username}. '
+        f"Ви в чаті з {new_holder.username} доки не підтвердите повернення."
+    )
+    _create_message(
+        owner, previous_holder, to_prev, exchange_request=exchange_request, is_system=True
+    )
+    _create_message(
+        owner, new_holder, to_new, exchange_request=exchange_request, is_system=True
+    )
+    _create_message(
+        new_holder, owner, to_owner, exchange_request=exchange_request, is_system=True
+    )
+
+
+def notify_queue_joined(entry, position: int) -> PrivateMessage:
+    from .models import CopyQueueEntry
+
+    entry = CopyQueueEntry.objects.select_related("copy__book", "copy__owner", "user").get(pk=entry.pk)
+    body = (
+        f'Ви в черзі на примірник "{entry.copy.book.title}" (позиція {position}). '
+        f"Отримаєте сповіщення, коли підійде ваша черга або власник схвалить передачу."
+    )
+    return _create_message(
+        entry.copy.owner, entry.user, body, is_system=True
+    )
+
+
+def notify_owner_queue_joined(entry, position: int) -> PrivateMessage:
+    from .models import CopyQueueEntry
+
+    entry = CopyQueueEntry.objects.select_related("copy__book", "copy__owner", "user").get(pk=entry.pk)
+    body = (
+        f'{entry.user.username} став(ла) у чергу на ваш примірник "{entry.copy.book.title}" '
+        f"(позиція {position})."
+    )
+    return _create_message(entry.user, entry.copy.owner, body, is_system=True)
+
+
+def notify_queue_position(entry, position: int) -> PrivateMessage:
+    from .models import CopyQueueEntry
+
+    entry = CopyQueueEntry.objects.select_related("copy__book", "copy__owner", "user").get(pk=entry.pk)
+    body = (
+        f'Оновлення черги: примірник "{entry.copy.book.title}" — ваша позиція зараз {position}.'
+    )
+    return _create_message(entry.copy.owner, entry.user, body, is_system=True)
+
+
+def notify_queue_your_turn(entry, req: BookExchangeRequest) -> PrivateMessage:
+    from .models import CopyQueueEntry
+
+    entry = CopyQueueEntry.objects.select_related("copy__book", "copy__owner", "user").get(pk=entry.pk)
+    body = (
+        f'Ваша черга на примірник "{entry.copy.book.title}"! '
+        f"Створено запит на позику — власник {entry.copy.owner.username} може прийняти його "
+        f"в чаті або в «Обміни»."
+    )
+    return _create_message(
+        entry.copy.owner, entry.user, body, exchange_request=req, is_system=True
+    )
+
+
+def notify_queue_available(entry) -> PrivateMessage:
+    """Примірник вільний, але автозапит не створився — м’яке сповіщення."""
+    from .models import CopyQueueEntry
+
+    entry = CopyQueueEntry.objects.select_related("copy__book", "copy__owner", "user").get(pk=entry.pk)
+    body = (
+        f'Примірник "{entry.copy.book.title}" знову доступний. '
+        f"Надішліть запит на позику або зачекайте пропозиції від системи."
+    )
+    return _create_message(entry.copy.owner, entry.user, body, is_system=True)
+
+
 def get_exchange_message_partners(user: CustomUser):
     """
-    Співрозмовники лише з пар BookExchangeRequest (позика або обмін).
-    Без спільного запиту доступу до чату немає.
+    Співрозмовники за *активним* контекстом:
+    - pending запити на обмін/позику;
+    - активна позика (Shelf.borrowed_from);
+    - активна фізична передача (LoanHandoff) — власник + обидва позичальники;
+    - черга на примірник.
+
+    Після завершення handoff попередній позичальник відпадає; власник лишається
+    з новим доки не підтвердить повернення.
     """
+    from .models import CopyQueueEntry, LoanHandoff
+
     ids: set[int] = set()
-    for er in BookExchangeRequest.objects.filter(
+    pending = BookExchangeRequest.Status.PENDING
+    for er in BookExchangeRequest.objects.filter(status=pending).filter(
         Q(requester=user) | Q(shelf_owner=user)
     ).only("requester_id", "shelf_owner_id"):
         ids.add(er.requester_id)
         ids.add(er.shelf_owner_id)
+
+    for s in Shelf.objects.filter(borrowed_from=user).only("user_id"):
+        ids.add(s.user_id)
+    for s in Shelf.objects.filter(user=user, borrowed_from__isnull=False).only(
+        "borrowed_from_id"
+    ):
+        ids.add(s.borrowed_from_id)
+
+    active_h = (
+        LoanHandoff.Status.AWAITING_GIVE,
+        LoanHandoff.Status.AWAITING_RECEIVE,
+    )
+    try:
+        for h in LoanHandoff.objects.filter(status__in=active_h).filter(
+            Q(owner=user) | Q(from_user=user) | Q(to_user=user)
+        ).only("owner_id", "from_user_id", "to_user_id"):
+            ids.add(h.owner_id)
+            ids.add(h.from_user_id)
+            ids.add(h.to_user_id)
+    except Exception:
+        pass
+
+    for e in CopyQueueEntry.objects.filter(
+        status__in=("waiting", "offered"),
+        copy__owner=user,
+    ).only("user_id"):
+        ids.add(e.user_id)
+    for e in CopyQueueEntry.objects.filter(
+        status__in=("waiting", "offered"),
+        user=user,
+    ).select_related("copy").only("copy__owner_id"):
+        ids.add(e.copy.owner_id)
+
     ids.discard(user.pk)
     return CustomUser.objects.filter(pk__in=ids).order_by("username").distinct()
 

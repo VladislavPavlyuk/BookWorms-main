@@ -10,6 +10,7 @@ from mainApp.models import (
     Comment,
     CopyEvent,
     Like,
+    LoanHandoff,
     Post,
     PrivateMessage,
     READER_AGE_MAX,
@@ -147,10 +148,13 @@ class ShelfSerializer(serializers.ModelSerializer):
     book = BookSerializer(read_only=True)
     user = UserPublicSerializer(read_only=True)
     borrowed_from = UserPublicSerializer(read_only=True)
+    lent_to = serializers.SerializerMethodField()
+    loan_due_date = serializers.SerializerMethodField()
     is_overdue = serializers.SerializerMethodField()
     days_left = serializers.SerializerMethodField()
     is_lent_out = serializers.SerializerMethodField()
     pending_return_shelf_id = serializers.SerializerMethodField()
+    request_shelf_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Shelf
@@ -160,24 +164,49 @@ class ShelfSerializer(serializers.ModelSerializer):
             "book",
             "copy_id",
             "borrowed_from",
+            "lent_to",
             "return_pending",
             "due_date",
+            "loan_due_date",
             "is_overdue",
             "days_left",
             "is_lent_out",
             "pending_return_shelf_id",
+            "request_shelf_id",
             "added_at",
         )
 
+    def get_lent_to(self, obj):
+        loan = getattr(obj, "loan_row", None)
+        if not loan:
+            return None
+        return UserPublicSerializer(loan.user, context=self.context).data
+
+    def get_loan_due_date(self, obj):
+        loan = getattr(obj, "loan_row", None)
+        if loan and loan.due_date:
+            return loan.due_date
+        return None
+
+    def _effective_due(self, obj):
+        if obj.borrowed_from_id and obj.due_date:
+            return obj.due_date
+        loan = getattr(obj, "loan_row", None)
+        if loan and loan.due_date:
+            return loan.due_date
+        return None
+
     def get_is_overdue(self, obj):
-        if not obj.due_date or not obj.borrowed_from_id:
+        due = self._effective_due(obj)
+        if not due:
             return False
-        return obj.due_date < timezone.now().date()
+        return due < timezone.now().date()
 
     def get_days_left(self, obj):
-        if not obj.due_date or not obj.borrowed_from_id:
+        due = self._effective_due(obj)
+        if not due:
             return None
-        return (obj.due_date - timezone.now().date()).days
+        return (due - timezone.now().date()).days
 
     def get_is_lent_out(self, obj):
         if getattr(obj, "is_lent_out", None) is not None:
@@ -192,6 +221,15 @@ class ShelfSerializer(serializers.ModelSerializer):
         if getattr(obj, "pending_return_shelf_id", None) is not None:
             return obj.pending_return_shelf_id
         return None
+
+    def get_request_shelf_id(self, obj):
+        """Id полиці власника для create_exchange (для позики = сам рядок)."""
+        rid = getattr(obj, "request_shelf_id", None)
+        if rid is not None:
+            return rid
+        if obj.borrowed_from_id:
+            return None
+        return obj.pk
 
 
 class CopyEventSerializer(serializers.ModelSerializer):
@@ -260,6 +298,7 @@ class ExchangeRequestSerializer(serializers.ModelSerializer):
     target_shelf = ShelfSerializer(read_only=True)
     offer_shelf = ShelfSerializer(read_only=True)
     kind = serializers.SerializerMethodField()
+    is_transmission = serializers.SerializerMethodField()
 
     class Meta:
         model = BookExchangeRequest
@@ -271,12 +310,24 @@ class ExchangeRequestSerializer(serializers.ModelSerializer):
             "offer_shelf",
             "status",
             "kind",
+            "is_transmission",
             "created_at",
             "resolved_at",
         )
 
     def get_kind(self, obj):
         return "exchange" if obj.offer_shelf_id else "borrow"
+
+    def get_is_transmission(self, obj):
+        """Pending borrow while copy is currently lent → owner would transmit to requester."""
+        if obj.offer_shelf_id or obj.status != BookExchangeRequest.Status.PENDING:
+            return False
+        copy_id = getattr(obj.target_shelf, "copy_id", None)
+        if not copy_id:
+            return False
+        from mainApp.exchange_service import is_copy_lent_out
+
+        return is_copy_lent_out(copy_id)
 
 
 class CreateExchangeSerializer(serializers.Serializer):
@@ -324,3 +375,88 @@ class MessageSerializer(serializers.ModelSerializer):
 
 class SendMessageSerializer(serializers.Serializer):
     body = serializers.CharField()
+
+
+class LoanHandoffSerializer(serializers.ModelSerializer):
+    owner = UserPublicSerializer(read_only=True)
+    from_user = UserPublicSerializer(read_only=True)
+    to_user = UserPublicSerializer(read_only=True)
+    book_title = serializers.CharField(source="copy.book.title", read_only=True)
+    copy_id = serializers.IntegerField(read_only=True)
+    my_role = serializers.SerializerMethodField()
+    can_confirm_give = serializers.SerializerMethodField()
+    can_confirm_receive = serializers.SerializerMethodField()
+    can_cancel = serializers.SerializerMethodField()
+    participants = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LoanHandoff
+        fields = (
+            "id",
+            "copy_id",
+            "book_title",
+            "owner",
+            "from_user",
+            "to_user",
+            "status",
+            "giver_confirmed_at",
+            "receiver_confirmed_at",
+            "exchange_request_id",
+            "created_at",
+            "my_role",
+            "can_confirm_give",
+            "can_confirm_receive",
+            "can_cancel",
+            "participants",
+        )
+
+    def _req_user(self):
+        req = self.context.get("request")
+        return getattr(req, "user", None) if req else None
+
+    def get_my_role(self, obj):
+        u = self._req_user()
+        if not u or not u.is_authenticated:
+            return None
+        if u.id == obj.owner_id:
+            return "owner"
+        if u.id == obj.from_user_id:
+            return "giver"
+        if u.id == obj.to_user_id:
+            return "receiver"
+        return None
+
+    def get_can_confirm_give(self, obj):
+        u = self._req_user()
+        return bool(
+            u
+            and u.is_authenticated
+            and u.id == obj.from_user_id
+            and obj.status == "awaiting_give"
+        )
+
+    def get_can_confirm_receive(self, obj):
+        u = self._req_user()
+        return bool(
+            u
+            and u.is_authenticated
+            and u.id == obj.to_user_id
+            and obj.status == "awaiting_receive"
+        )
+
+    def get_can_cancel(self, obj):
+        u = self._req_user()
+        return bool(
+            u
+            and u.is_authenticated
+            and u.id == obj.owner_id
+            and obj.status in ("awaiting_give", "awaiting_receive")
+        )
+
+    def get_participants(self, obj):
+        ctx = self.context
+        return [
+            UserPublicSerializer(obj.owner, context=ctx).data,
+            UserPublicSerializer(obj.from_user, context=ctx).data,
+            UserPublicSerializer(obj.to_user, context=ctx).data,
+        ]

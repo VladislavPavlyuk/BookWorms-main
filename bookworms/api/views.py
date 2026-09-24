@@ -15,19 +15,28 @@ import logging
 from mainApp.exchange_service import (
     accept_exchange_request,
     add_owned_copy,
+    attach_loan_info,
+    attach_request_targets,
     available_owned_shelves_qs,
     cancel_exchange_request,
+    cancel_loan_handoff,
     confirm_borrow_return,
+    confirm_handoff_give,
+    confirm_handoff_receive,
     create_exchange_request,
     ensure_shelves_have_copies,
+    filter_physically_present,
     get_or_create_book_from_payload,
     group_shelves_by_book,
+    handoffs_involving,
     is_copy_lent_out,
+    physical_presence_shelves_qs,
     reject_exchange_request,
     remove_owned_shelf,
     request_borrow_return,
     resolve_and_sync_book_by_isbn,
 )
+from mainApp import queue_service
 from mainApp.message_service import (
     get_exchange_message_partners,
     mark_messages_read_for_user,
@@ -71,6 +80,7 @@ from .serializers import (
     CopyEventSerializer,
     CreateExchangeSerializer,
     ExchangeRequestSerializer,
+    LoanHandoffSerializer,
     MeSerializer,
     MeUpdateSerializer,
     MessageSerializer,
@@ -419,36 +429,43 @@ def post_comment(request, post_id):
 
 @api_view(["GET"])
 def my_shelf(request):
-    shelves = list(
+    shelves_all = list(
         request.user.shelf_entries.select_related("book", "borrowed_from", "user", "copy")
         .order_by("-added_at")
     )
-    shelves = ensure_shelves_have_copies(shelves)
+    shelves_all = ensure_shelves_have_copies(shelves_all)
     pending = list(
         Shelf.objects.filter(borrowed_from=request.user, return_pending=True)
         .select_related("user", "book", "borrowed_from", "copy")
         .order_by("-added_at")
     )
     pending = ensure_shelves_have_copies(pending)
-    lent_copy_ids = {
-        cid
-        for cid in Shelf.objects.filter(borrowed_from=request.user).values_list(
-            "copy_id", flat=True
+    loan_by_copy = {
+        row.copy_id: row
+        for row in Shelf.objects.filter(borrowed_from=request.user).select_related(
+            "user", "book", "copy"
         )
-        if cid
+        if row.copy_id
     }
     pending_by_copy = {p.copy_id: p.id for p in pending if p.copy_id}
-    for s in shelves:
-        s.is_lent_out = (not s.borrowed_from_id) and (s.copy_id in lent_copy_ids)
+    lent_out_count = 0
+    for s in shelves_all:
+        s.is_lent_out = (not s.borrowed_from_id) and (s.copy_id in loan_by_copy)
+        if s.is_lent_out:
+            lent_out_count += 1
+        s.loan_row = None if s.borrowed_from_id else loan_by_copy.get(s.copy_id)
         s.pending_return_shelf_id = (
             None if s.borrowed_from_id else pending_by_copy.get(s.copy_id)
         )
+    # Фізична наявність: без власних, що вже у позиці
+    shelves = [s for s in shelves_all if not s.is_lent_out]
     return Response(
         {
             "shelves": ShelfSerializer(shelves, many=True, context={"request": request}).data,
             "pending_returns": ShelfSerializer(
                 pending, many=True, context={"request": request}
             ).data,
+            "lent_out_count": lent_out_count,
         }
     )
 
@@ -563,11 +580,15 @@ def shelf_confirm_return(request, shelf_id):
 
 @api_view(["GET"])
 def browse_shelves(request):
-    others_qs = ensure_shelves_have_copies(
-        list(
-            available_owned_shelves_qs(exclude_user_id=request.user.id)
-            .select_related("user", "book", "borrowed_from", "copy")
-            .order_by("-added_at")
+    others_qs = attach_request_targets(
+        attach_loan_info(
+            ensure_shelves_have_copies(
+                list(
+                    physical_presence_shelves_qs(exclude_user_id=request.user.id)
+                    .select_related("user", "book", "borrowed_from", "copy")
+                    .order_by("-added_at")
+                )
+            )
         )
     )
     mine = ensure_shelves_have_copies(
@@ -581,9 +602,7 @@ def browse_shelves(request):
     ctx = {"request": request}
     return Response(
         {
-            # Flat list kept for RequestModal / legacy clients
             "others": ShelfSerializer(others_qs, many=True, context=ctx).data,
-            # One cover per ISBN + owners inline
             "others_grouped": BookBrowseGroupSerializer(
                 grouped, many=True, context=ctx
             ).data,
@@ -597,17 +616,23 @@ def user_shelf(request, user_id):
     owner = User.objects.filter(pk=user_id).first()
     if not owner:
         return _error("Користувача не знайдено.", 404)
-    # Власні примірники (книги, якими володіє / тримає як власник)
-    shelves = (
-        owner.shelf_entries.filter(borrowed_from__isnull=True)
-        .select_related("book", "borrowed_from", "user", "copy")
-        .order_by("-added_at")
+    shelves = attach_request_targets(
+        filter_physically_present(
+            ensure_shelves_have_copies(
+                list(
+                    owner.shelf_entries.select_related(
+                        "book", "borrowed_from", "user", "copy"
+                    ).order_by("-added_at")
+                )
+            )
+        )
     )
+    ctx = {"request": request}
     return Response(
         {
-            "user": UserPublicSerializer(owner, context={"request": request}).data,
+            "user": UserPublicSerializer(owner, context=ctx).data,
             "is_own": request.user.pk == owner.pk,
-            "shelves": ShelfSerializer(shelves, many=True, context={"request": request}).data,
+            "shelves": ShelfSerializer(shelves, many=True, context=ctx).data,
         }
     )
 
@@ -617,10 +642,16 @@ def book_detail(request, book_id):
     book = Book.objects.filter(pk=book_id).first()
     if not book:
         return _error("Книгу не знайдено.", 404)
-    holders = (
-        Shelf.objects.filter(book=book)
-        .select_related("user", "borrowed_from", "book", "copy")
-        .order_by("added_at")
+    holders = attach_request_targets(
+        filter_physically_present(
+            ensure_shelves_have_copies(
+                list(
+                    Shelf.objects.filter(book=book)
+                    .select_related("user", "borrowed_from", "book", "copy")
+                    .order_by("added_at")
+                )
+            )
+        )
     )
     owners = []
     seen = set()
@@ -650,7 +681,7 @@ def book_detail(request, book_id):
 
 @api_view(["GET"])
 def copy_history(request, copy_id):
-    """Історія подій одного примірника + поточні полиці."""
+    """Історія подій одного примірника + поточні полиці + черга."""
     copy = (
         BookCopy.objects.filter(pk=copy_id)
         .select_related("book", "owner")
@@ -658,10 +689,16 @@ def copy_history(request, copy_id):
     )
     if not copy:
         return _error("Примірник не знайдено.", 404)
-    holders = (
-        Shelf.objects.filter(copy=copy)
-        .select_related("user", "borrowed_from", "book", "copy")
-        .order_by("added_at")
+    holders = attach_request_targets(
+        filter_physically_present(
+            ensure_shelves_have_copies(
+                list(
+                    Shelf.objects.filter(copy=copy)
+                    .select_related("user", "borrowed_from", "book", "copy")
+                    .order_by("added_at")
+                )
+            )
+        )
     )
     events = (
         CopyEvent.objects.filter(copy=copy)
@@ -676,13 +713,98 @@ def copy_history(request, copy_id):
         .order_by("-created_at")
     )
     ctx = {"request": request}
+    my_entry = (
+        queue_service.active_queue_qs(copy_id)
+        .filter(user=request.user)
+        .first()
+        if request.user.is_authenticated
+        else None
+    )
     return Response(
         {
             "copy": BookCopySerializer(copy, context=ctx).data,
             "holders": ShelfSerializer(holders, many=True, context=ctx).data,
             "events": CopyEventSerializer(events, many=True, context=ctx).data,
+            "queue": queue_service.serialize_queue(copy_id),
+            "queue_length": queue_service.active_queue_qs(copy_id).count(),
+            "my_queue_position": (
+                queue_service.queue_position(my_entry) if my_entry else None
+            ),
+            "is_lent_out": is_copy_lent_out(copy_id),
         }
     )
+
+
+@api_view(["GET"])
+def copy_queue_list(request, copy_id):
+    if not BookCopy.objects.filter(pk=copy_id).exists():
+        return _error("Примірник не знайдено.", 404)
+    my_entry = queue_service.active_queue_qs(copy_id).filter(user=request.user).first()
+    return Response(
+        {
+            "queue": queue_service.serialize_queue(copy_id),
+            "my_queue_position": (
+                queue_service.queue_position(my_entry) if my_entry else None
+            ),
+            "is_lent_out": is_copy_lent_out(copy_id),
+        }
+    )
+
+
+@api_view(["POST"])
+def copy_queue_join(request, copy_id):
+    copy = BookCopy.objects.filter(pk=copy_id).select_related("book", "owner").first()
+    if not copy:
+        return _error("Примірник не знайдено.", 404)
+    entry, err = queue_service.join_queue(request.user, copy, notify=True)
+    if err:
+        return _error(err)
+    return Response(
+        {
+            "ok": True,
+            "position": queue_service.queue_position(entry),
+            "queue": queue_service.serialize_queue(copy_id),
+        },
+        status=201,
+    )
+
+
+@api_view(["POST"])
+def copy_queue_leave(request, copy_id):
+    ok, err = queue_service.leave_queue(request.user, copy_id)
+    if not ok:
+        return _error(err or "Помилка.")
+    return Response({"ok": True, "queue": queue_service.serialize_queue(copy_id)})
+
+
+@api_view(["GET"])
+def my_queues(request):
+    """Мої активні позиції в чергах."""
+    from mainApp.models import CopyQueueEntry
+
+    entries = (
+        CopyQueueEntry.objects.filter(
+            user=request.user,
+            status__in=queue_service.ACTIVE,
+        )
+        .select_related("copy", "copy__book", "copy__owner")
+        .order_by("created_at")
+    )
+    items = []
+    for e in entries:
+        items.append(
+            {
+                "id": e.pk,
+                "copy_id": e.copy_id,
+                "book_title": e.copy.book.title,
+                "owner_id": e.copy.owner_id,
+                "owner_username": e.copy.owner.username,
+                "status": e.status,
+                "position": queue_service.queue_position(e),
+                "created_at": e.created_at,
+            }
+        )
+    return Response({"results": items})
 
 
 @api_view(["GET"])
@@ -749,10 +871,18 @@ def exchange_create(request):
             continue
         offer = None
         oid = row.get("offer_shelf_id")
+        if is_copy_lent_out(target.copy_id) or target.borrowed_from_id:
+            oid = None
         if oid:
-            offer = Shelf.objects.filter(pk=oid, user=request.user).first()
+            offer = (
+                available_owned_shelves_qs()
+                .filter(pk=oid, user=request.user)
+                .first()
+            )
             if not offer:
-                errors.append(f'"{target.book.title[:45]}": книгу для обміну не знайдено.')
+                errors.append(
+                    f'"{target.book.title[:45]}": книгу для обміну не знайдено серед вільних.'
+                )
                 continue
         req, err = create_exchange_request(request.user, target, offer)
         if err:
@@ -822,12 +952,90 @@ def message_thread(request, partner_id):
     )
     timeline = list(reversed(list(recent)))
     mark_thread_read(request.user, partner_id)
+
+    # Pending actions with this partner (accept/reject in chat)
+    ctx = {"request": request}
+    pending_in = BookExchangeRequest.objects.filter(
+        status=BookExchangeRequest.Status.PENDING,
+        shelf_owner=request.user,
+        requester_id=partner_id,
+    ).select_related(
+        "requester",
+        "shelf_owner",
+        "target_shelf__book",
+        "target_shelf__user",
+        "target_shelf__copy",
+        "offer_shelf__book",
+        "offer_shelf__user",
+        "target_shelf__borrowed_from",
+        "offer_shelf__borrowed_from",
+    )
+    pending_out = BookExchangeRequest.objects.filter(
+        status=BookExchangeRequest.Status.PENDING,
+        requester=request.user,
+        shelf_owner_id=partner_id,
+    ).select_related(
+        "requester",
+        "shelf_owner",
+        "target_shelf__book",
+        "target_shelf__user",
+        "target_shelf__copy",
+        "offer_shelf__book",
+        "offer_shelf__user",
+        "target_shelf__borrowed_from",
+        "offer_shelf__borrowed_from",
+    )
+    # Повернення від цього партнера, що чекають підтвердження власника
+    pending_returns = list(
+        Shelf.objects.filter(
+            borrowed_from=request.user,
+            user_id=partner_id,
+            return_pending=True,
+        )
+        .select_related("user", "book", "borrowed_from", "copy")
+        .order_by("-added_at")
+    )
+    pending_returns = ensure_shelves_have_copies(pending_returns)
     return Response(
         {
-            "partner": UserPublicSerializer(partner, context={"request": request}).data,
-            "messages": MessageSerializer(timeline, many=True, context={"request": request}).data,
+            "partner": UserPublicSerializer(partner, context=ctx).data,
+            "messages": MessageSerializer(timeline, many=True, context=ctx).data,
+            "pending_in": ExchangeRequestSerializer(pending_in, many=True, context=ctx).data,
+            "pending_out": ExchangeRequestSerializer(pending_out, many=True, context=ctx).data,
+            "pending_returns": ShelfSerializer(
+                pending_returns, many=True, context=ctx
+            ).data,
+            "handoffs": LoanHandoffSerializer(
+                handoffs_involving(request.user.id, partner_id),
+                many=True,
+                context=ctx,
+            ).data,
         }
     )
+
+
+@api_view(["POST"])
+def handoff_confirm_give(request, handoff_id):
+    ok, err = confirm_handoff_give(handoff_id, request.user)
+    if not ok:
+        return _error(err or "Помилка.")
+    return Response({"ok": True})
+
+
+@api_view(["POST"])
+def handoff_confirm_receive(request, handoff_id):
+    ok, err = confirm_handoff_receive(handoff_id, request.user)
+    if not ok:
+        return _error(err or "Помилка.")
+    return Response({"ok": True})
+
+
+@api_view(["POST"])
+def handoff_cancel(request, handoff_id):
+    ok, err = cancel_loan_handoff(handoff_id, request.user)
+    if not ok:
+        return _error(err or "Помилка.")
+    return Response({"ok": True})
 
 
 @api_view(["GET"])

@@ -4,11 +4,12 @@
 {% block title %}Полиці інших користувачів{% endblock %}
 
 {% block content %}
-{# others_grouped: [{book, owners, shelves}] — одна обкладинка на ISBN #}
+{# others_grouped: фізична наявність — вільні у власника або в позичальника #}
 
 <p class="text-muted mb-3">
-    Одна обкладинка на ISBN. Власники різних примірників — в одному рядку.
-    Позначте конкретного власника для <strong>позики</strong> або оберіть свою книгу для <strong>обміну</strong>.
+    Каталог показує примірники <strong>там, де вони фізично зараз</strong>.
+    Якщо книга в позиці — вона на полиці позичальника (власник і термін вказані);
+    запит на позику/передачу йде <em>власнику</em>.
 </p>
 
 {% if messages %}
@@ -21,7 +22,7 @@
 {% endif %}
 
 {% if not my_owned_shelves %}
-    <div class="alert alert-info">Щоб у рядку обрати обмін двома книгами, потрібна хоча б одна <em>ваша</em> книга на полиці (не позичена). <a href="{% url 'my_library' %}">Моя полиця</a>.</div>
+    <div class="alert alert-info">Щоб обрати обмін, потрібна хоча б одна <em>ваша</em> вільна книга. <a href="{% url 'my_library' %}">Моя полиця</a>.</div>
 {% endif %}
 
 {% if others_grouped %}
@@ -44,44 +45,75 @@
                             </h3>
                             {% if book.authors %}<p class="small text-muted mb-1">{{ book.authors }}</p>{% endif %}
                             <p class="small text-muted mb-2">ISBN {{ book.isbn }} · вік {{ book.reader_age_summary }}</p>
-                            <p class="mb-2">
-                                <a href="{% url 'book_history' book.id %}" class="btn btn-sm btn-outline-secondary">Усі примірники</a>
-                            </p>
                             <div class="table-responsive">
                                 <table class="table table-sm align-middle mb-0">
                                     <thead>
                                         <tr>
                                             <th class="text-center" style="width: 2.5rem;"></th>
-                                            <th>Примірник у</th>
-                                            <th>Ваша книга в обмін (або позика)</th>
+                                            <th>Де зараз</th>
+                                            <th>Власник / термін</th>
+                                            <th>Ваша книга в обмін</th>
                                             <th></th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {% for s in g.shelves %}
-                                            <tr>
+                                            {% with req_id=s.request_shelf_id|default:s.id %}
+                                            <tr {% if s.borrowed_from_id %}class="table-warning"{% endif %}>
                                                 <td class="text-center">
-                                                    <input type="checkbox" name="target_shelf_ids" value="{{ s.id }}"
+                                                    {% if req_id %}
+                                                    <input type="checkbox" name="target_shelf_ids" value="{{ req_id }}"
                                                            class="form-check-input js-shelf-pick"
-                                                           aria-label="Обрати примірник {{ s.user.username }}">
+                                                           aria-label="Обрати примірник">
+                                                    {% endif %}
                                                 </td>
-                                                <td>{% shelf_user_link s.user %}{% if s.copy_id %} <span class="text-muted small">#{{ s.copy_id }}</span>{% endif %}</td>
                                                 <td>
-                                                    <select name="offer_shelf_id_{{ s.id }}" class="form-select form-select-sm" style="max-width: 280px;">
-                                                        <option value="">— позика (без вашої книги) —</option>
+                                                    {% shelf_user_link s.user %}
+                                                    {% if s.copy_id %} <span class="text-muted small">#{{ s.copy_id }}</span>{% endif %}
+                                                    {% if s.borrowed_from_id %}
+                                                        <br><span class="badge text-bg-warning">позика</span>
+                                                    {% else %}
+                                                        <br><span class="badge text-bg-success">вільний</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td class="small">
+                                                    {% if s.borrowed_from_id %}
+                                                        {% shelf_user_link s.borrowed_from %}
+                                                        {% if s.due_date %}
+                                                            <br>
+                                                            <span class="{% if s.is_overdue %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                                                                до {{ s.due_date|date:"d.m.Y" }}
+                                                                {% if s.is_overdue %}· прострочено{% elif s.days_left is not None %}· ще {{ s.days_left }} дн.{% endif %}
+                                                            </span>
+                                                        {% endif %}
+                                                        <br><span class="text-muted">Запит = передача з дозволу власника</span>
+                                                    {% else %}
+                                                        {% shelf_user_link s.user %}
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if s.borrowed_from_id %}
+                                                    {# Передача третій особі — без обміну; select не рендеримо (disabled усе одно лишає options у DOM). #}
+                                                    <span class="text-muted small">— запит на передачу (без обміну) —</span>
+                                                    <input type="hidden" name="offer_shelf_id_{{ req_id }}" value="">
+                                                    {% else %}
+                                                    <select name="offer_shelf_id_{{ req_id }}" class="form-select form-select-sm" style="max-width: 280px;">
+                                                        <option value="">— позика —</option>
                                                         {% for ms in my_owned_shelves %}
                                                             {% if ms.book_id != s.book_id %}
                                                                 <option value="{{ ms.id }}">{{ ms.book.title|truncatechars:40 }}</option>
                                                             {% endif %}
                                                         {% endfor %}
                                                     </select>
+                                                    {% endif %}
                                                 </td>
                                                 <td class="text-nowrap">
                                                     {% if s.copy_id %}
-                                                    <a href="{% url 'copy_history' s.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія подій</a>
+                                                    <a href="{% url 'copy_history' s.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія / черга</a>
                                                     {% endif %}
                                                 </td>
                                             </tr>
+                                            {% endwith %}
                                         {% endfor %}
                                     </tbody>
                                 </table>
@@ -94,11 +126,10 @@
         </div>
         <div class="d-flex flex-wrap align-items-center gap-3 mt-2 mb-4">
             <button type="submit" class="btn btn-primary">Надіслати запити для обраних</button>
-            <span class="text-muted small">Кожен обраний власник = окремий запит на його примірник.</span>
         </div>
     </form>
 {% else %}
-    <p class="text-muted">Немає записів на полицях інших користувачів.</p>
+    <p class="text-muted">Немає примірників у каталозі.</p>
 {% endif %}
 
 <p class="mt-3"><a href="{% url 'exchange_requests' %}">Мої запити на обмін</a></p>
@@ -111,7 +142,7 @@
         var any = form.querySelectorAll(".js-shelf-pick:checked").length > 0;
         if (!any) {
             ev.preventDefault();
-            alert("Позначте хоча б одного власника чекбоксом.");
+            alert("Позначте хоча б один примірник.");
         }
     });
 })();

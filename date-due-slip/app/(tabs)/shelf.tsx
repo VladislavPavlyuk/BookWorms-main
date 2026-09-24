@@ -24,6 +24,7 @@ export default function ShelfScreen() {
   const router = useRouter();
   const [shelves, setShelves] = useState<Shelf[]>([]);
   const [pending, setPending] = useState<Shelf[]>([]);
+  const [lentOutCount, setLentOutCount] = useState(0);
   const [isbn, setIsbn] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -42,6 +43,7 @@ export default function ShelfScreen() {
     const data = await ShelfApi.mine();
     setShelves(Array.isArray(data?.shelves) ? data.shelves : []);
     setPending(Array.isArray(data?.pending_returns) ? data.pending_returns : []);
+    setLentOutCount(Number(data?.lent_out_count) || 0);
   };
 
   useFocusEffect(
@@ -85,13 +87,7 @@ export default function ShelfScreen() {
   const act = async (s: Shelf) => {
     try {
       if (s.borrowed_from) await ShelfApi.returnBook(s.id);
-      else {
-        if (s.is_lent_out) {
-          Alert.alert("Полиця", "Книга зараз у позиці — спочатку повернення.");
-          return;
-        }
-        await ShelfApi.remove(s.id);
-      }
+      else await ShelfApi.remove(s.id);
       await load();
     } catch (e) {
       Alert.alert("Полиця", e instanceof ApiError ? e.message : String(e));
@@ -101,18 +97,6 @@ export default function ShelfScreen() {
   const confirm = async (s: Shelf) => {
     try {
       await ShelfApi.confirmReturn(s.id);
-      Alert.alert("Повернення", "Підтверджено.");
-      await load();
-    } catch (e) {
-      Alert.alert("Повернення", e instanceof ApiError ? e.message : String(e));
-    }
-  };
-
-  const confirmOwned = async (s: Shelf) => {
-    const id = s.pending_return_shelf_id;
-    if (!id) return;
-    try {
-      await ShelfApi.confirmReturn(id);
       Alert.alert("Повернення", "Підтверджено.");
       await load();
     } catch (e) {
@@ -157,29 +141,43 @@ export default function ShelfScreen() {
           />
         }
         ListHeaderComponent={
-          pending.length ? (
-            <View style={styles.pendingBox}>
-              <Text style={styles.sec}>Підтвердити повернення ({pending.length})</Text>
-              <Text style={styles.pendingHint}>
-                Позичальник повідомив про повернення. Підтвердіть, коли книга у вас.
-              </Text>
-              {pending.map((s) => (
-                <View key={s.id} style={[styles.card, styles.pendingCard]}>
-                  <BookCover uri={s.book.cover_url} size="full" bleed={0} />
-                  <View style={styles.cardBody}>
-                    <Text style={styles.title}>{s.book.title}</Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
-                      <Text style={styles.meta}>від </Text>
-                      <UserNameLink user={s.user} style={styles.meta} />
+          <View>
+            <Text style={styles.physHint}>
+              На полиці — лише те, що фізично у вас: власні вільні та позичені (з власником і терміном).
+              Видані вами в позику з’являються на полиці позичальника.
+              {lentOutCount > 0
+                ? ` Зараз у позиці з ваших: ${lentOutCount} — див. Date Due Slip.`
+                : ""}
+            </Text>
+            {lentOutCount > 0 ? (
+              <Pressable onPress={() => router.push("/(tabs)/slips")} style={styles.slipsLink}>
+                <Text style={styles.link}>Відкрити Date Due Slip</Text>
+              </Pressable>
+            ) : null}
+            {pending.length ? (
+              <View style={styles.pendingBox}>
+                <Text style={styles.sec}>Підтвердити повернення ({pending.length})</Text>
+                <Text style={styles.pendingHint}>
+                  Позичальник повідомив про повернення. Підтвердіть, коли книга у вас.
+                </Text>
+                {pending.map((s) => (
+                  <View key={s.id} style={[styles.card, styles.pendingCard]}>
+                    <BookCover uri={s.book.cover_url} size="full" bleed={0} />
+                    <View style={styles.cardBody}>
+                      <Text style={styles.title}>{s.book.title}</Text>
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
+                        <Text style={styles.meta}>від </Text>
+                        <UserNameLink user={s.user} style={styles.meta} />
+                      </View>
+                      <Pressable style={styles.confirmBtn} onPress={() => confirm(s)}>
+                        <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
+                      </Pressable>
                     </View>
-                    <Pressable style={styles.confirmBtn} onPress={() => confirm(s)}>
-                      <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
-                    </Pressable>
                   </View>
-                </View>
-              ))}
-            </View>
-          ) : null
+                ))}
+              </View>
+            ) : null}
+          </View>
         }
         contentContainerStyle={{ paddingBottom: 24 }}
         ListEmptyComponent={
@@ -201,10 +199,21 @@ export default function ShelfScreen() {
                       <Text style={styles.meta}> · позичено у </Text>
                       <UserNameLink user={item.borrowed_from} style={styles.meta} />
                     </>
-                  ) : null}
-                  <Text style={styles.meta}>
-                    {item.is_lent_out && !item.borrowed_from ? " · зараз у позиці" : ""}
+                  ) : (
+                    <Text style={styles.meta}> · власна</Text>
+                  )}
+                  <Text
+                    style={[
+                      styles.meta,
+                      item.is_overdue ? { color: colors.stamp, fontWeight: "700" } : null,
+                    ]}
+                  >
                     {item.due_date ? ` · до ${item.due_date}` : ""}
+                    {item.is_overdue
+                      ? " · прострочено"
+                      : item.days_left != null
+                        ? ` · ще ${item.days_left} дн.`
+                        : ""}
                     {item.return_pending ? " · очікує підтвердження" : ""}
                     {` · ${item.book.reader_age_summary}`}
                   </Text>
@@ -216,11 +225,6 @@ export default function ShelfScreen() {
               {item.borrowed_from && (
                 <Pressable onPress={() => router.push(`/chat/${item.borrowed_from!.id}`)}>
                   <Text style={styles.link}>Чат з власником</Text>
-                </Pressable>
-              )}
-              {!!item.pending_return_shelf_id && (
-                <Pressable style={styles.confirmBtn} onPress={() => confirmOwned(item)}>
-                  <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
                 </Pressable>
               )}
               {!item.borrowed_from && (
@@ -242,7 +246,7 @@ export default function ShelfScreen() {
                 <Text style={styles.link}>Пост</Text>
               </Pressable>
               <Pressable onPress={() => act(item)}>
-                <Text style={[styles.action, item.is_lent_out && !item.borrowed_from ? { opacity: 0.4 } : null]}>
+                <Text style={styles.action}>
                   {item.borrowed_from ? "Повернути" : "Прибрати"}
                 </Text>
               </Pressable>
@@ -301,6 +305,15 @@ export default function ShelfScreen() {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", padding: 12, gap: 8 },
   empty: { color: colors.muted, textAlign: "center", marginTop: 40, paddingHorizontal: 24 },
+  physHint: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  slipsLink: { paddingHorizontal: 16, marginBottom: 10 },
   input: { flex: 1, borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 8 },
   inputFull: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 10, marginBottom: 12 },
   add: { backgroundColor: colors.ink, paddingHorizontal: 12, justifyContent: "center" },

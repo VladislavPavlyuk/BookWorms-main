@@ -6,7 +6,8 @@
 {% block content %}
 
 <p class="text-muted small mb-4">
-    Книги у власності {% shelf_user_link shelf_owner %}.
+    Полиця {% shelf_user_link shelf_owner %} — лише те, що <strong>фізично у цього користувача</strong>
+    (власні вільні або позичені з терміном і власником).
     {% if user.is_authenticated %}
         <a href="{% url 'message_thread' shelf_owner.id %}" class="text-nowrap">Написати повідомлення</a>
         ·
@@ -14,28 +15,52 @@
     {% endif %}
 </p>
 
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{% if 'error' in message.tags %}danger{% elif 'success' in message.tags %}success{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
 {% if shelves %}
     <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
         {% for shelf in shelves %}
-            {% with book=shelf.book %}
+            {% with book=shelf.book req_id=shelf.request_shelf_id|default:shelf.id %}
             <div class="col">
-                <div class="card h-100">
+                <div class="card h-100 {% if shelf.borrowed_from_id %}border-warning{% endif %}">
                     {% if book.cover_url %}
                         <a href="{% url 'copy_history' shelf.copy_id %}" class="d-block text-center text-decoration-none library-book-cover-link">
                             <img src="{{ book.cover_url }}" class="card-img-top" alt="" style="max-height: 200px; object-fit: contain; background: #f8f9fa;">
                         </a>
                     {% endif %}
                     <div class="card-body d-flex flex-column">
-                        <h5 class="card-title"><a href="{% url 'copy_history' shelf.copy_id %}" class="link-dark text-decoration-none library-book-title-link">{{ book.title }}</a></h5>
-                        <p class="card-text small text-muted mb-1">ISBN: {{ book.isbn }}</p>
-                        {% if book.authors %}
-                            <p class="card-text small mb-1">{{ book.authors }}</p>
+                        <h5 class="card-title"><a href="{% url 'copy_history' shelf.copy_id %}" class="link-dark text-decoration-none">{{ book.title }}</a></h5>
+                        <p class="card-text small text-muted mb-1">ISBN: {{ book.isbn }}{% if shelf.copy_id %} · #{{ shelf.copy_id }}{% endif %}</p>
+                        {% if book.authors %}<p class="card-text small mb-1">{{ book.authors }}</p>{% endif %}
+                        {% if shelf.borrowed_from_id %}
+                            <p class="small text-warning mb-1">
+                                Позичено у {% shelf_user_link shelf.borrowed_from %}
+                            </p>
+                            {% if shelf.due_date %}
+                            <p class="small mb-2 {% if shelf.is_overdue %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                                до {{ shelf.due_date|date:"d.m.Y" }}
+                            </p>
+                            {% endif %}
+                        {% else %}
+                            <p class="small text-success mb-2">Власний · вільний</p>
                         {% endif %}
-                        <p class="small text-muted mb-1">Вік: <span class="text-dark">{{ book.reader_age_summary }}</span></p>
-                        <div class="mt-auto pt-2">
-                            <a href="{% url 'copy_history' shelf.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія подій</a>
-                            {% if shelf.borrowed_from_id %}
-                                <p class="small text-warning mb-0 mt-2">Позичено (у читання)</p>
+                        <div class="mt-auto pt-2 d-flex flex-wrap gap-2">
+                            <a href="{% url 'copy_history' shelf.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія / черга</a>
+                            {% if req_id %}
+                            <form method="post" action="{% url 'create_exchange' %}" class="m-0">
+                                {% csrf_token %}
+                                <input type="hidden" name="target_shelf_ids" value="{{ req_id }}">
+                                <button type="submit" class="btn btn-sm btn-primary">
+                                    {% if shelf.borrowed_from_id %}Просити передачу{% else %}Позичити{% endif %}
+                                </button>
+                            </form>
                             {% endif %}
                         </div>
                     </div>
@@ -45,7 +70,7 @@
         {% endfor %}
     </div>
 {% else %}
-    <p class="text-muted">На полиці ще немає книг.</p>
+    <p class="text-muted">Зараз нічого немає на цій полиці.</p>
 {% endif %}
 
 {% endblock %}

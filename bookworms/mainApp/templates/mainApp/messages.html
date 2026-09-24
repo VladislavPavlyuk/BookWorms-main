@@ -6,7 +6,80 @@
 {% block content %}
 
 <p class="mb-2">Чат з <strong>{% shelf_user_link partner %}</strong></p>
-<p class="text-muted small">Окремий діалог лише з цим користувачем (спільний запит на позику або обмін). Зверху - старіші повідомлення, знизу - новіші; вхідні зліва, ваші - справа.</p>
+<p class="text-muted small">Діалог за активною позикою / передачею / чергою. Під час фізичної передачі в чаті беруть участь власник і обидва позичальники.</p>
+
+{% if pending_returns %}
+<div class="card border-success mb-3 shadow-sm">
+    <div class="card-header bg-success text-white fw-semibold">Підтвердити повернення</div>
+    <div class="card-body">
+        {% for row in pending_returns %}
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div>
+                <strong>{{ row.book.title }}</strong>
+                <span class="text-muted small">— від {% shelf_user_link row.user %}</span>
+            </div>
+            <form method="post" action="{% url 'confirm_return_borrowed_shelf_book' row.id %}" class="m-0">
+                {% csrf_token %}
+                <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                <button type="submit" class="btn btn-success btn-sm">Підтвердити повернення</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if handoffs %}
+<div class="card border-warning mb-3 shadow-sm">
+    <div class="card-header bg-warning-subtle fw-semibold">Фізична передача</div>
+    <div class="card-body">
+        {% for h in handoffs %}
+        <div class="mb-3 {% if not forloop.last %}border-bottom pb-3{% endif %}">
+            <p class="mb-1">
+                <strong>{{ h.copy.book.title }}</strong>
+                <span class="text-muted small">#{{ h.copy_id }}</span>
+            </p>
+            <p class="small mb-2">
+                Власник {% shelf_user_link h.owner %} ·
+                від {% shelf_user_link h.from_user %} →
+                {% shelf_user_link h.to_user %}
+                {% if h.status == "awaiting_give" %}
+                    <span class="badge text-bg-warning">очікує віддачі</span>
+                {% elif h.status == "awaiting_receive" %}
+                    <span class="badge text-bg-info">очікує отримання</span>
+                {% endif %}
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+                {% if h.from_user_id == user.id and h.status == "awaiting_give" %}
+                <form method="post" action="{% url 'handoff_confirm_give' h.id %}" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                    <button type="submit" class="btn btn-sm btn-warning">Я віддав книгу</button>
+                </form>
+                {% endif %}
+                {% if h.to_user_id == user.id and h.status == "awaiting_receive" %}
+                <form method="post" action="{% url 'handoff_confirm_receive' h.id %}" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                    <button type="submit" class="btn btn-sm btn-success">Я отримав книгу</button>
+                </form>
+                {% endif %}
+                {% if h.owner_id == user.id %}
+                <form method="post" action="{% url 'handoff_cancel' h.id %}" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Скасувати передачу</button>
+                </form>
+                {% endif %}
+                <a href="{% url 'message_thread' h.from_user_id %}" class="btn btn-sm btn-outline-primary">Чат з {{ h.from_user.username }}</a>
+                <a href="{% url 'message_thread' h.to_user_id %}" class="btn btn-sm btn-outline-primary">Чат з {{ h.to_user.username }}</a>
+                <a href="{% url 'message_thread' h.owner_id %}" class="btn btn-sm btn-outline-primary">Чат з {{ h.owner.username }}</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 {% if messages %}
     {% for message in messages %}

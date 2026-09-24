@@ -7,6 +7,10 @@ echo "== preflight =="
 test -f bookworms/mainApp/middleware.py
 test -f bookworms/mainApp/migrations/0018_bookcopy_shelf_copy.py
 test -f bookworms/mainApp/migrations/0019_copyevent.py
+test -f bookworms/mainApp/migrations/0021_copy_queue_and_transmit.py
+test -f bookworms/mainApp/migrations/0022_loan_handoff.py
+grep -q 'class LoanHandoff' bookworms/mainApp/models.py
+grep -q 'class AddIsbnForm' bookworms/mainApp/forms.py
 grep -q 'Cheap by default' bookworms/api/views.py
 grep -q 'code_rev' bookworms/api/views.py
 grep -q 'post_worker_init' bookworms/bookworms/gunicorn.conf.py
@@ -47,6 +51,11 @@ if [ "$ok" != 1 ]; then
   docker compose -f docker-compose.qnap.yml exec -T api curl -sS --max-time 3 http://127.0.0.1:8000/api/health/ || true
   exit 1
 fi
+
+echo "== migrate (post-up) =="
+docker compose -f docker-compose.qnap.yml exec -T api python manage.py showmigrations mainApp | tail -20
+docker compose -f docker-compose.qnap.yml exec -T api python manage.py migrate --noinput
+docker compose -f docker-compose.qnap.yml exec -T api python manage.py migrate mainApp --noinput
 
 echo "== api logs =="
 docker compose -f docker-compose.qnap.yml logs --tail=40 api

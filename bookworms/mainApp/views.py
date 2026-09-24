@@ -46,13 +46,22 @@ from .notification_service import list_notifications, notification_payload, unre
 from .exchange_service import (
     accept_exchange_request,
     add_owned_copy,
+    attach_loan_info,
+    attach_request_targets,
     available_owned_shelves_qs,
+    browsable_owned_shelves_qs,
     cancel_exchange_request,
+    cancel_loan_handoff,
     confirm_borrow_return,
+    confirm_handoff_give,
+    confirm_handoff_receive,
     create_many_exchange_requests,
+    filter_physically_present,
     get_or_create_book_from_payload,
     group_shelves_by_book,
+    handoffs_involving,
     is_copy_lent_out,
+    physical_presence_shelves_qs,
     reject_exchange_request,
     remove_owned_shelf,
     request_borrow_return,
@@ -545,8 +554,9 @@ def my_library(request):
             messages.success(request, f"Додано вручну: {book.title}")
             return redirect("my_library")
 
-    # borrowed_from підтягуємо одним запитом - щоб у шаблоні знати, позичена книга чи власна.
-    shelves = list(
+    # Полиця = фізичне місце: власні вільні + позичені вами.
+    # Власні примірники, які зараз у когось у позиці, тут НЕ показуємо.
+    shelves_all = list(
         request.user.shelf_entries.select_related("book", "borrowed_from", "copy").all()
     )
     pending_returns_to_confirm = list(
@@ -554,13 +564,31 @@ def my_library(request):
         .select_related("user", "book", "copy")
         .order_by("-added_at")
     )
-    lent_copy_ids = set(
-        Shelf.objects.filter(borrowed_from=request.user).values_list("copy_id", flat=True)
-    )
-    pending_by_copy = {row.copy_id: row for row in pending_returns_to_confirm}
-    for s in shelves:
-        s.is_lent_out = (not s.borrowed_from_id) and (s.copy_id in lent_copy_ids)
-        s.pending_return_row = None if s.borrowed_from_id else pending_by_copy.get(s.copy_id)
+    loan_by_copy = {
+        row.copy_id: row
+        for row in Shelf.objects.filter(borrowed_from=request.user)
+        .select_related("user", "book", "copy")
+        if row.copy_id
+    }
+    lent_out_count = 0
+    today = timezone.now().date()
+    for s in shelves_all:
+        s.is_lent_out = (not s.borrowed_from_id) and (s.copy_id in loan_by_copy)
+        if s.is_lent_out:
+            lent_out_count += 1
+        s.pending_return_row = None if s.borrowed_from_id else (
+            loan_by_copy[s.copy_id]
+            if s.copy_id in loan_by_copy and loan_by_copy[s.copy_id].return_pending
+            else None
+        )
+        s.loan_row = None if s.borrowed_from_id else loan_by_copy.get(s.copy_id)
+        if s.borrowed_from_id and s.due_date:
+            s.is_overdue = s.due_date < today
+            s.days_left = (s.due_date - today).days
+        else:
+            s.is_overdue = False
+            s.days_left = None
+    shelves = [s for s in shelves_all if not s.is_lent_out]
     locked_raw = request.session.get("reader_age_locked_shelf_ids", [])
     if not isinstance(locked_raw, list):
         locked_raw = []
@@ -574,6 +602,7 @@ def my_library(request):
             "manual_form": manual_form,
             "manual_open": bool(manual_form.errors),
             "shelves": shelves,
+            "lent_out_count": lent_out_count,
             "pending_returns_to_confirm": pending_returns_to_confirm,
             "reader_age_min": READER_AGE_MIN,
             "reader_age_max": READER_AGE_MAX,
@@ -730,19 +759,29 @@ def confirm_return_borrowed_shelf_book(request, shelf_id):
         )
     else:
         messages.error(request, err or "Помилка.")
+    partner_id = request.POST.get("partner_id")
+    if partner_id:
+        try:
+            return redirect("message_thread", partner_id=int(partner_id))
+        except (TypeError, ValueError):
+            pass
     return redirect("my_library")
 
 
 @login_required
 def browse_shelves(request):
     """
-    Каталог чужих книг: одна картка на ISBN (обкладинка + власники в рядок).
-    Запит позики/обміну — по конкретному примірнику (чекбокс біля власника).
+    Каталог: примірники там, де вони фізично зараз (вільні у власника або в позичальника).
+    Запит на позичений примірник → передача з дозволу власника.
     """
-    others_qs = list(
-        available_owned_shelves_qs(exclude_user_id=request.user.id)
-        .select_related("user", "book")
-        .order_by("-added_at")
+    others_qs = attach_request_targets(
+        attach_loan_info(
+            list(
+                physical_presence_shelves_qs(exclude_user_id=request.user.id)
+                .select_related("user", "book", "copy", "borrowed_from")
+                .order_by("-added_at")
+            )
+        )
     )
     others_grouped = group_shelves_by_book(others_qs)
     my_owned_shelves = available_owned_shelves_qs().filter(user=request.user).select_related(
@@ -760,16 +799,19 @@ def browse_shelves(request):
 
 @login_required
 def user_public_shelf(request, user_id):
-    """Список примірників користувача. Власне ім'я з навбару веде в профіль — сюди лише чужі."""
+    """Полиця користувача = лише те, що фізично у нього (власне вільне + позичене ним)."""
     User = get_user_model()
     shelf_owner = get_object_or_404(User, pk=user_id)
     if request.user.pk == shelf_owner.pk:
         return redirect("profile_app:profile")
-    # Лише власні примірники (не позичені в когось)
-    shelves = (
-        shelf_owner.shelf_entries.filter(borrowed_from__isnull=True)
-        .select_related("book", "borrowed_from", "copy")
-        .order_by("-added_at")
+    shelves = attach_request_targets(
+        filter_physically_present(
+            list(
+                shelf_owner.shelf_entries.select_related("book", "borrowed_from", "copy").order_by(
+                    "-added_at"
+                )
+            )
+        )
     )
     return render(
         request,
@@ -896,6 +938,9 @@ def create_exchange(request):
 
         offer_shelf = None
         raw_offer = request.POST.get(f"offer_shelf_id_{tid}", "") or ""
+        # Позичений примірник / передача — лише borrow/transmit, без обміну
+        if is_copy_lent_out(target_shelf.copy_id) or target_shelf.borrowed_from_id:
+            raw_offer = ""
         if raw_offer.strip():
             try:
                 oid = int(raw_offer)
@@ -903,11 +948,15 @@ def create_exchange(request):
                 t = target_shelf.book.title
                 preflight.append(f'"{t[:45]}": некоректна книга для обміну.')
                 continue
-            offer_shelf = Shelf.objects.filter(pk=oid, user=request.user).first()
+            offer_shelf = (
+                available_owned_shelves_qs()
+                .filter(pk=oid, user=request.user)
+                .first()
+            )
             if not offer_shelf:
                 t = target_shelf.book.title
                 preflight.append(
-                    f'"{t[:45]}": запропоновану книгу не знайдено на вашій полиці.'
+                    f'"{t[:45]}": запропоновану книгу не знайдено серед ваших вільних.'
                 )
                 continue
 
@@ -1013,18 +1062,29 @@ def exchange_accept(request, request_id):
     """Перед accept дивимось, був offer чи ні - щоб показати різне повідомлення (обмін vs позика)."""
     if request.method != "POST":
         return redirect("exchange_requests")
-    req = BookExchangeRequest.objects.filter(
-        pk=request_id, status=BookExchangeRequest.Status.PENDING
-    ).first()
+    req = (
+        BookExchangeRequest.objects.filter(
+            pk=request_id, status=BookExchangeRequest.Status.PENDING
+        )
+        .select_related("target_shelf")
+        .first()
+    )
     had_offer = bool(req and req.offer_shelf_id)
+    was_transmit = bool(
+        req and not had_offer and is_copy_lent_out(getattr(req.target_shelf, "copy_id", None))
+    )
     ok, err = accept_exchange_request(request_id, request.user)
     if ok:
-        messages.success(
-            request,
-            "Обмін прийнято: полиці оновлено."
-            if had_offer
-            else "Запит прийнято: книгу видано в позику (повернення - з полиці позичальника).",
-        )
+        if had_offer:
+            msg = "Обмін прийнято: полиці оновлено."
+        elif was_transmit:
+            msg = (
+                "Передачу схвалено. Книга лишається у поточного позичальника, "
+                "доки він і наступний читач не підтвердять фізичну передачу в чаті."
+            )
+        else:
+            msg = "Запит прийнято: книгу видано в позику (повернення - з полиці позичальника)."
+        messages.success(request, msg)
     else:
         messages.error(request, err or "Помилка.")
     return redirect("exchange_requests")
@@ -1163,6 +1223,16 @@ def message_thread(request, partner_id: int):
     )
     timeline = list(reversed(list(recent)))
     mark_thread_read(request.user, partner_id)
+    handoffs = handoffs_involving(request.user.id, partner_id)
+    pending_returns = list(
+        Shelf.objects.filter(
+            borrowed_from=request.user,
+            user_id=partner_id,
+            return_pending=True,
+        )
+        .select_related("user", "book", "copy")
+        .order_by("-added_at")
+    )
 
     return render(
         request,
@@ -1172,8 +1242,60 @@ def message_thread(request, partner_id: int):
             "timeline": timeline,
             "partners": partners,
             "partner": partner,
+            "handoffs": handoffs,
+            "pending_returns": pending_returns,
         },
     )
+
+
+@login_required
+@require_POST
+def handoff_confirm_give_view(request, handoff_id):
+    ok, err = confirm_handoff_give(handoff_id, request.user)
+    if ok:
+        messages.success(request, "Віддачу підтверджено — очікуємо підтвердження отримання.")
+    else:
+        messages.error(request, err or "Помилка.")
+    partner_id = request.POST.get("partner_id")
+    if partner_id:
+        return redirect("message_thread", partner_id=int(partner_id))
+    return redirect("exchange_requests")
+
+
+@login_required
+@require_POST
+def handoff_confirm_receive_view(request, handoff_id):
+    ok, err = confirm_handoff_receive(handoff_id, request.user)
+    if ok:
+        messages.success(
+            request,
+            "Отримання підтверджено — книга на вашій полиці; попередній позичальник вийшов з чату.",
+        )
+    else:
+        messages.error(request, err or "Помилка.")
+    partner_id = request.POST.get("partner_id")
+    if partner_id:
+        try:
+            return redirect("message_thread", partner_id=int(partner_id))
+        except Exception:
+            pass
+    return redirect("exchange_requests")
+
+
+@login_required
+@require_POST
+def handoff_cancel_view(request, handoff_id):
+    ok, err = cancel_loan_handoff(handoff_id, request.user)
+    if ok:
+        messages.success(request, "Фізичну передачу скасовано.")
+    else:
+        messages.error(request, err or "Помилка.")
+    partner_id = request.POST.get("partner_id")
+    if partner_id:
+        return redirect("message_thread", partner_id=int(partner_id))
+    return redirect("exchange_requests")
+
+
 @login_required
 def add_comment(request, post_id):
     post = get_object_or_404(Post, id=post_id)

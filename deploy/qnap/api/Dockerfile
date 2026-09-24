@@ -27,6 +27,9 @@ RUN chmod +x /entrypoint.sh \
     && test -f /app/mainApp/migrations/0018_bookcopy_shelf_copy.py \
     && test -f /app/mainApp/migrations/0019_copyevent.py \
     && test -f /app/mainApp/migrations/0020_customuser_last_watched_post.py \
+    && test -f /app/mainApp/migrations/0021_copy_queue_and_transmit.py \
+    && test -f /app/mainApp/migrations/0022_loan_handoff.py \
+    && grep -q 'class LoanHandoff' /app/mainApp/models.py \
     && grep -q 'last_watched_post' /app/mainApp/models.py \
     && grep -q 'code_rev' /app/api/views.py \
     && grep -q 'Cheap by default' /app/api/views.py \

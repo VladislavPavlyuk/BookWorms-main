@@ -59,6 +59,28 @@ export default function UserShelf() {
     router.push(`/chat/${owner.id}`);
   };
 
+  const requestCopy = (s: Shelf) => {
+    const rid = s.request_shelf_id;
+    if (!rid) {
+      Alert.alert("Запит", "Немає рядка власника для цього примірника.");
+      return;
+    }
+    if (s.borrowed_from) {
+      setTarget({
+        ...s,
+        id: rid,
+        user: s.borrowed_from,
+        borrowed_from: null,
+        is_lent_out: true,
+        lent_to: owner,
+        loan_due_date: s.due_date,
+        request_shelf_id: rid,
+      });
+      return;
+    }
+    setTarget(s);
+  };
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.screen }}
@@ -66,6 +88,9 @@ export default function UserShelf() {
     >
       <Text style={styles.h}>{owner?.username}</Text>
       <Text style={styles.bio}>{owner?.biography || "—"}</Text>
+      <Text style={styles.hint}>
+        Лише те, що фізично у цього користувача (власне вільне або позичене з власником і терміном).
+      </Text>
       {!isOwn && user && (
         <Pressable onPress={openChat} style={styles.chatBtn}>
           <Text style={styles.chatBtnText}>
@@ -73,50 +98,59 @@ export default function UserShelf() {
           </Text>
         </Pressable>
       )}
-      {shelves.map((s) => (
-        <View key={s.id} style={styles.card}>
-          <Pressable onPress={() => router.push(`/book/${s.book.id}`)}>
-            <BookCover uri={s.book.cover_url} size="full" bleed={0} />
-            <View style={styles.cardBody}>
-              <Text style={styles.title}>{s.book.title}</Text>
-              <View style={styles.metaRow}>
-                {s.borrowed_from ? (
-                  <>
-                    <Text style={styles.meta}>позичено у </Text>
-                    <UserNameLink user={s.borrowed_from} style={styles.meta} />
-                  </>
-                ) : (
-                  <Text style={styles.meta}>власна</Text>
-                )}
-                {!!s.due_date && <Text style={styles.meta}>{` · до ${s.due_date}`}</Text>}
-                <Text style={styles.meta}>{` · ${s.book.reader_age_summary}`}</Text>
+
+      <Text style={styles.sec}>На полиці зараз</Text>
+      {shelves.length === 0 ? (
+        <Text style={styles.empty}>Зараз нічого немає на цій полиці.</Text>
+      ) : (
+        shelves.map((s) => (
+          <View key={s.id} style={styles.card}>
+            <Pressable onPress={() => router.push(`/book/${s.book.id}`)}>
+              <BookCover uri={s.book.cover_url} size="full" bleed={0} />
+              <View style={styles.cardBody}>
+                <Text style={styles.title}>{s.book.title}</Text>
+                <View style={styles.metaRow}>
+                  {s.borrowed_from ? (
+                    <>
+                      <Text style={[styles.meta, styles.warn]}>позика · власник </Text>
+                      <UserNameLink user={s.borrowed_from} style={styles.meta} />
+                      {!!s.due_date && (
+                        <Text
+                          style={[
+                            styles.meta,
+                            s.is_overdue ? { color: colors.stamp, fontWeight: "700" } : null,
+                          ]}
+                        >
+                          {` · до ${s.due_date}`}
+                          {s.is_overdue
+                            ? " · прострочено"
+                            : s.days_left != null
+                              ? ` · ще ${s.days_left} дн.`
+                              : ""}
+                        </Text>
+                      )}
+                    </>
+                  ) : (
+                    <Text style={styles.meta}>власний · вільний</Text>
+                  )}
+                  <Text style={styles.meta}>{` · ${s.book.reader_age_summary}`}</Text>
+                </View>
               </View>
+            </Pressable>
+            <View style={styles.cardBody}>
+              <HistoryLink copyId={s.copy_id} style={{ marginBottom: 8 }} />
+              {!isOwn && user && (
+                <Pressable onPress={() => requestCopy(s)}>
+                  <Text style={styles.act}>
+                    {s.borrowed_from ? "Просити передачу у власника" : "Позичити / обмін"}
+                  </Text>
+                </Pressable>
+              )}
             </View>
-          </Pressable>
-          <View style={styles.cardBody}>
-          <HistoryLink copyId={s.copy_id} style={{ marginBottom: 8 }} />
-          {!isOwn && !s.borrowed_from && user && (
-            <Pressable onPress={() => setTarget(s)}>
-              <Text style={styles.act}>Позичити / обмін</Text>
-            </Pressable>
-          )}
-          {!isOwn && !s.borrowed_from && (
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: "/post/new",
-                  params: { book_id: String(s.book.id) },
-                })
-              }
-            >
-              <Text style={[styles.act, { color: colors.muted }]}>
-                Написати пост (якщо книга у вас)
-              </Text>
-            </Pressable>
-          )}
           </View>
-        </View>
-      ))}
+        ))
+      )}
+
       <RequestModal
         target={target}
         myOwned={myOwned}
@@ -129,7 +163,17 @@ export default function UserShelf() {
 
 const styles = StyleSheet.create({
   h: { fontSize: 22, fontWeight: "800", color: colors.ink, paddingHorizontal: 16, paddingTop: 12 },
-  bio: { color: colors.muted, marginBottom: 12, paddingHorizontal: 16 },
+  bio: { color: colors.muted, marginBottom: 8, paddingHorizontal: 16 },
+  hint: { color: colors.muted, fontSize: 12, lineHeight: 16, paddingHorizontal: 16, marginBottom: 12 },
+  sec: {
+    fontWeight: "800",
+    color: colors.ink,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    fontSize: 16,
+  },
+  empty: { color: colors.muted, paddingHorizontal: 16, marginBottom: 8 },
   chatBtn: {
     borderWidth: 1,
     borderColor: colors.stamp,
@@ -153,5 +197,6 @@ const styles = StyleSheet.create({
   title: { fontWeight: "700", color: colors.ink },
   metaRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", marginTop: 4 },
   meta: { color: colors.muted },
+  warn: { color: colors.stamp, fontWeight: "700" },
   act: { color: colors.stamp, fontWeight: "800", marginTop: 8 },
 });

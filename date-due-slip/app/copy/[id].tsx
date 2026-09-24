@@ -1,33 +1,72 @@
-import { useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, CopyApi } from "../../src/api";
+import { useAuth } from "../../src/auth";
 import { BookCover } from "../../src/BookCover";
 import { colors } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
-import type { BookCopyDetail, CopyEvent, Shelf } from "../../src/types";
+import type { BookCopyDetail, CopyEvent, QueueEntry, Shelf } from "../../src/types";
 
 export default function CopyHistoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
   const [copy, setCopy] = useState<BookCopyDetail | null>(null);
   const [holders, setHolders] = useState<Shelf[]>([]);
   const [events, setEvents] = useState<CopyEvent[]>([]);
+  const [queue, setQueue] = useState<QueueEntry[]>([]);
+  const [myPos, setMyPos] = useState<number | null>(null);
+  const [lent, setLent] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    CopyApi.history(Number(id))
-      .then((d) => {
-        setCopy(d.copy);
-        setHolders(d.holders);
-        setEvents(d.events);
-      })
-      .catch((e) =>
+  const load = useCallback(async () => {
+    const d = await CopyApi.history(Number(id));
+    setCopy(d.copy);
+    setHolders(d.holders);
+    setEvents(d.events);
+    setQueue(d.queue || []);
+    setMyPos(d.my_queue_position ?? null);
+    setLent(!!d.is_lent_out);
+  }, [id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load().catch((e) =>
         Alert.alert("Історія", e instanceof ApiError ? e.message : String(e))
       );
-  }, [id]);
+    }, [load])
+  );
 
   if (!copy) return null;
   const book = copy.book;
+  const isOwner = user?.id === copy.owner.id;
+  const canJoin = !!user && !isOwner && myPos == null;
+
+  const join = async () => {
+    setBusy(true);
+    try {
+      const r = await CopyApi.joinQueue(copy.id);
+      Alert.alert("Черга", `Ви в черзі (позиція ${r.position}).`);
+      await load();
+    } catch (e) {
+      Alert.alert("Черга", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const leave = async () => {
+    setBusy(true);
+    try {
+      await CopyApi.leaveQueue(copy.id);
+      await load();
+    } catch (e) {
+      Alert.alert("Черга", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ paddingBottom: 32 }}>
@@ -43,6 +82,48 @@ export default function CopyHistoryScreen() {
           <Text style={styles.meta}>Власник: </Text>
           <UserNameLink user={copy.owner} style={styles.link} />
         </View>
+        {lent ? <Text style={styles.lent}>Зараз у позиці</Text> : null}
+
+        <Text style={styles.h}>Черга інтересу</Text>
+        <Text style={styles.meta}>
+          Якщо кілька людей хочуть цей примірник — FIFO. Після повернення наступний отримає
+          автозапит; власник також може схвалити передачу третій особі з чату.
+        </Text>
+        {myPos != null ? (
+          <Text style={styles.myPos}>Ваша позиція: {myPos}</Text>
+        ) : null}
+        <View style={styles.qActions}>
+          {canJoin ? (
+            <Pressable style={styles.btn} onPress={join} disabled={busy}>
+              <Text style={styles.btnText}>Стати в чергу</Text>
+            </Pressable>
+          ) : null}
+          {myPos != null ? (
+            <Pressable style={styles.btnGhost} onPress={leave} disabled={busy}>
+              <Text style={styles.btnGhostText}>Вийти з черги</Text>
+            </Pressable>
+          ) : null}
+          {myPos != null ? (
+            <Pressable
+              style={styles.btnGhost}
+              onPress={() => router.push(`/chat/${copy.owner.id}`)}
+            >
+              <Text style={styles.btnGhostText}>Чат з власником</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {queue.length === 0 ? (
+          <Text style={styles.meta}>Черга порожня.</Text>
+        ) : (
+          queue.map((q) => (
+            <View key={q.id} style={styles.card}>
+              <Text style={styles.evCode}>
+                #{q.position} · {q.username}
+                {q.status === "offered" ? " · запропоновано" : ""}
+              </Text>
+            </View>
+          ))
+        )}
 
         <Text style={styles.h}>Хронологія подій</Text>
         {events.length === 0 ? (
@@ -88,7 +169,7 @@ export default function CopyHistoryScreen() {
           ))
         )}
 
-        <Text style={styles.h}>Поточний стан</Text>
+        <Text style={styles.h}>Де зараз (фізично)</Text>
         {holders.length === 0 ? (
           <Text style={styles.meta}>Ні на чиїй полиці.</Text>
         ) : (
@@ -97,8 +178,11 @@ export default function CopyHistoryScreen() {
               <View style={styles.row}>
                 <UserNameLink user={s.user} style={styles.link} />
                 <Text style={styles.meta}>
-                  {s.borrowed_from ? " · позика" : " · власник"}
+                  {s.borrowed_from
+                    ? ` · позика у ${s.borrowed_from.username}`
+                    : " · власник · вільний"}
                 </Text>
+                {!!s.due_date && <Text style={styles.meta}>{` · до ${s.due_date}`}</Text>}
               </View>
             </View>
           ))
@@ -113,16 +197,35 @@ const styles = StyleSheet.create({
   copyTag: { color: colors.stamp, fontWeight: "800", letterSpacing: 0.5, marginBottom: 4 },
   title: { fontSize: 22, fontWeight: "800", color: colors.ink },
   meta: { color: colors.muted, marginTop: 2 },
+  lent: { color: colors.stamp, fontWeight: "700", marginTop: 8 },
+  myPos: { color: colors.ink, fontWeight: "800", marginTop: 8 },
   link: { color: colors.stamp, fontWeight: "700" },
   row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", marginTop: 2 },
   h: { marginTop: 24, fontWeight: "800", color: colors.ink, marginBottom: 8 },
+  qActions: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginVertical: 10 },
+  btn: {
+    backgroundColor: colors.stamp,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  btnText: { color: "#fff", fontWeight: "800" },
+  btnGhost: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  btnGhostText: { color: colors.ink, fontWeight: "700" },
   card: {
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: colors.white,
-    padding: 12,
+    borderRadius: 10,
+    padding: 10,
     marginBottom: 8,
+    backgroundColor: colors.paper,
   },
-  evCode: { color: colors.ink, fontWeight: "800" },
-  evTime: { color: colors.muted, fontSize: 12, marginTop: 2, marginBottom: 6 },
+  evCode: { fontWeight: "800", color: colors.ink },
+  evTime: { color: colors.muted, fontSize: 12, marginTop: 2 },
 });
