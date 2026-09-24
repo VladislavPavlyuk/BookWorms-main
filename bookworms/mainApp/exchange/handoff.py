@@ -7,8 +7,11 @@ from django.utils import timezone
 from .. import message_service
 from .. import ops_log
 from ..copy_events import log_copy_event
+from ..error_handling import domain_guard
+from ..exceptions import ExchangeForbidden, ExchangeInvalidState, ExchangeNotFound
 from ..models import BookExchangeRequest, CopyEvent, CustomUser, LoanHandoff, Shelf
 from .due import loan_due_date
+
 
 def active_handoff_for_copy(copy_id: int | None) -> LoanHandoff | None:
     if not copy_id:
@@ -72,13 +75,13 @@ def handoffs_involving(*user_ids: int) -> list[LoanHandoff]:
     return rows
 
 
-
+@domain_guard("handoff.approve")
 def approve_loan_handoff(
     req: BookExchangeRequest,
     owner: CustomUser,
     owner_shelf: Shelf,
     requester: CustomUser,
-) -> tuple[bool, str | None]:
+) -> LoanHandoff:
     """
     Власник схвалив передачу: книга лишається у поточного позичальника,
     створюється LoanHandoff. Полиця переїде лише після confirm give + receive.
@@ -101,13 +104,15 @@ def approve_loan_handoff(
     )
     if not borrower_shelf:
         ops_log.warning("handoff.approve.no_loan", cid=cid, copy_id=owner_shelf.copy_id)
-        return False, "Активну позику не знайдено — спробуйте ще раз."
+        raise ExchangeNotFound("Активну позику не знайдено — спробуйте ще раз.")
 
     previous_holder = borrower_shelf.user
     if previous_holder.id == requester.id:
-        return False, "Цей користувач уже тримає примірник."
+        raise ExchangeInvalidState("Цей користувач уже тримає примірник.")
     if borrower_shelf.return_pending:
-        return False, "Спочатку завершіть повернення від поточного позичальника."
+        raise ExchangeInvalidState(
+            "Спочатку завершіть повернення від поточного позичальника."
+        )
 
     copy_id = owner_shelf.copy_id
     handoff = LoanHandoff.objects.create(
@@ -135,10 +140,10 @@ def approve_loan_handoff(
         cid=cid,
         **ops_log.handoff_snapshot(handoff),
     )
-    return True, None
+    return handoff
 
 
-def complete_loan_handoff_transfer(handoff: LoanHandoff) -> tuple[bool, str | None]:
+def complete_loan_handoff_transfer(handoff: LoanHandoff) -> None:
     """Зняти позику з from_user і видати to_user (після обох підтверджень)."""
     from .. import queue_service
 
@@ -164,7 +169,7 @@ def complete_loan_handoff_transfer(handoff: LoanHandoff) -> tuple[bool, str | No
             copy_id=copy_id,
             from_user_id=previous_holder.id,
         )
-        return False, "Позику вже знято — передачу не завершено."
+        raise ExchangeInvalidState("Позику вже знято — передачу не завершено.")
 
     book_title = borrower_shelf.book.title
     book_id = borrower_shelf.book_id
@@ -199,13 +204,11 @@ def complete_loan_handoff_transfer(handoff: LoanHandoff) -> tuple[bool, str | No
     except Exception as exc:
         ops_log.exception("handoff.complete.queue_fail", exc, cid=cid, copy_id=copy_id)
     ops_log.info("handoff.complete.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
-    return True, None
 
 
+@domain_guard("handoff.give")
 @transaction.atomic
-def confirm_handoff_give(
-    handoff_id: int, acting_user: CustomUser
-) -> tuple[bool, str | None]:
+def confirm_handoff_give(handoff_id: int, acting_user: CustomUser) -> None:
     """Поточний позичальник підтверджує, що фізично віддав книгу наступному."""
     cid = ops_log.new_cid()
     ops_log.info(
@@ -223,18 +226,9 @@ def confirm_handoff_give(
             )
             .get(pk=handoff_id)
         )
-    except LoanHandoff.DoesNotExist:
+    except LoanHandoff.DoesNotExist as exc:
         ops_log.warning("handoff.give.missing", cid=cid, handoff_id=handoff_id)
-        return False, "Передачу не знайдено."
-    except Exception as exc:
-        ops_log.exception(
-            "handoff.give.lock_fail",
-            exc,
-            cid=cid,
-            handoff_id=handoff_id,
-            actor_id=acting_user.id,
-        )
-        return False, f"Помилка блокування передачі (cid={cid})."
+        raise ExchangeNotFound("Передачу не знайдено.") from exc
 
     ops_log.info("handoff.give.locked", cid=cid, **ops_log.handoff_snapshot(handoff))
 
@@ -245,7 +239,7 @@ def confirm_handoff_give(
             status=handoff.status,
             actor_id=acting_user.id,
         )
-        return False, "Зараз не чекається підтвердження віддачі."
+        raise ExchangeInvalidState("Зараз не чекається підтвердження віддачі.")
     if acting_user.id != handoff.from_user_id:
         ops_log.warning(
             "handoff.give.forbidden",
@@ -253,41 +247,31 @@ def confirm_handoff_give(
             actor_id=acting_user.id,
             from_user_id=handoff.from_user_id,
         )
-        return False, "Підтвердити віддачу може лише поточний тримач книги."
-
-    try:
-        handoff.status = LoanHandoff.Status.AWAITING_RECEIVE
-        handoff.giver_confirmed_at = timezone.now()
-        handoff.save(update_fields=["status", "giver_confirmed_at"])
-        log_copy_event(
-            handoff.copy_id,
-            CopyEvent.Code.HANDOFF_GIVEN,
-            actor=acting_user,
-            holder=acting_user,
-            legal_owner=handoff.owner,
-            previous_holder=acting_user,
-            counterparty=handoff.to_user,
-            exchange_request=handoff.exchange_request,
+        raise ExchangeForbidden(
+            "Підтвердити віддачу може лише поточний тримач книги."
         )
-        message_service.notify_handoff_given(handoff)
-    except Exception as exc:
-        ops_log.exception(
-            "handoff.give.save_fail",
-            exc,
-            cid=cid,
-            **ops_log.handoff_snapshot(handoff),
-        )
-        raise
 
+    handoff.status = LoanHandoff.Status.AWAITING_RECEIVE
+    handoff.giver_confirmed_at = timezone.now()
+    handoff.save(update_fields=["status", "giver_confirmed_at"])
+    log_copy_event(
+        handoff.copy_id,
+        CopyEvent.Code.HANDOFF_GIVEN,
+        actor=acting_user,
+        holder=acting_user,
+        legal_owner=handoff.owner,
+        previous_holder=acting_user,
+        counterparty=handoff.to_user,
+        exchange_request=handoff.exchange_request,
+    )
+    message_service.notify_handoff_given(handoff)
     ops_log.info("handoff.give.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
-    return True, None
 
 
+@domain_guard("handoff.receive")
 @transaction.atomic
-def confirm_handoff_receive(
-    handoff_id: int, acting_user: CustomUser
-) -> tuple[bool, str | None]:
-    """Наступний позичальник підтверджує отримання — полиця переїздить, попередній виходить з чату."""
+def confirm_handoff_receive(handoff_id: int, acting_user: CustomUser) -> None:
+    """Наступний позичальник підтверджує отримання — полиця переїздить."""
     cid = ops_log.new_cid()
     ops_log.info(
         "handoff.receive.start",
@@ -303,27 +287,18 @@ def confirm_handoff_receive(
             )
             .get(pk=handoff_id)
         )
-    except LoanHandoff.DoesNotExist:
+    except LoanHandoff.DoesNotExist as exc:
         ops_log.warning("handoff.receive.missing", cid=cid, handoff_id=handoff_id)
-        return False, "Передачу не знайдено."
-    except Exception as exc:
-        ops_log.exception(
-            "handoff.receive.lock_fail",
-            exc,
-            cid=cid,
-            handoff_id=handoff_id,
-            actor_id=acting_user.id,
-        )
-        return False, f"Помилка блокування передачі (cid={cid})."
+        raise ExchangeNotFound("Передачу не знайдено.") from exc
 
     if handoff.status != LoanHandoff.Status.AWAITING_RECEIVE:
         if handoff.status == LoanHandoff.Status.AWAITING_GIVE:
             ops_log.warning("handoff.receive.need_give_first", cid=cid)
-            return False, "Спочатку поточний тримач має підтвердити віддачу."
-        ops_log.warning(
-            "handoff.receive.bad_status", cid=cid, status=handoff.status
-        )
-        return False, "Зараз не чекається підтвердження отримання."
+            raise ExchangeInvalidState(
+                "Спочатку поточний тримач має підтвердити віддачу."
+            )
+        ops_log.warning("handoff.receive.bad_status", cid=cid, status=handoff.status)
+        raise ExchangeInvalidState("Зараз не чекається підтвердження отримання.")
     if acting_user.id != handoff.to_user_id:
         ops_log.warning(
             "handoff.receive.forbidden",
@@ -331,31 +306,23 @@ def confirm_handoff_receive(
             actor_id=acting_user.id,
             to_user_id=handoff.to_user_id,
         )
-        return False, "Підтвердити отримання може лише наступний позичальник."
-
-    try:
-        handoff.receiver_confirmed_at = timezone.now()
-        handoff.save(update_fields=["receiver_confirmed_at"])
-        ok, err = complete_loan_handoff_transfer(handoff)
-        if not ok:
-            ops_log.warning("handoff.receive.complete_fail", cid=cid, err=err)
-        else:
-            ops_log.info("handoff.receive.ok", cid=cid, handoff_id=handoff_id)
-        return ok, err
-    except Exception as exc:
-        ops_log.exception(
-            "handoff.receive.fail",
-            exc,
-            cid=cid,
-            **ops_log.handoff_snapshot(handoff),
+        raise ExchangeForbidden(
+            "Підтвердити отримання може лише наступний позичальник."
         )
+
+    handoff.receiver_confirmed_at = timezone.now()
+    handoff.save(update_fields=["receiver_confirmed_at"])
+    try:
+        complete_loan_handoff_transfer(handoff)
+    except ExchangeInvalidState as exc:
+        ops_log.warning("handoff.receive.complete_fail", cid=cid, err=str(exc))
         raise
+    ops_log.info("handoff.receive.ok", cid=cid, handoff_id=handoff_id)
 
 
+@domain_guard("handoff.cancel")
 @transaction.atomic
-def cancel_loan_handoff(
-    handoff_id: int, acting_user: CustomUser
-) -> tuple[bool, str | None]:
+def cancel_loan_handoff(handoff_id: int, acting_user: CustomUser) -> None:
     """Власник скасовує схвалену, але ще не завершену фізичну передачу."""
     cid = ops_log.new_cid()
     try:
@@ -366,39 +333,33 @@ def cancel_loan_handoff(
             )
             .get(pk=handoff_id)
         )
-    except LoanHandoff.DoesNotExist:
-        return False, "Передачу не знайдено."
-    except Exception as exc:
-        ops_log.exception(
-            "handoff.cancel.lock_fail", exc, cid=cid, handoff_id=handoff_id
-        )
-        return False, f"Помилка блокування передачі (cid={cid})."
+    except LoanHandoff.DoesNotExist as exc:
+        raise ExchangeNotFound("Передачу не знайдено.") from exc
 
     if handoff.status not in (
         LoanHandoff.Status.AWAITING_GIVE,
         LoanHandoff.Status.AWAITING_RECEIVE,
     ):
-        return False, "Цю передачу вже завершено або скасовано."
+        raise ExchangeInvalidState("Цю передачу вже завершено або скасовано.")
     if acting_user.id != handoff.owner_id:
-        return False, "Скасувати може лише власник примірника."
+        raise ExchangeForbidden("Скасувати може лише власник примірника.")
 
     handoff.status = LoanHandoff.Status.CANCELLED
     handoff.resolved_at = timezone.now()
     handoff.save(update_fields=["status", "resolved_at"])
     message_service.notify_handoff_cancelled(handoff)
     ops_log.info("handoff.cancel.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
-    return True, None
 
 
+@domain_guard("handoff.transmit")
 def transmit_loan_to_requester(
     req: BookExchangeRequest,
     owner: CustomUser,
     owner_shelf: Shelf,
     requester: CustomUser,
-) -> tuple[bool, str | None]:
+) -> LoanHandoff:
     """Legacy alias — тепер схвалення створює handoff, не миттєвий перенос."""
     return approve_loan_handoff(req, owner, owner_shelf, requester)
-
 
 
 # Back-compat private names

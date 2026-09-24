@@ -6,13 +6,18 @@ from django.db import transaction
 from .. import message_service
 from .. import ops_log
 from ..copy_events import log_copy_event
+from ..error_handling import domain_guard
+from ..exceptions import ExchangeConflict, ExchangeInvalidState, ExchangeNotFound
 from ..models import BookCopy, CopyEvent, CustomUser, Shelf
 from .handoff import active_handoff_for_copy
 
+
+@domain_guard("exchange.return_request")
 @transaction.atomic
-def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, str | None]:
+def request_borrow_return(shelf_id: int, borrower: CustomUser) -> None:
     """
-    Позичальник повідомляє, що повертає книгу. Рядок лишається на його полиці до підтвердження позикодавцем.
+    Позичальник повідомляє, що повертає книгу. Рядок лишається на його полиці
+    до підтвердження позикодавцем.
     """
     shelf = (
         Shelf.objects.select_for_update(of=("self",))
@@ -21,11 +26,13 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
         .first()
     )
     if not shelf:
-        return False, "Запис на полиці не знайдено."
+        raise ExchangeNotFound("Запис на полиці не знайдено.")
     if not shelf.borrowed_from_id:
-        return False, "Ця книга не позичена - її можна просто прибрати з полиці."
+        raise ExchangeInvalidState(
+            "Ця книга не позичена - її можна просто прибрати з полиці."
+        )
     if shelf.return_pending:
-        return False, "Повернення вже очікує підтвердження позикодавця."
+        raise ExchangeConflict("Повернення вже очікує підтвердження позикодавця.")
     if active_handoff_for_copy(shelf.copy_id):
         ops_log.warning(
             "return.blocked_by_handoff",
@@ -33,10 +40,9 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
             user_id=borrower.id,
             copy_id=shelf.copy_id,
         )
-        return (
-            False,
+        raise ExchangeConflict(
             "Для цього примірника схвалено передачу наступному читачу. "
-            "Не «Повернути власнику», а в чаті натисніть «Я віддав книгу».",
+            "Не «Повернути власнику», а в чаті натисніть «Я віддав книгу»."
         )
 
     Shelf.objects.filter(pk=shelf.pk).update(return_pending=True)
@@ -50,11 +56,11 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
         counterparty=shelf.borrowed_from,
     )
     message_service.notify_borrow_return_requested(shelf)
-    return True, None
 
 
+@domain_guard("exchange.return_confirm")
 @transaction.atomic
-def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str | None]:
+def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> None:
     """
     Позикодавець підтверджує отримання: видаляємо рядок позичальника.
     Рядок власника вже має бути на його полиці (після фіксу позики); якщо ні — відновлюємо.
@@ -70,9 +76,13 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
         .first()
     )
     if not shelf:
-        return False, "Немає запису з очікуванням вашого підтвердження повернення."
+        raise ExchangeNotFound(
+            "Немає запису з очікуванням вашого підтвердження повернення."
+        )
     if active_handoff_for_copy(shelf.copy_id):
-        return False, "Спочатку скасуйте активну фізичну передачу цього примірника."
+        raise ExchangeConflict(
+            "Спочатку скасуйте активну фізичну передачу цього примірника."
+        )
 
     owner_id = lender.id
     copy_id = shelf.copy_id
@@ -123,4 +133,3 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
         except Exception:
             # Черга не повинна валити підтвердження повернення
             pass
-    return True, None

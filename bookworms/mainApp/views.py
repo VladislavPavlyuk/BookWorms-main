@@ -43,6 +43,8 @@ from .message_service import (
     send_user_message,
 )
 from .notification_service import list_notifications, notification_payload, unread_count
+from .error_handling import web_exchange
+from .exceptions import ExchangeError
 from .exchange_service import (
     accept_exchange_request,
     add_owned_copy,
@@ -528,9 +530,10 @@ def my_library(request):
     if request.method == "POST" and "add_isbn" in request.POST:
         form = AddIsbnForm(request.POST)
         if form.is_valid():
-            book, err = resolve_and_sync_book_by_isbn(form.cleaned_data["isbn"])
-            if err or not book:
-                messages.error(request, err or "Книгу з таким ISBN не знайдено.")
+            try:
+                book = resolve_and_sync_book_by_isbn(form.cleaned_data["isbn"])
+            except ExchangeError as exc:
+                messages.error(request, exc.message)
             else:
                 add_owned_copy(request.user, book)
                 messages.success(request, f"Додано: {book.title}")
@@ -735,14 +738,16 @@ def remove_shelf_entry(request, shelf_id):
 def return_borrowed_shelf_book(request, shelf_id):
     if request.method != "POST":
         return redirect("my_library")
-    ok, err = request_borrow_return(shelf_id, request.user)
-    if ok:
-        messages.success(
-            request,
-            "Запит на повернення надіслано. Книга зникне з вашої полиці після підтвердження позикодавцем.",
-        )
-    else:
-        messages.error(request, err or "Помилка.")
+    web_exchange(
+        request,
+        request_borrow_return,
+        shelf_id,
+        request.user,
+        success=(
+            "Запит на повернення надіслано. Книга зникне з вашої полиці "
+            "після підтвердження позикодавцем."
+        ),
+    )
     return redirect("my_library")
 
 
@@ -751,14 +756,13 @@ def confirm_return_borrowed_shelf_book(request, shelf_id):
     """Позикодавець підтверджує отримання фізично повернутої книги."""
     if request.method != "POST":
         return redirect("my_library")
-    ok, err = confirm_borrow_return(shelf_id, request.user)
-    if ok:
-        messages.success(
-            request,
-            "Повернення підтверджено — позику знято з полиці позичальника.",
-        )
-    else:
-        messages.error(request, err or "Помилка.")
+    web_exchange(
+        request,
+        confirm_borrow_return,
+        shelf_id,
+        request.user,
+        success="Повернення підтверджено — позику знято з полиці позичальника.",
+    )
     partner_id = request.POST.get("partner_id")
     if partner_id:
         try:
@@ -1073,8 +1077,11 @@ def exchange_accept(request, request_id):
     was_transmit = bool(
         req and not had_offer and is_copy_lent_out(getattr(req.target_shelf, "copy_id", None))
     )
-    ok, err = accept_exchange_request(request_id, request.user)
-    if ok:
+    try:
+        accept_exchange_request(request_id, request.user)
+    except ExchangeError as exc:
+        messages.error(request, exc.message)
+    else:
         if had_offer:
             msg = "Обмін прийнято: полиці оновлено."
         elif was_transmit:
@@ -1085,8 +1092,6 @@ def exchange_accept(request, request_id):
         else:
             msg = "Запит прийнято: книгу видано в позику (повернення - з полиці позичальника)."
         messages.success(request, msg)
-    else:
-        messages.error(request, err or "Помилка.")
     return redirect("exchange_requests")
 
 
@@ -1095,11 +1100,13 @@ def exchange_reject(request, request_id):
     """Власник відмовляє у запиті - статус запиту rejected, полиці не змінюються."""
     if request.method != "POST":
         return redirect("exchange_requests")
-    ok, err = reject_exchange_request(request_id, request.user)
-    if ok:
-        messages.success(request, "Запит відхилено.")
-    else:
-        messages.error(request, err or "Помилка.")
+    web_exchange(
+        request,
+        reject_exchange_request,
+        request_id,
+        request.user,
+        success="Запит відхилено.",
+    )
     return redirect("exchange_requests")
 
 
@@ -1108,11 +1115,13 @@ def exchange_cancel(request, request_id):
     """Відправник запиту передумав - статус cancelled."""
     if request.method != "POST":
         return redirect("exchange_requests")
-    ok, err = cancel_exchange_request(request_id, request.user)
-    if ok:
-        messages.success(request, "Запит скасовано.")
-    else:
-        messages.error(request, err or "Помилка.")
+    web_exchange(
+        request,
+        cancel_exchange_request,
+        request_id,
+        request.user,
+        success="Запит скасовано.",
+    )
     return redirect("exchange_requests")
 
 
@@ -1161,13 +1170,15 @@ def notification_confirm_return(request, message_id: int):
     if payload.get("kind") != "return" or not shelf_id:
         messages.error(request, "Це сповіщення не є активним запитом на повернення.")
         return redirect("notifications_inbox")
-    ok, err = confirm_borrow_return(shelf_id, request.user)
-    if ok:
-        if msg.read_at is None:
-            mark_messages_read_for_user(request.user, [msg.pk])
-        messages.success(request, "Повернення підтверджено.")
-    else:
-        messages.error(request, err or "Помилка підтвердження.")
+    ok, _ = web_exchange(
+        request,
+        confirm_borrow_return,
+        shelf_id,
+        request.user,
+        success="Повернення підтверджено.",
+    )
+    if ok and msg.read_at is None:
+        mark_messages_read_for_user(request.user, [msg.pk])
     return redirect("notifications_inbox")
 
 
@@ -1251,28 +1262,13 @@ def message_thread(request, partner_id: int):
 @login_required
 @require_POST
 def handoff_confirm_give_view(request, handoff_id):
-    from . import ops_log
-
-    cid = ops_log.new_cid()
-    try:
-        ok, err = confirm_handoff_give(handoff_id, request.user)
-    except Exception as exc:
-        ops_log.exception(
-            "web.handoff.give.500",
-            exc,
-            cid=cid,
-            handoff_id=handoff_id,
-            user_id=request.user.id,
-        )
-        messages.error(request, f"Серверна помилка при віддачі (cid={cid}).")
-        partner_id = request.POST.get("partner_id")
-        if partner_id:
-            return redirect("message_thread", partner_id=int(partner_id))
-        return redirect("exchange_requests")
-    if ok:
-        messages.success(request, "Віддачу підтверджено — очікуємо підтвердження отримання.")
-    else:
-        messages.error(request, err or "Помилка.")
+    web_exchange(
+        request,
+        confirm_handoff_give,
+        handoff_id,
+        request.user,
+        success="Віддачу підтверджено — очікуємо підтвердження отримання.",
+    )
     partner_id = request.POST.get("partner_id")
     if partner_id:
         return redirect("message_thread", partner_id=int(partner_id))
@@ -1282,34 +1278,16 @@ def handoff_confirm_give_view(request, handoff_id):
 @login_required
 @require_POST
 def handoff_confirm_receive_view(request, handoff_id):
-    from . import ops_log
-
-    cid = ops_log.new_cid()
-    try:
-        ok, err = confirm_handoff_receive(handoff_id, request.user)
-    except Exception as exc:
-        ops_log.exception(
-            "web.handoff.receive.500",
-            exc,
-            cid=cid,
-            handoff_id=handoff_id,
-            user_id=request.user.id,
-        )
-        messages.error(request, f"Серверна помилка при отриманні (cid={cid}).")
-        partner_id = request.POST.get("partner_id")
-        if partner_id:
-            try:
-                return redirect("message_thread", partner_id=int(partner_id))
-            except Exception:
-                pass
-        return redirect("exchange_requests")
-    if ok:
-        messages.success(
-            request,
-            "Отримання підтверджено — книга на вашій полиці; попередній позичальник вийшов з чату.",
-        )
-    else:
-        messages.error(request, err or "Помилка.")
+    web_exchange(
+        request,
+        confirm_handoff_receive,
+        handoff_id,
+        request.user,
+        success=(
+            "Отримання підтверджено — книга на вашій полиці; "
+            "попередній позичальник вийшов з чату."
+        ),
+    )
     partner_id = request.POST.get("partner_id")
     if partner_id:
         try:
@@ -1322,11 +1300,13 @@ def handoff_confirm_receive_view(request, handoff_id):
 @login_required
 @require_POST
 def handoff_cancel_view(request, handoff_id):
-    ok, err = cancel_loan_handoff(handoff_id, request.user)
-    if ok:
-        messages.success(request, "Фізичну передачу скасовано.")
-    else:
-        messages.error(request, err or "Помилка.")
+    web_exchange(
+        request,
+        cancel_loan_handoff,
+        handoff_id,
+        request.user,
+        success="Фізичну передачу скасовано.",
+    )
     partner_id = request.POST.get("partner_id")
     if partner_id:
         return redirect("message_thread", partner_id=int(partner_id))

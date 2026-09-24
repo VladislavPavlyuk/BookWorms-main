@@ -6,11 +6,21 @@ from django.utils import timezone
 
 from .. import message_service
 from ..copy_events import log_copy_event
+from ..error_handling import domain_guard
+from ..exceptions import (
+    ExchangeConflict,
+    ExchangeError,
+    ExchangeForbidden,
+    ExchangeInvalidState,
+    ExchangeNotFound,
+)
 from ..models import BookCopy, BookExchangeRequest, CopyEvent, CustomUser, Shelf
 from .copies import is_copy_lent_out
 from .due import loan_due_date
 from .handoff import active_handoff_for_copy, approve_loan_handoff
 
+
+@domain_guard("exchange.create_request")
 def create_exchange_request(
     requester: CustomUser,
     target_shelf: Shelf,
@@ -18,9 +28,9 @@ def create_exchange_request(
     *,
     from_queue: bool = False,
     join_queue_if_busy: bool = True,
-) -> tuple[BookExchangeRequest | None, str | None]:
+) -> BookExchangeRequest:
     """
-    Створює запит. Помилка - (None, текст).
+    Створює запит. Помилка — ExchangeError.
     Без offer_shelf: після прийняття - позика (borrowed_from = власник).
     З offer_shelf: обмін двома примірниками (повна передача, без позики).
 
@@ -30,28 +40,36 @@ def create_exchange_request(
     from .. import queue_service
 
     if target_shelf.user_id == requester.id:
-        return None, "Не можна запитувати власну книгу."
+        raise ExchangeInvalidState("Не можна запитувати власну книгу.")
 
     if target_shelf.borrowed_from_id:
-        return None, "Неможливо запитувати позичену в іншого користувача книгу."
+        raise ExchangeInvalidState(
+            "Неможливо запитувати позичену в іншого користувача книгу."
+        )
 
     lent = is_copy_lent_out(target_shelf.copy_id)
 
     if lent and offer_shelf is not None:
-        return None, "Неможливо обміняти примірник, який зараз у позиці."
+        raise ExchangeInvalidState("Неможливо обміняти примірник, який зараз у позиці.")
 
     if lent and active_handoff_for_copy(target_shelf.copy_id):
-        return None, "Для цього примірника вже схвалено передачу — дочекайтесь фізичної передачі."
+        raise ExchangeConflict(
+            "Для цього примірника вже схвалено передачу — дочекайтесь фізичної передачі."
+        )
 
     if offer_shelf is not None:
         if offer_shelf.user_id != requester.id:
-            return None, "Запропонована книга має бути з вашої полиці."
+            raise ExchangeForbidden("Запропонована книга має бути з вашої полиці.")
         if offer_shelf.borrowed_from_id:
-            return None, "Неможна віддавати в обмін позичену книгу - спочатку поверніть її власнику."
+            raise ExchangeInvalidState(
+                "Неможна віддавати в обмін позичену книгу - спочатку поверніть її власнику."
+            )
         if is_copy_lent_out(offer_shelf.copy_id):
-            return None, "Неможна віддавати в обмін книгу, яка зараз у когось у позиці."
+            raise ExchangeInvalidState(
+                "Неможна віддавати в обмін книгу, яка зараз у когось у позиці."
+            )
         if offer_shelf.copy_id == target_shelf.copy_id:
-            return None, "Немає сенсу обмінювати той самий примірник."
+            raise ExchangeInvalidState("Немає сенсу обмінювати той самий примірник.")
 
     pending = BookExchangeRequest.Status.PENDING
     if BookExchangeRequest.objects.filter(
@@ -59,11 +77,10 @@ def create_exchange_request(
         requester=requester,
         status=pending,
     ).exists():
-        return None, "Ви вже маєте активний запит щодо цієї книги."
+        raise ExchangeConflict("Ви вже маєте активний запит щодо цієї книги.")
 
-    # Той самий примірник уже на полиці (не блокуємо інший ISBN-клон).
     if Shelf.objects.filter(user=requester, copy_id=target_shelf.copy_id).exists():
-        return None, "Цей примірник вже є у вас на полиці."
+        raise ExchangeConflict("Цей примірник вже є у вас на полиці.")
 
     req = BookExchangeRequest.objects.create(
         target_shelf=target_shelf,
@@ -93,7 +110,6 @@ def create_exchange_request(
         and target_shelf.copy_id
         and not from_queue
     ):
-        # Кілька охочих на вільний примірник — теж ставимо в чергу (крім першого запиту).
         other_pending = (
             BookExchangeRequest.objects.filter(
                 target_shelf__copy_id=target_shelf.copy_id,
@@ -108,7 +124,7 @@ def create_exchange_request(
                 requester, target_shelf.copy, notify=True, exchange_request=req
             )
 
-    return req, None
+    return req
 
 
 def create_many_exchange_requests(
@@ -133,31 +149,33 @@ def create_many_exchange_requests(
         if offer_shelf is not None:
             oid = offer_shelf.pk
             if oid in seen_offer_ids:
-                errs.append(f'"{label}": цю свою книгу вже обрано для іншого рядка в цьому пакеті.')
+                errs.append(
+                    f'"{label}": цю свою книгу вже обрано для іншого рядка в цьому пакеті.'
+                )
                 continue
             seen_offer_ids.add(oid)
         filtered.append((target_shelf, offer_shelf))
 
     for target_shelf, offer_shelf in filtered:
         label = short_title(target_shelf)
-        req, err = create_exchange_request(requester, target_shelf, offer_shelf)
-        if err:
-            errs.append(f"'{label}': {err}")
-        else:
+        try:
+            create_exchange_request(requester, target_shelf, offer_shelf)
             ok += 1
+        except ExchangeError as exc:
+            errs.append(f"'{label}': {exc.message}")
     return ok, errs
 
 
+@domain_guard("exchange.accept")
 @transaction.atomic
-def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[bool, str | None]:
+def accept_exchange_request(request_id: int, acting_user: CustomUser) -> None:
     """
     Власник погоджується.
     Позика: власник ЗБЕРІГАЄ свій рядок Shelf; позичальнику створюється окремий рядок
     з borrowed_from на той самий BookCopy.
     Обмін: обидва рядки міняють user_id і owner на BookCopy (повна передача).
 
-    Якщо примірник уже в позиці — *передача третій особі*: знімаємо з поточного
-    позичальника і видаємо запитувачу (лише для позики, не обміну).
+    Якщо примірник уже в позиці — *передача третій особі*: схвалення створює handoff.
     """
     from .. import queue_service
 
@@ -166,11 +184,11 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
             pk=request_id,
             status=BookExchangeRequest.Status.PENDING,
         )
-    except BookExchangeRequest.DoesNotExist:
-        return False, "Запит не знайдено або вже оброблено."
+    except BookExchangeRequest.DoesNotExist as exc:
+        raise ExchangeNotFound("Запит не знайдено або вже оброблено.") from exc
 
     if req.shelf_owner_id != acting_user.id:
-        return False, "Ви не власник цієї книги."
+        raise ExchangeForbidden("Ви не власник цієї книги.")
 
     target = (
         Shelf.objects.select_for_update(of=("self",))
@@ -182,9 +200,9 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
         .first()
     )
     if not target:
-        return False, "Книги вже немає на вашій полиці."
+        raise ExchangeNotFound("Книги вже немає на вашій полиці.")
     if target.borrowed_from_id:
-        return False, "Не можна віддати позичену книгу."
+        raise ExchangeInvalidState("Не можна віддати позичену книгу.")
 
     requester = CustomUser.objects.select_for_update().get(pk=req.requester_id)
 
@@ -197,26 +215,29 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
             .first()
         )
         if not offer:
-            return False, "Запропонована книга більше не на полиці відправника."
+            raise ExchangeNotFound("Запропонована книга більше не на полиці відправника.")
         if offer.borrowed_from_id or is_copy_lent_out(offer.copy_id):
-            return False, "Запропонована книга недоступна для обміну (позика)."
+            raise ExchangeInvalidState(
+                "Запропонована книга недоступна для обміну (позика)."
+            )
 
     if Shelf.objects.filter(user=requester, copy_id=target.copy_id).exists():
-        return False, "У користувача вже є цей примірник - неможливо завершити обмін."
+        raise ExchangeConflict(
+            "У користувача вже є цей примірник - неможливо завершити обмін."
+        )
 
-    # --- Передача третій особі: схвалення ≠ фізичний перенос ---
     if is_copy_lent_out(target.copy_id):
         if offer is not None:
-            return False, "Неможливо обміняти примірник, який зараз у позиці."
+            raise ExchangeInvalidState("Неможливо обміняти примірник, який зараз у позиці.")
         if active_handoff_for_copy(target.copy_id):
-            return False, "Для цього примірника вже є активна фізична передача."
-        ok, err = approve_loan_handoff(req, acting_user, target, requester)
-        if not ok:
-            return False, err
+            raise ExchangeConflict(
+                "Для цього примірника вже є активна фізична передача."
+            )
+        approve_loan_handoff(req, acting_user, target, requester)
         req.status = BookExchangeRequest.Status.ACCEPTED
         req.resolved_at = timezone.now()
         req.save(update_fields=["status", "resolved_at"])
-        return True, None
+        return
 
     if offer:
         if (
@@ -224,7 +245,7 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
             .exclude(pk=offer.pk)
             .exists()
         ):
-            return False, "У вас уже є запропонований до обміну примірник."
+            raise ExchangeConflict("У вас уже є запропонований до обміну примірник.")
         prev_target_owner = acting_user
         prev_offer_owner = requester
         Shelf.objects.filter(pk=target.pk).update(
@@ -288,29 +309,29 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
     req.resolved_at = timezone.now()
     req.save(update_fields=["status", "resolved_at"])
     message_service.notify_exchange_request_accepted(req)
-    return True, None
 
 
-def reject_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[bool, str | None]:
+@domain_guard("exchange.reject")
+def reject_exchange_request(request_id: int, acting_user: CustomUser) -> None:
     try:
         req = BookExchangeRequest.objects.get(
             pk=request_id,
             status=BookExchangeRequest.Status.PENDING,
         )
-    except BookExchangeRequest.DoesNotExist:
-        return False, "Запит не знайдено."
+    except BookExchangeRequest.DoesNotExist as exc:
+        raise ExchangeNotFound("Запит не знайдено.") from exc
 
     if req.shelf_owner_id != acting_user.id:
-        return False, "Ви не власник цієї книги."
+        raise ExchangeForbidden("Ви не власник цієї книги.")
 
     req.status = BookExchangeRequest.Status.REJECTED
     req.resolved_at = timezone.now()
     req.save(update_fields=["status", "resolved_at"])
     message_service.notify_exchange_request_rejected(req)
-    return True, None
 
 
-def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[bool, str | None]:
+@domain_guard("exchange.cancel")
+def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> None:
     """Той, хто надсилав запит, передумав - скасування до відповіді власника."""
     from .. import queue_service
 
@@ -319,11 +340,11 @@ def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
             pk=request_id,
             status=BookExchangeRequest.Status.PENDING,
         )
-    except BookExchangeRequest.DoesNotExist:
-        return False, "Запит не знайдено."
+    except BookExchangeRequest.DoesNotExist as exc:
+        raise ExchangeNotFound("Запит не знайдено.") from exc
 
     if req.requester_id != acting_user.id:
-        return False, "Скасувати може лише той, хто надіслав запит."
+        raise ExchangeForbidden("Скасувати може лише той, хто надіслав запит.")
 
     copy_id = req.target_shelf.copy_id
     req.status = BookExchangeRequest.Status.CANCELLED
@@ -332,6 +353,3 @@ def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> tuple[b
     message_service.notify_exchange_request_cancelled(req)
     if copy_id:
         queue_service.leave_queue(acting_user, copy_id)
-    return True, None
-
-

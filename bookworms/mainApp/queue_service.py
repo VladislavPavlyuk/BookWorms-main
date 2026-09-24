@@ -141,6 +141,7 @@ def offer_next_after_return(copy_id: int, owner: CustomUser) -> BookExchangeRequ
     і надіслати «ваша черга».
     """
     from .exchange_service import create_exchange_request
+    from .exceptions import ExchangeError
 
     entry = (
         CopyQueueEntry.objects.select_for_update()
@@ -171,14 +172,15 @@ def offer_next_after_return(copy_id: int, owner: CustomUser) -> BookExchangeRequ
     if existing:
         req = existing
     else:
-        req, err = create_exchange_request(
-            entry.user,
-            owner_shelf,
-            None,
-            from_queue=True,
-            join_queue_if_busy=False,
-        )
-        if err or not req:
+        try:
+            req = create_exchange_request(
+                entry.user,
+                owner_shelf,
+                None,
+                from_queue=True,
+                join_queue_if_busy=False,
+            )
+        except ExchangeError:
             message_service.notify_queue_available(entry)
             return None
 

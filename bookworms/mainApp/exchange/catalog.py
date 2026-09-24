@@ -1,6 +1,8 @@
 """Book catalog resolve/sync from ISBN providers (SRP)."""
 from __future__ import annotations
 
+from ..error_handling import domain_guard
+from ..exceptions import ExchangeInvalidState, ExchangeNotFound
 from ..models import Book
 
 
@@ -43,12 +45,15 @@ def sync_book_from_payload(book: Book, payload: dict) -> Book:
     return book
 
 
-def resolve_and_sync_book_by_isbn(raw_isbn: str) -> tuple[Book | None, str | None]:
+@domain_guard("exchange.resolve_isbn")
+def resolve_and_sync_book_by_isbn(raw_isbn: str) -> Book:
     from ..book_lookup import fetch_book_by_isbn, isbn_candidates, normalize_isbn
 
     norm = normalize_isbn(raw_isbn)
     if not norm:
-        return None, "Невірний ISBN: потрібно 10 символів (останній може бути X) або 13 цифр."
+        raise ExchangeInvalidState(
+            "Невірний ISBN: потрібно 10 символів (останній може бути X) або 13 цифр."
+        )
 
     candidates = isbn_candidates(norm)
     existing = Book.objects.filter(isbn__in=candidates).first()
@@ -58,11 +63,11 @@ def resolve_and_sync_book_by_isbn(raw_isbn: str) -> tuple[Book | None, str | Non
     if payload:
         if existing and existing.isbn != payload.get("isbn"):
             sync_book_from_payload(existing, payload)
-            return existing, None
+            return existing
         book, _ = get_or_create_book_from_payload(payload)
-        return book, None
+        return book
 
     if existing:
-        return existing, None
+        return existing
 
-    return None, err or "Книгу з таким ISBN не знайдено."
+    raise ExchangeNotFound(err or "Книгу з таким ISBN не знайдено.")

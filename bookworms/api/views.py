@@ -59,7 +59,8 @@ from mainApp.models import (
     PrivateMessage,
     Shelf,
 )
-from mainApp.book_lookup import normalize_isbn
+from mainApp.exceptions import ExchangeError
+
 from mainApp.web3forms_mail import (
     activation_payload,
     activation_url_for,
@@ -496,9 +497,7 @@ def due_slips(request):
 def shelf_add_isbn(request):
     ser = AddIsbnSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
-    book, err = resolve_and_sync_book_by_isbn(ser.validated_data["isbn"])
-    if err or not book:
-        return _error(err or "Книгу з таким ISBN не знайдено.")
+    book = resolve_and_sync_book_by_isbn(ser.validated_data["isbn"])
     shelf = add_owned_copy(request.user, book)
     shelf = Shelf.objects.select_related("book", "borrowed_from", "user", "copy").get(
         pk=shelf.pk
@@ -564,17 +563,13 @@ def shelf_reader_age(request, shelf_id):
 
 @api_view(["POST"])
 def shelf_return(request, shelf_id):
-    ok, err = request_borrow_return(shelf_id, request.user)
-    if not ok:
-        return _error(err or "Помилка.")
+    request_borrow_return(shelf_id, request.user)
     return Response({"ok": True})
 
 
 @api_view(["POST"])
 def shelf_confirm_return(request, shelf_id):
-    ok, err = confirm_borrow_return(shelf_id, request.user)
-    if not ok:
-        return _error(err or "Помилка.")
+    confirm_borrow_return(shelf_id, request.user)
     return Response({"ok": True})
 
 
@@ -884,11 +879,11 @@ def exchange_create(request):
                     f'"{target.book.title[:45]}": книгу для обміну не знайдено серед вільних.'
                 )
                 continue
-        req, err = create_exchange_request(request.user, target, offer)
-        if err:
-            errors.append(f'"{target.book.title[:45]}": {err}')
-        else:
+        try:
+            req = create_exchange_request(request.user, target, offer)
             created.append(req)
+        except ExchangeError as exc:
+            errors.append(f'"{target.book.title[:45]}": {exc.message}')
     ctx = {"request": request}
     return Response(
         {
@@ -900,9 +895,7 @@ def exchange_create(request):
 
 
 def _exchange_action(request, request_id, fn):
-    ok, err = fn(request_id, request.user)
-    if not ok:
-        return _error(err or "Помилка.")
+    fn(request_id, request.user)
     return Response({"ok": True})
 
 
@@ -1016,89 +1009,20 @@ def message_thread(request, partner_id):
 
 @api_view(["POST"])
 def handoff_confirm_give(request, handoff_id):
-    from mainApp import ops_log
-
-    cid = ops_log.new_cid()
-    ops_log.info(
-        "api.handoff.give",
-        cid=cid,
-        handoff_id=handoff_id,
-        user_id=request.user.id,
-    )
-    try:
-        ok, err = confirm_handoff_give(handoff_id, request.user)
-    except Exception as exc:
-        ops_log.exception(
-            "api.handoff.give.500",
-            exc,
-            cid=cid,
-            handoff_id=handoff_id,
-            user_id=request.user.id,
-        )
-        return _error(f"Серверна помилка при віддачі (cid={cid}).", 500)
-    if not ok:
-        ops_log.warning(
-            "api.handoff.give.reject",
-            cid=cid,
-            handoff_id=handoff_id,
-            user_id=request.user.id,
-            err=err,
-        )
-        return _error(err or "Помилка.")
-    return Response({"ok": True, "cid": cid})
+    confirm_handoff_give(handoff_id, request.user)
+    return Response({"ok": True})
 
 
 @api_view(["POST"])
 def handoff_confirm_receive(request, handoff_id):
-    from mainApp import ops_log
-
-    cid = ops_log.new_cid()
-    ops_log.info(
-        "api.handoff.receive",
-        cid=cid,
-        handoff_id=handoff_id,
-        user_id=request.user.id,
-    )
-    try:
-        ok, err = confirm_handoff_receive(handoff_id, request.user)
-    except Exception as exc:
-        ops_log.exception(
-            "api.handoff.receive.500",
-            exc,
-            cid=cid,
-            handoff_id=handoff_id,
-            user_id=request.user.id,
-        )
-        return _error(f"Серверна помилка при отриманні (cid={cid}).", 500)
-    if not ok:
-        ops_log.warning(
-            "api.handoff.receive.reject",
-            cid=cid,
-            err=err,
-        )
-        return _error(err or "Помилка.")
-    return Response({"ok": True, "cid": cid})
+    confirm_handoff_receive(handoff_id, request.user)
+    return Response({"ok": True})
 
 
 @api_view(["POST"])
 def handoff_cancel(request, handoff_id):
-    from mainApp import ops_log
-
-    cid = ops_log.new_cid()
-    try:
-        ok, err = cancel_loan_handoff(handoff_id, request.user)
-    except Exception as exc:
-        ops_log.exception(
-            "api.handoff.cancel.500",
-            exc,
-            cid=cid,
-            handoff_id=handoff_id,
-            user_id=request.user.id,
-        )
-        return _error(f"Серверна помилка (cid={cid}).", 500)
-    if not ok:
-        return _error(err or "Помилка.")
-    return Response({"ok": True, "cid": cid})
+    cancel_loan_handoff(handoff_id, request.user)
+    return Response({"ok": True})
 
 
 @api_view(["GET"])
