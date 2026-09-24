@@ -14,6 +14,7 @@ from django.db.models import Exists, OuterRef, QuerySet
 from django.utils import timezone
 
 from . import message_service
+from . import ops_log
 from .copy_events import log_copy_event
 from .models import (
     Book,
@@ -677,6 +678,16 @@ def _approve_loan_handoff(
     Власник схвалив передачу: книга лишається у поточного позичальника,
     створюється LoanHandoff. Полиця переїде лише після confirm give + receive.
     """
+    cid = ops_log.new_cid()
+    ops_log.info(
+        "handoff.approve.start",
+        cid=cid,
+        req_id=req.pk,
+        owner_id=owner.id,
+        requester_id=requester.id,
+        owner_shelf_id=owner_shelf.pk,
+        copy_id=owner_shelf.copy_id,
+    )
     borrower_shelf = (
         Shelf.objects.select_for_update(of=("self",))
         .filter(copy_id=owner_shelf.copy_id, borrowed_from__isnull=False)
@@ -684,6 +695,7 @@ def _approve_loan_handoff(
         .first()
     )
     if not borrower_shelf:
+        ops_log.warning("handoff.approve.no_loan", cid=cid, copy_id=owner_shelf.copy_id)
         return False, "Активну позику не знайдено — спробуйте ще раз."
 
     previous_holder = borrower_shelf.user
@@ -713,12 +725,20 @@ def _approve_loan_handoff(
         exchange_request=req,
     )
     message_service.notify_handoff_approved(handoff)
+    ops_log.info(
+        "handoff.approve.ok",
+        cid=cid,
+        **ops_log.handoff_snapshot(handoff),
+    )
     return True, None
 
 
 def _complete_loan_handoff_transfer(handoff: LoanHandoff) -> tuple[bool, str | None]:
     """Зняти позику з from_user і видати to_user (після обох підтверджень)."""
     from . import queue_service
+
+    cid = ops_log.new_cid()
+    ops_log.info("handoff.complete.start", cid=cid, **ops_log.handoff_snapshot(handoff))
 
     owner = handoff.owner
     requester = handoff.to_user
@@ -733,6 +753,12 @@ def _complete_loan_handoff_transfer(handoff: LoanHandoff) -> tuple[bool, str | N
         .first()
     )
     if not borrower_shelf:
+        ops_log.warning(
+            "handoff.complete.no_shelf",
+            cid=cid,
+            copy_id=copy_id,
+            from_user_id=previous_holder.id,
+        )
         return False, "Позику вже знято — передачу не завершено."
 
     book_title = borrower_shelf.book.title
@@ -763,7 +789,11 @@ def _complete_loan_handoff_transfer(handoff: LoanHandoff) -> tuple[bool, str | N
     message_service.notify_loan_transmitted(
         owner, previous_holder, requester, book_title, exchange_request=req
     )
-    queue_service.after_copy_loaned_or_transmitted(copy_id, requester.id)
+    try:
+        queue_service.after_copy_loaned_or_transmitted(copy_id, requester.id)
+    except Exception as exc:
+        ops_log.exception("handoff.complete.queue_fail", exc, cid=cid, copy_id=copy_id)
+    ops_log.info("handoff.complete.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
     return True, None
 
 
@@ -772,34 +802,79 @@ def confirm_handoff_give(
     handoff_id: int, acting_user: CustomUser
 ) -> tuple[bool, str | None]:
     """Поточний позичальник підтверджує, що фізично віддав книгу наступному."""
+    cid = ops_log.new_cid()
+    ops_log.info(
+        "handoff.give.start",
+        cid=cid,
+        handoff_id=handoff_id,
+        actor_id=acting_user.id,
+    )
     try:
+        # of=("self",) — Postgres: FOR UPDATE + LEFT JOIN на nullable FK інакше 500
         handoff = (
-            LoanHandoff.objects.select_for_update()
-            .select_related("owner", "from_user", "to_user", "copy__book", "exchange_request")
+            LoanHandoff.objects.select_for_update(of=("self",))
+            .select_related(
+                "owner", "from_user", "to_user", "copy__book", "exchange_request"
+            )
             .get(pk=handoff_id)
         )
     except LoanHandoff.DoesNotExist:
+        ops_log.warning("handoff.give.missing", cid=cid, handoff_id=handoff_id)
         return False, "Передачу не знайдено."
+    except Exception as exc:
+        ops_log.exception(
+            "handoff.give.lock_fail",
+            exc,
+            cid=cid,
+            handoff_id=handoff_id,
+            actor_id=acting_user.id,
+        )
+        return False, f"Помилка блокування передачі (cid={cid})."
+
+    ops_log.info("handoff.give.locked", cid=cid, **ops_log.handoff_snapshot(handoff))
 
     if handoff.status != LoanHandoff.Status.AWAITING_GIVE:
+        ops_log.warning(
+            "handoff.give.bad_status",
+            cid=cid,
+            status=handoff.status,
+            actor_id=acting_user.id,
+        )
         return False, "Зараз не чекається підтвердження віддачі."
     if acting_user.id != handoff.from_user_id:
+        ops_log.warning(
+            "handoff.give.forbidden",
+            cid=cid,
+            actor_id=acting_user.id,
+            from_user_id=handoff.from_user_id,
+        )
         return False, "Підтвердити віддачу може лише поточний тримач книги."
 
-    handoff.status = LoanHandoff.Status.AWAITING_RECEIVE
-    handoff.giver_confirmed_at = timezone.now()
-    handoff.save(update_fields=["status", "giver_confirmed_at"])
-    log_copy_event(
-        handoff.copy_id,
-        CopyEvent.Code.HANDOFF_GIVEN,
-        actor=acting_user,
-        holder=acting_user,
-        legal_owner=handoff.owner,
-        previous_holder=acting_user,
-        counterparty=handoff.to_user,
-        exchange_request=handoff.exchange_request,
-    )
-    message_service.notify_handoff_given(handoff)
+    try:
+        handoff.status = LoanHandoff.Status.AWAITING_RECEIVE
+        handoff.giver_confirmed_at = timezone.now()
+        handoff.save(update_fields=["status", "giver_confirmed_at"])
+        log_copy_event(
+            handoff.copy_id,
+            CopyEvent.Code.HANDOFF_GIVEN,
+            actor=acting_user,
+            holder=acting_user,
+            legal_owner=handoff.owner,
+            previous_holder=acting_user,
+            counterparty=handoff.to_user,
+            exchange_request=handoff.exchange_request,
+        )
+        message_service.notify_handoff_given(handoff)
+    except Exception as exc:
+        ops_log.exception(
+            "handoff.give.save_fail",
+            exc,
+            cid=cid,
+            **ops_log.handoff_snapshot(handoff),
+        )
+        raise
+
+    ops_log.info("handoff.give.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
     return True, None
 
 
@@ -808,25 +883,68 @@ def confirm_handoff_receive(
     handoff_id: int, acting_user: CustomUser
 ) -> tuple[bool, str | None]:
     """Наступний позичальник підтверджує отримання — полиця переїздить, попередній виходить з чату."""
+    cid = ops_log.new_cid()
+    ops_log.info(
+        "handoff.receive.start",
+        cid=cid,
+        handoff_id=handoff_id,
+        actor_id=acting_user.id,
+    )
     try:
         handoff = (
-            LoanHandoff.objects.select_for_update()
-            .select_related("owner", "from_user", "to_user", "copy__book", "exchange_request")
+            LoanHandoff.objects.select_for_update(of=("self",))
+            .select_related(
+                "owner", "from_user", "to_user", "copy__book", "exchange_request"
+            )
             .get(pk=handoff_id)
         )
     except LoanHandoff.DoesNotExist:
+        ops_log.warning("handoff.receive.missing", cid=cid, handoff_id=handoff_id)
         return False, "Передачу не знайдено."
+    except Exception as exc:
+        ops_log.exception(
+            "handoff.receive.lock_fail",
+            exc,
+            cid=cid,
+            handoff_id=handoff_id,
+            actor_id=acting_user.id,
+        )
+        return False, f"Помилка блокування передачі (cid={cid})."
 
     if handoff.status != LoanHandoff.Status.AWAITING_RECEIVE:
         if handoff.status == LoanHandoff.Status.AWAITING_GIVE:
+            ops_log.warning("handoff.receive.need_give_first", cid=cid)
             return False, "Спочатку поточний тримач має підтвердити віддачу."
+        ops_log.warning(
+            "handoff.receive.bad_status", cid=cid, status=handoff.status
+        )
         return False, "Зараз не чекається підтвердження отримання."
     if acting_user.id != handoff.to_user_id:
+        ops_log.warning(
+            "handoff.receive.forbidden",
+            cid=cid,
+            actor_id=acting_user.id,
+            to_user_id=handoff.to_user_id,
+        )
         return False, "Підтвердити отримання може лише наступний позичальник."
 
-    handoff.receiver_confirmed_at = timezone.now()
-    handoff.save(update_fields=["receiver_confirmed_at"])
-    return _complete_loan_handoff_transfer(handoff)
+    try:
+        handoff.receiver_confirmed_at = timezone.now()
+        handoff.save(update_fields=["receiver_confirmed_at"])
+        ok, err = _complete_loan_handoff_transfer(handoff)
+        if not ok:
+            ops_log.warning("handoff.receive.complete_fail", cid=cid, err=err)
+        else:
+            ops_log.info("handoff.receive.ok", cid=cid, handoff_id=handoff_id)
+        return ok, err
+    except Exception as exc:
+        ops_log.exception(
+            "handoff.receive.fail",
+            exc,
+            cid=cid,
+            **ops_log.handoff_snapshot(handoff),
+        )
+        raise
 
 
 @transaction.atomic
@@ -834,12 +952,22 @@ def cancel_loan_handoff(
     handoff_id: int, acting_user: CustomUser
 ) -> tuple[bool, str | None]:
     """Власник скасовує схвалену, але ще не завершену фізичну передачу."""
+    cid = ops_log.new_cid()
     try:
-        handoff = LoanHandoff.objects.select_for_update().select_related(
-            "owner", "from_user", "to_user", "copy__book", "exchange_request"
-        ).get(pk=handoff_id)
+        handoff = (
+            LoanHandoff.objects.select_for_update(of=("self",))
+            .select_related(
+                "owner", "from_user", "to_user", "copy__book", "exchange_request"
+            )
+            .get(pk=handoff_id)
+        )
     except LoanHandoff.DoesNotExist:
         return False, "Передачу не знайдено."
+    except Exception as exc:
+        ops_log.exception(
+            "handoff.cancel.lock_fail", exc, cid=cid, handoff_id=handoff_id
+        )
+        return False, f"Помилка блокування передачі (cid={cid})."
 
     if handoff.status not in (
         LoanHandoff.Status.AWAITING_GIVE,
@@ -853,6 +981,7 @@ def cancel_loan_handoff(
     handoff.resolved_at = timezone.now()
     handoff.save(update_fields=["status", "resolved_at"])
     message_service.notify_handoff_cancelled(handoff)
+    ops_log.info("handoff.cancel.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
     return True, None
 
 
@@ -916,8 +1045,8 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
     Позичальник повідомляє, що повертає книгу. Рядок лишається на його полиці до підтвердження позикодавцем.
     """
     shelf = (
-        Shelf.objects.select_related("borrowed_from", "book", "copy")
-        .select_for_update()
+        Shelf.objects.select_for_update(of=("self",))
+        .select_related("borrowed_from", "book", "copy")
         .filter(pk=shelf_id, user=borrower)
         .first()
     )
@@ -928,7 +1057,17 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> tuple[bool, st
     if shelf.return_pending:
         return False, "Повернення вже очікує підтвердження позикодавця."
     if active_handoff_for_copy(shelf.copy_id):
-        return False, "Спочатку завершіть або скасуйте фізичну передачу наступному читачу."
+        ops_log.warning(
+            "return.blocked_by_handoff",
+            shelf_id=shelf_id,
+            user_id=borrower.id,
+            copy_id=shelf.copy_id,
+        )
+        return (
+            False,
+            "Для цього примірника схвалено передачу наступному читачу. "
+            "Не «Повернути власнику», а в чаті натисніть «Я віддав книгу».",
+        )
 
     Shelf.objects.filter(pk=shelf.pk).update(return_pending=True)
     shelf.return_pending = True
@@ -951,8 +1090,8 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
     Рядок власника вже має бути на його полиці (після фіксу позики); якщо ні — відновлюємо.
     """
     shelf = (
-        Shelf.objects.select_related("book", "user", "copy")
-        .select_for_update()
+        Shelf.objects.select_for_update(of=("self",))
+        .select_related("book", "user", "copy")
         .filter(
             pk=shelf_id,
             borrowed_from=lender,
@@ -979,7 +1118,7 @@ def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> tuple[bool, str 
     )
 
     owner_row = (
-        Shelf.objects.select_for_update()
+        Shelf.objects.select_for_update(of=("self",))
         .filter(user_id=owner_id, copy_id=copy_id, borrowed_from__isnull=True)
         .first()
     )

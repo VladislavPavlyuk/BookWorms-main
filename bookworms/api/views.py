@@ -152,7 +152,7 @@ def health(request):
     payload = {
         "status": "ok",
         "app": "rechenets",
-        "code_rev": "2026-09-20-rechenets",
+        "code_rev": "2026-09-24-handoff-for-update",
     }
     try:
         connection.ensure_connection()
@@ -1016,26 +1016,89 @@ def message_thread(request, partner_id):
 
 @api_view(["POST"])
 def handoff_confirm_give(request, handoff_id):
-    ok, err = confirm_handoff_give(handoff_id, request.user)
+    from mainApp import ops_log
+
+    cid = ops_log.new_cid()
+    ops_log.info(
+        "api.handoff.give",
+        cid=cid,
+        handoff_id=handoff_id,
+        user_id=request.user.id,
+    )
+    try:
+        ok, err = confirm_handoff_give(handoff_id, request.user)
+    except Exception as exc:
+        ops_log.exception(
+            "api.handoff.give.500",
+            exc,
+            cid=cid,
+            handoff_id=handoff_id,
+            user_id=request.user.id,
+        )
+        return _error(f"Серверна помилка при віддачі (cid={cid}).", 500)
     if not ok:
+        ops_log.warning(
+            "api.handoff.give.reject",
+            cid=cid,
+            handoff_id=handoff_id,
+            user_id=request.user.id,
+            err=err,
+        )
         return _error(err or "Помилка.")
-    return Response({"ok": True})
+    return Response({"ok": True, "cid": cid})
 
 
 @api_view(["POST"])
 def handoff_confirm_receive(request, handoff_id):
-    ok, err = confirm_handoff_receive(handoff_id, request.user)
+    from mainApp import ops_log
+
+    cid = ops_log.new_cid()
+    ops_log.info(
+        "api.handoff.receive",
+        cid=cid,
+        handoff_id=handoff_id,
+        user_id=request.user.id,
+    )
+    try:
+        ok, err = confirm_handoff_receive(handoff_id, request.user)
+    except Exception as exc:
+        ops_log.exception(
+            "api.handoff.receive.500",
+            exc,
+            cid=cid,
+            handoff_id=handoff_id,
+            user_id=request.user.id,
+        )
+        return _error(f"Серверна помилка при отриманні (cid={cid}).", 500)
     if not ok:
+        ops_log.warning(
+            "api.handoff.receive.reject",
+            cid=cid,
+            err=err,
+        )
         return _error(err or "Помилка.")
-    return Response({"ok": True})
+    return Response({"ok": True, "cid": cid})
 
 
 @api_view(["POST"])
 def handoff_cancel(request, handoff_id):
-    ok, err = cancel_loan_handoff(handoff_id, request.user)
+    from mainApp import ops_log
+
+    cid = ops_log.new_cid()
+    try:
+        ok, err = cancel_loan_handoff(handoff_id, request.user)
+    except Exception as exc:
+        ops_log.exception(
+            "api.handoff.cancel.500",
+            exc,
+            cid=cid,
+            handoff_id=handoff_id,
+            user_id=request.user.id,
+        )
+        return _error(f"Серверна помилка (cid={cid}).", 500)
     if not ok:
         return _error(err or "Помилка.")
-    return Response({"ok": True})
+    return Response({"ok": True, "cid": cid})
 
 
 @api_view(["GET"])

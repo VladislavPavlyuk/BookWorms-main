@@ -233,3 +233,38 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
+# Логи handoff/позик → stderr (docker logs dds-api)
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        "mainApp.ops": {
+            "handlers": ["console"],
+            "level": os.environ.get("OPS_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+        "mainApp.exchange_service": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}
+

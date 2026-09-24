@@ -1251,7 +1251,24 @@ def message_thread(request, partner_id: int):
 @login_required
 @require_POST
 def handoff_confirm_give_view(request, handoff_id):
-    ok, err = confirm_handoff_give(handoff_id, request.user)
+    from . import ops_log
+
+    cid = ops_log.new_cid()
+    try:
+        ok, err = confirm_handoff_give(handoff_id, request.user)
+    except Exception as exc:
+        ops_log.exception(
+            "web.handoff.give.500",
+            exc,
+            cid=cid,
+            handoff_id=handoff_id,
+            user_id=request.user.id,
+        )
+        messages.error(request, f"Серверна помилка при віддачі (cid={cid}).")
+        partner_id = request.POST.get("partner_id")
+        if partner_id:
+            return redirect("message_thread", partner_id=int(partner_id))
+        return redirect("exchange_requests")
     if ok:
         messages.success(request, "Віддачу підтверджено — очікуємо підтвердження отримання.")
     else:
@@ -1265,7 +1282,27 @@ def handoff_confirm_give_view(request, handoff_id):
 @login_required
 @require_POST
 def handoff_confirm_receive_view(request, handoff_id):
-    ok, err = confirm_handoff_receive(handoff_id, request.user)
+    from . import ops_log
+
+    cid = ops_log.new_cid()
+    try:
+        ok, err = confirm_handoff_receive(handoff_id, request.user)
+    except Exception as exc:
+        ops_log.exception(
+            "web.handoff.receive.500",
+            exc,
+            cid=cid,
+            handoff_id=handoff_id,
+            user_id=request.user.id,
+        )
+        messages.error(request, f"Серверна помилка при отриманні (cid={cid}).")
+        partner_id = request.POST.get("partner_id")
+        if partner_id:
+            try:
+                return redirect("message_thread", partner_id=int(partner_id))
+            except Exception:
+                pass
+        return redirect("exchange_requests")
     if ok:
         messages.success(
             request,
