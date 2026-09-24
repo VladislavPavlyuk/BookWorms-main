@@ -22,12 +22,23 @@ from sqlalchemy import (
 
 metadata = MetaData()
 
-# Django CustomUser → auth-style table name for custom user model
+# Django CustomUser — columns FastAPI auth/shelf need (subset of AbstractUser + extras)
 users = Table(
     "mainApp_customuser",
     metadata,
-    Column("id", BigInteger, primary_key=True),
-    Column("username", String(150), nullable=False),
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
+    Column("password", String(128), nullable=False),
+    Column("last_login", DateTime(timezone=True), nullable=True),
+    Column("is_superuser", Boolean, nullable=False, server_default="false"),
+    Column("username", String(150), nullable=False, unique=True),
+    Column("first_name", String(150), nullable=False, server_default=""),
+    Column("last_name", String(150), nullable=False, server_default=""),
+    Column("email", String(254), nullable=False, server_default=""),
+    Column("is_staff", Boolean, nullable=False, server_default="false"),
+    Column("is_active", Boolean, nullable=False, server_default="true"),
+    Column("date_joined", DateTime(timezone=True), nullable=False),
+    Column("biography", String(500), nullable=False, server_default=""),
+    Column("email_confirmed", Boolean, nullable=False, server_default="true"),
 )
 
 books = Table(

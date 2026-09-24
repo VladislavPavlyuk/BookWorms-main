@@ -86,12 +86,15 @@ services:
       POSTGRES_DB: bookworms_test
       POSTGRES_USER: bookworms
       POSTGRES_PASSWORD: bookworms
+      DJANGO_SECRET_KEY: test-secret-key-for-jwt
+      SKIP_EMAIL_ACTIVATION: "1"
+      JWT_ACCESS_DAYS: "1"
+      JWT_REFRESH_DAYS: "7"
     working_dir: /app
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
-        pip install -q pytest
         echo "wait postgres..."
         python - <<'PY'
         import socket, time, sys
@@ -105,5 +108,5 @@ services:
                 time.sleep(1)
         sys.exit("postgres not reachable")
         PY
-        exec pytest fastapi_app/tests/repositories -q
+        exec pytest fastapi_app/tests -q
     mem_limit: 128m

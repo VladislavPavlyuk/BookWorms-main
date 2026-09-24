@@ -52,14 +52,20 @@ alembic upgrade head
 | Table DDL for books/shelves/users | Django migrations |
 | `fastapi_schema_meta` | Alembic |
 
+## Auth (JWT)
+
+- `POST /auth/login` `{username, password}` → `{access, refresh, user}`
+- `POST /auth/refresh` `{refresh}` → new pair
+- `POST /auth/register` — only when `SKIP_EMAIL_ACTIVATION=1` (else use Django `/api/auth/register/`)
+- Shelf routes require `Authorization: Bearer <access>` (SimpleJWT-compatible, `DJANGO_SECRET_KEY`)
+- TLS at edge; nginx forwards `Authorization` on `/fastapi/`
+
 ## Tests (repo / live DB)
 
 ```bash
 docker compose -f docker-compose.test.yml up -d
-pip install -r requirements-fastapi.txt
-POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 POSTGRES_DB=bookworms_test \
-  POSTGRES_USER=bookworms POSTGRES_PASSWORD=bookworms \
-  pytest fastapi_app/tests/repositories -q
+# or on QNAP:
+sh deploy/qnap/run-repo-tests.sh fastapi
 ```
 
 Naming: `test_<method>_<when…>_<returns…>`; `actualResult` / `expectedResult`; one assert.

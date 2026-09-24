@@ -4,6 +4,8 @@ set -e
 cd "$(dirname "$0")/../.."
 
 TARGET="${1:-django}"
+# Bust Docker COPY layers — QNAP often rebuilds from stale cache.
+export CACHEBUST="${CACHEBUST:-$(date +%s)}"
 
 docker compose -f docker-compose.test.yml up -d postgres
 

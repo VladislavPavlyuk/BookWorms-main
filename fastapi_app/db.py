@@ -3,8 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 
 from .config import get_settings
 
@@ -25,5 +24,6 @@ def get_engine() -> Engine:
 
 
 def get_connection() -> Generator[Connection, None, None]:
-    with get_engine().connect() as conn:
+    """Request-scoped connection; commits on success, rolls back on error."""
+    with get_engine().begin() as conn:
         yield conn

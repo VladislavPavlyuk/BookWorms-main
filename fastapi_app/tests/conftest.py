@@ -1,9 +1,8 @@
 """
-Live-DB fixtures for FastAPI repository tests.
+Live-DB fixtures for FastAPI repository / auth tests.
 
 Uses Postgres from docker-compose.test.yml (or any POSTGRES_* / DATABASE_URL).
-Creates thin mainApp_* tables from Core metadata (not Django migrations) so
-repo queries can run without the Django app installed.
+Creates thin mainApp_* tables from Core metadata (not Django migrations).
 """
 from __future__ import annotations
 
@@ -16,8 +15,9 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine
 
 from fastapi_app import tables as t
+from fastapi_app.auth.passwords import hash_password
 
-# Tables the shelf repo needs (FK order for create / reverse for drop).
+# Tables the shelf/auth repos need (FK order for create / reverse for drop).
 _SHELF_TABLES = (t.users, t.books, t.book_copies, t.shelves)
 
 
@@ -41,7 +41,6 @@ def engine() -> Generator[Engine, None, None]:
     except Exception as exc:  # pragma: no cover
         pytest.skip(f"live DB unreachable ({_sqlalchemy_url()}): {exc}")
 
-    # Own the thin schema for this test DB (do not point at production).
     for table in reversed(_SHELF_TABLES):
         table.drop(eng, checkfirst=True)
     t.metadata.create_all(eng, tables=list(_SHELF_TABLES))
@@ -57,6 +56,31 @@ def conn(engine: Engine) -> Generator[Connection, None, None]:
         yield connection
 
 
+def _user_row(
+    *,
+    user_id: int,
+    username: str,
+    password: str = "x",
+    is_active: bool = True,
+) -> dict:
+    now = datetime.now(timezone.utc)
+    return {
+        "id": user_id,
+        "password": hash_password(password),
+        "last_login": None,
+        "is_superuser": False,
+        "username": username,
+        "first_name": "",
+        "last_name": "",
+        "email": f"{username}@example.com",
+        "is_staff": False,
+        "is_active": is_active,
+        "date_joined": now,
+        "biography": "",
+        "email_confirmed": is_active,
+    }
+
+
 @pytest.fixture
 def shelf_seed(conn: Connection) -> dict:
     """Owner shelf for one free copy. Returns ids used by tests."""
@@ -67,8 +91,8 @@ def shelf_seed(conn: Connection) -> dict:
     conn.execute(
         t.users.insert(),
         [
-            {"id": owner_id, "username": "owner"},
-            {"id": borrower_id, "username": "borrower"},
+            _user_row(user_id=owner_id, username="owner", password="owner-pass"),
+            _user_row(user_id=borrower_id, username="borrower", password="borrower-pass"),
         ],
     )
     conn.execute(
@@ -103,6 +127,8 @@ def shelf_seed(conn: Connection) -> dict:
             "added_at": now,
         },
     )
+    # Explicit PKs leave SERIAL/IDENTITY behind → register() UniqueViolation on id.
+    _sync_pk_sequences(conn)
     return {
         "owner_id": owner_id,
         "borrower_id": borrower_id,
@@ -110,4 +136,29 @@ def shelf_seed(conn: Connection) -> dict:
         "copy_id": copy_id,
         "owner_shelf_id": owner_shelf_id,
         "now": now,
+        "owner_password": "owner-pass",
     }
+
+
+def _sync_pk_sequences(conn: Connection) -> None:
+    """Best-effort: advance IDENTITY/SERIAL past MAX(id). create_user also uses MAX+1."""
+    for table_name in (
+        "mainApp_customuser",
+        "mainApp_book",
+        "mainApp_bookcopy",
+        "mainApp_shelf",
+    ):
+        conn.execute(
+            text(
+                f"""
+                SELECT CASE
+                  WHEN pg_get_serial_sequence('"{table_name}"', 'id') IS NULL THEN NULL
+                  ELSE setval(
+                    pg_get_serial_sequence('"{table_name}"', 'id'),
+                    (SELECT COALESCE(MAX(id), 1) FROM "{table_name}"),
+                    true
+                  )
+                END
+                """
+            )
+        )
