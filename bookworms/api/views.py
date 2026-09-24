@@ -28,7 +28,6 @@ from mainApp.exchange_service import (
     filter_physically_present,
     get_or_create_book_from_payload,
     group_shelves_by_book,
-    handoffs_involving,
     is_copy_lent_out,
     physical_presence_shelves_qs,
     reject_exchange_request,
@@ -37,11 +36,11 @@ from mainApp.exchange_service import (
     resolve_and_sync_book_by_isbn,
 )
 from mainApp import queue_service
-from mainApp.message_service import (
-    get_exchange_message_partners,
-    mark_messages_read_for_user,
-    mark_thread_read,
-    send_user_message,
+from mainApp.message_service import mark_messages_read_for_user
+from mainApp.messaging import (
+    MessagingForbidden,
+    MessagingNotFound,
+    get_messaging_service,
 )
 from mainApp.notification_service import (
     list_notifications,
@@ -916,92 +915,52 @@ def exchange_cancel_view(request, request_id):
 
 @api_view(["GET"])
 def message_partners(request):
-    partners = get_exchange_message_partners(request.user)
+    partners = get_messaging_service().list_partners(request.user)
     return Response(UserPublicSerializer(partners, many=True, context={"request": request}).data)
 
 
 @api_view(["GET", "POST"])
 def message_thread(request, partner_id):
-    partners = get_exchange_message_partners(request.user)
-    if partner_id not in set(partners.values_list("pk", flat=True)):
-        return _error("Немає спільного запиту з цим користувачем.", 403)
-    partner = User.objects.filter(pk=partner_id).first()
-    if not partner:
-        return _error("Користувача не знайдено.", 404)
+    chat = get_messaging_service()
     if request.method == "POST":
         ser = SendMessageSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        msg = send_user_message(request.user, partner, ser.validated_data["body"])
+        try:
+            msg = chat.send(request.user, partner_id, ser.validated_data["body"])
+        except MessagingForbidden as exc:
+            return _error(exc.message, 403)
+        except MessagingNotFound as exc:
+            return _error(exc.message, 404)
         if not msg:
             return _error("Порожній текст.")
-        return Response(MessageSerializer(msg, context={"request": request}).data, status=201)
-    recent = (
-        PrivateMessage.objects.filter(
-            Q(recipient=request.user, sender_id=partner_id)
-            | Q(sender=request.user, recipient_id=partner_id)
+        return Response(
+            MessageSerializer(msg, context={"request": request}).data, status=201
         )
-        .select_related("sender", "recipient")
-        .order_by("-created_at")[:250]
-    )
-    timeline = list(reversed(list(recent)))
-    mark_thread_read(request.user, partner_id)
 
-    # Pending actions with this partner (accept/reject in chat)
+    try:
+        thread = chat.open_thread(request.user, partner_id)
+    except MessagingForbidden as exc:
+        return _error(exc.message, 403)
+    except MessagingNotFound as exc:
+        return _error(exc.message, 404)
+
+    pending_returns = ensure_shelves_have_copies(list(thread.pending_returns))
     ctx = {"request": request}
-    pending_in = BookExchangeRequest.objects.filter(
-        status=BookExchangeRequest.Status.PENDING,
-        shelf_owner=request.user,
-        requester_id=partner_id,
-    ).select_related(
-        "requester",
-        "shelf_owner",
-        "target_shelf__book",
-        "target_shelf__user",
-        "target_shelf__copy",
-        "offer_shelf__book",
-        "offer_shelf__user",
-        "target_shelf__borrowed_from",
-        "offer_shelf__borrowed_from",
-    )
-    pending_out = BookExchangeRequest.objects.filter(
-        status=BookExchangeRequest.Status.PENDING,
-        requester=request.user,
-        shelf_owner_id=partner_id,
-    ).select_related(
-        "requester",
-        "shelf_owner",
-        "target_shelf__book",
-        "target_shelf__user",
-        "target_shelf__copy",
-        "offer_shelf__book",
-        "offer_shelf__user",
-        "target_shelf__borrowed_from",
-        "offer_shelf__borrowed_from",
-    )
-    # Повернення від цього партнера, що чекають підтвердження власника
-    pending_returns = list(
-        Shelf.objects.filter(
-            borrowed_from=request.user,
-            user_id=partner_id,
-            return_pending=True,
-        )
-        .select_related("user", "book", "borrowed_from", "copy")
-        .order_by("-added_at")
-    )
-    pending_returns = ensure_shelves_have_copies(pending_returns)
     return Response(
         {
-            "partner": UserPublicSerializer(partner, context=ctx).data,
-            "messages": MessageSerializer(timeline, many=True, context=ctx).data,
-            "pending_in": ExchangeRequestSerializer(pending_in, many=True, context=ctx).data,
-            "pending_out": ExchangeRequestSerializer(pending_out, many=True, context=ctx).data,
+            "partner": UserPublicSerializer(thread.partner, context=ctx).data,
+            "messages": MessageSerializer(thread.timeline, many=True, context=ctx).data,
+            "pending_in": ExchangeRequestSerializer(
+                thread.pending_in, many=True, context=ctx
+            ).data,
+            "pending_out": ExchangeRequestSerializer(
+                thread.pending_out, many=True, context=ctx
+            ).data,
             "pending_returns": ShelfSerializer(
                 pending_returns, many=True, context=ctx
             ).data,
             "handoffs": LoanHandoffSerializer(
-                handoffs_involving(request.user.id, partner_id),
-                many=True,
-                context=ctx,
+                thread.handoffs, many=True, context=ctx
             ).data,
         }
     )

@@ -37,10 +37,7 @@ from django.utils import timezone
 from django.conf import settings
 # Бізнес-правила обміну/позик винесені в exchange_service - тут лише HTTP і шаблони.
 from .message_service import (
-    get_exchange_message_partners,
     mark_messages_read_for_user,
-    mark_thread_read,
-    send_user_message,
 )
 from .notification_service import list_notifications, notification_payload, unread_count
 from .error_handling import web_exchange
@@ -61,7 +58,6 @@ from .exchange_service import (
     filter_physically_present,
     get_or_create_book_from_payload,
     group_shelves_by_book,
-    handoffs_involving,
     is_copy_lent_out,
     physical_presence_shelves_qs,
     reject_exchange_request,
@@ -1198,24 +1194,23 @@ def message_thread(request, partner_id: int):
     Окремий чат лише з одним користувачем (спільний запит на позику/обмін).
     Загальної скриньки немає - посилання тільки з обмінів / позики.
     """
-    partners = get_exchange_message_partners(request.user)
-    if not partners.exists():
-        messages.info(
-            request,
-            "Чат доступний лише після запиту на позику або обмін книги з іншим користувачем.",
-        )
-        return redirect("exchange_requests")
-    partner_ids = frozenset(partners.values_list("pk", flat=True))
-    if partner_id not in partner_ids:
-        messages.error(request, "Немає спільного запиту з цим користувачем.")
-        return redirect("exchange_requests")
+    from .messaging import (
+        MessagingForbidden,
+        MessagingNoPartners,
+        MessagingNotFound,
+        get_messaging_service,
+    )
 
-    partner = get_user_model().objects.get(pk=partner_id)
+    chat = get_messaging_service()
 
     if request.method == "POST" and "send_message" in request.POST:
         form = SendExchangePartnerMessageForm(request.POST)
         if form.is_valid():
-            msg = send_user_message(request.user, partner, form.cleaned_data["body"])
+            try:
+                msg = chat.send(request.user, partner_id, form.cleaned_data["body"])
+            except (MessagingForbidden, MessagingNotFound) as exc:
+                messages.error(request, exc.message)
+                return redirect("exchange_requests")
             if msg:
                 messages.success(request, "Повідомлення надіслано.")
             else:
@@ -1224,38 +1219,22 @@ def message_thread(request, partner_id: int):
     else:
         form = SendExchangePartnerMessageForm()
 
-    recent = (
-        PrivateMessage.objects.filter(
-            Q(recipient=request.user, sender_id=partner_id)
-            | Q(sender=request.user, recipient_id=partner_id)
-        )
-        .select_related("sender", "recipient", "exchange_request")
-        .order_by("-created_at")[:250]
-    )
-    timeline = list(reversed(list(recent)))
-    mark_thread_read(request.user, partner_id)
-    handoffs = handoffs_involving(request.user.id, partner_id)
-    pending_returns = list(
-        Shelf.objects.filter(
-            borrowed_from=request.user,
-            user_id=partner_id,
-            return_pending=True,
-        )
-        .select_related("user", "book", "copy")
-        .order_by("-added_at")
-    )
+    try:
+        ctx = chat.open_thread(request.user, partner_id)
+    except MessagingNoPartners as exc:
+        messages.info(request, exc.message)
+        return redirect("exchange_requests")
+    except MessagingForbidden as exc:
+        messages.error(request, exc.message)
+        return redirect("exchange_requests")
+    except MessagingNotFound as exc:
+        messages.error(request, exc.message)
+        return redirect("exchange_requests")
 
     return render(
         request,
         "mainApp/messages.html",
-        {
-            "form": form,
-            "timeline": timeline,
-            "partners": partners,
-            "partner": partner,
-            "handoffs": handoffs,
-            "pending_returns": pending_returns,
-        },
+        {"form": form, **ctx.as_web_dict()},
     )
 
 
