@@ -214,3 +214,36 @@ class ShelfQueryService(IShelfQueryService):
         from . import shelves as m
 
         return m.group_shelves_by_book(shelves)
+
+    def load_browse_catalog(self, viewer: CustomUser, *, ensure_copies: bool = False):
+        from . import shelves as m
+
+        return m.load_browse_catalog(viewer, ensure_copies=ensure_copies)
+
+    def for_user_physical_shelf(
+        self, owner: CustomUser, *, ensure_copies: bool = False
+    ) -> list[Shelf]:
+        from . import shelves as m
+
+        return m.for_user_physical_shelf(owner, ensure_copies=ensure_copies)
+
+    def for_book_physical_holders(
+        self, book, *, ensure_copies: bool = False
+    ) -> list[Shelf]:
+        from . import shelves as m
+
+        return m.for_book_physical_holders(book, ensure_copies=ensure_copies)
+
+    def for_copy_physical_holders(
+        self, copy, *, ensure_copies: bool = False
+    ) -> list[Shelf]:
+        from . import shelves as m
+
+        return m.for_copy_physical_holders(copy, ensure_copies=ensure_copies)
+
+    def get_available_owned_offer(
+        self, user: CustomUser, offer_shelf_id: int
+    ) -> Shelf | None:
+        from . import shelves as m
+
+        return m.get_available_owned_offer(user, offer_shelf_id)

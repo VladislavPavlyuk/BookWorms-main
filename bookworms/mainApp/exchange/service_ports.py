@@ -142,3 +142,26 @@ class IShelfQueryService(ABC):
 
     @abstractmethod
     def group_by_book(self, shelves) -> list[dict]: ...
+
+    @abstractmethod
+    def load_browse_catalog(self, viewer: CustomUser, *, ensure_copies: bool = False): ...
+
+    @abstractmethod
+    def for_user_physical_shelf(
+        self, owner: CustomUser, *, ensure_copies: bool = False
+    ) -> list[Shelf]: ...
+
+    @abstractmethod
+    def for_book_physical_holders(
+        self, book, *, ensure_copies: bool = False
+    ) -> list[Shelf]: ...
+
+    @abstractmethod
+    def for_copy_physical_holders(
+        self, copy, *, ensure_copies: bool = False
+    ) -> list[Shelf]: ...
+
+    @abstractmethod
+    def get_available_owned_offer(
+        self, user: CustomUser, offer_shelf_id: int
+    ) -> Shelf | None: ...

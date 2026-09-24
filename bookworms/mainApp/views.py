@@ -45,21 +45,14 @@ from .exceptions import ExchangeError
 from .exchange_service import (
     accept_exchange_request,
     add_owned_copy,
-    attach_loan_info,
-    attach_request_targets,
-    available_owned_shelves_qs,
-    browsable_owned_shelves_qs,
     cancel_exchange_request,
     cancel_loan_handoff,
     confirm_borrow_return,
     confirm_handoff_give,
     confirm_handoff_receive,
     create_many_exchange_requests,
-    filter_physically_present,
     get_or_create_book_from_payload,
-    group_shelves_by_book,
     is_copy_lent_out,
-    physical_presence_shelves_qs,
     reject_exchange_request,
     remove_owned_shelf,
     request_borrow_return,
@@ -774,25 +767,15 @@ def browse_shelves(request):
     Каталог: примірники там, де вони фізично зараз (вільні у власника або в позичальника).
     Запит на позичений примірник → передача з дозволу власника.
     """
-    others_qs = attach_request_targets(
-        attach_loan_info(
-            list(
-                physical_presence_shelves_qs(exclude_user_id=request.user.id)
-                .select_related("user", "book", "copy", "borrowed_from")
-                .order_by("-added_at")
-            )
-        )
-    )
-    others_grouped = group_shelves_by_book(others_qs)
-    my_owned_shelves = available_owned_shelves_qs().filter(user=request.user).select_related(
-        "book"
-    )
+    from .exchange import get_shelf_query_service
+
+    catalog = get_shelf_query_service().load_browse_catalog(request.user)
     return render(
         request,
         "mainApp/browse_shelves.html",
         {
-            "others_grouped": others_grouped,
-            "my_owned_shelves": my_owned_shelves,
+            "others_grouped": catalog.others_grouped,
+            "my_owned_shelves": catalog.my_owned,
         },
     )
 
@@ -800,19 +783,13 @@ def browse_shelves(request):
 @login_required
 def user_public_shelf(request, user_id):
     """Полиця користувача = лише те, що фізично у нього (власне вільне + позичене ним)."""
+    from .exchange import get_shelf_query_service
+
     User = get_user_model()
     shelf_owner = get_object_or_404(User, pk=user_id)
     if request.user.pk == shelf_owner.pk:
         return redirect("profile_app:profile")
-    shelves = attach_request_targets(
-        filter_physically_present(
-            list(
-                shelf_owner.shelf_entries.select_related("book", "borrowed_from", "copy").order_by(
-                    "-added_at"
-                )
-            )
-        )
-    )
+    shelves = get_shelf_query_service().for_user_physical_shelf(shelf_owner)
     return render(
         request,
         "mainApp/user_public_shelf.html",
@@ -906,6 +883,8 @@ def create_exchange(request):
     POST з browse_shelves: target_shelf_ids[] (чекбокси) + offer_shelf_id_<pk> для кожного рядка.
     Підтримує один або кілька запитів за одну відправку.
     """
+    from .exchange import get_shelf_query_service
+
     if request.method != "POST":
         return redirect("browse_shelves")
 
@@ -948,10 +927,8 @@ def create_exchange(request):
                 t = target_shelf.book.title
                 preflight.append(f'"{t[:45]}": некоректна книга для обміну.')
                 continue
-            offer_shelf = (
-                available_owned_shelves_qs()
-                .filter(pk=oid, user=request.user)
-                .first()
+            offer_shelf = get_shelf_query_service().get_available_owned_offer(
+                request.user, oid
             )
             if not offer_shelf:
                 t = target_shelf.book.title

@@ -15,9 +15,6 @@ import logging
 from mainApp.exchange_service import (
     accept_exchange_request,
     add_owned_copy,
-    attach_loan_info,
-    attach_request_targets,
-    available_owned_shelves_qs,
     cancel_exchange_request,
     cancel_loan_handoff,
     confirm_borrow_return,
@@ -25,11 +22,8 @@ from mainApp.exchange_service import (
     confirm_handoff_receive,
     create_exchange_request,
     ensure_shelves_have_copies,
-    filter_physically_present,
     get_or_create_book_from_payload,
-    group_shelves_by_book,
     is_copy_lent_out,
-    physical_presence_shelves_qs,
     reject_exchange_request,
     remove_owned_shelf,
     request_borrow_return,
@@ -574,52 +568,32 @@ def shelf_confirm_return(request, shelf_id):
 
 @api_view(["GET"])
 def browse_shelves(request):
-    others_qs = attach_request_targets(
-        attach_loan_info(
-            ensure_shelves_have_copies(
-                list(
-                    physical_presence_shelves_qs(exclude_user_id=request.user.id)
-                    .select_related("user", "book", "borrowed_from", "copy")
-                    .order_by("-added_at")
-                )
-            )
-        )
+    from mainApp.exchange import get_shelf_query_service
+
+    catalog = get_shelf_query_service().load_browse_catalog(
+        request.user, ensure_copies=True
     )
-    mine = ensure_shelves_have_copies(
-        list(
-            available_owned_shelves_qs()
-            .filter(user=request.user)
-            .select_related("book", "user", "borrowed_from", "copy")
-        )
-    )
-    grouped = group_shelves_by_book(others_qs)
     ctx = {"request": request}
     return Response(
         {
-            "others": ShelfSerializer(others_qs, many=True, context=ctx).data,
+            "others": ShelfSerializer(catalog.others, many=True, context=ctx).data,
             "others_grouped": BookBrowseGroupSerializer(
-                grouped, many=True, context=ctx
+                catalog.others_grouped, many=True, context=ctx
             ).data,
-            "my_owned": ShelfSerializer(mine, many=True, context=ctx).data,
+            "my_owned": ShelfSerializer(catalog.my_owned, many=True, context=ctx).data,
         }
     )
 
 
 @api_view(["GET"])
 def user_shelf(request, user_id):
+    from mainApp.exchange import get_shelf_query_service
+
     owner = User.objects.filter(pk=user_id).first()
     if not owner:
         return _error("Користувача не знайдено.", 404)
-    shelves = attach_request_targets(
-        filter_physically_present(
-            ensure_shelves_have_copies(
-                list(
-                    owner.shelf_entries.select_related(
-                        "book", "borrowed_from", "user", "copy"
-                    ).order_by("-added_at")
-                )
-            )
-        )
+    shelves = get_shelf_query_service().for_user_physical_shelf(
+        owner, ensure_copies=True
     )
     ctx = {"request": request}
     return Response(
@@ -633,19 +607,13 @@ def user_shelf(request, user_id):
 
 @api_view(["GET"])
 def book_detail(request, book_id):
+    from mainApp.exchange import get_shelf_query_service
+
     book = Book.objects.filter(pk=book_id).first()
     if not book:
         return _error("Книгу не знайдено.", 404)
-    holders = attach_request_targets(
-        filter_physically_present(
-            ensure_shelves_have_copies(
-                list(
-                    Shelf.objects.filter(book=book)
-                    .select_related("user", "borrowed_from", "book", "copy")
-                    .order_by("added_at")
-                )
-            )
-        )
+    holders = get_shelf_query_service().for_book_physical_holders(
+        book, ensure_copies=True
     )
     owners = []
     seen = set()
@@ -676,6 +644,8 @@ def book_detail(request, book_id):
 @api_view(["GET"])
 def copy_history(request, copy_id):
     """Історія подій одного примірника + поточні полиці + черга."""
+    from mainApp.exchange import get_shelf_query_service
+
     copy = (
         BookCopy.objects.filter(pk=copy_id)
         .select_related("book", "owner")
@@ -683,16 +653,8 @@ def copy_history(request, copy_id):
     )
     if not copy:
         return _error("Примірник не знайдено.", 404)
-    holders = attach_request_targets(
-        filter_physically_present(
-            ensure_shelves_have_copies(
-                list(
-                    Shelf.objects.filter(copy=copy)
-                    .select_related("user", "borrowed_from", "book", "copy")
-                    .order_by("added_at")
-                )
-            )
-        )
+    holders = get_shelf_query_service().for_copy_physical_holders(
+        copy, ensure_copies=True
     )
     events = (
         CopyEvent.objects.filter(copy=copy)
@@ -868,10 +830,10 @@ def exchange_create(request):
         if is_copy_lent_out(target.copy_id) or target.borrowed_from_id:
             oid = None
         if oid:
-            offer = (
-                available_owned_shelves_qs()
-                .filter(pk=oid, user=request.user)
-                .first()
+            from mainApp.exchange import get_shelf_query_service
+
+            offer = get_shelf_query_service().get_available_owned_offer(
+                request.user, oid
             )
             if not offer:
                 errors.append(

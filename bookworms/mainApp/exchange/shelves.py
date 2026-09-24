@@ -1,10 +1,14 @@
 """Shelf query objects for browse / physical presence (SRP)."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from django.db.models import Exists, OuterRef, QuerySet
 from django.utils import timezone
 
-from ..models import Shelf
+from ..models import Book, BookCopy, CustomUser, Shelf
+
+_SHELF_RELATED = ("user", "book", "copy", "borrowed_from")
 
 
 def available_owned_shelves_qs(exclude_user_id: int | None = None) -> QuerySet[Shelf]:
@@ -133,3 +137,104 @@ def group_shelves_by_book(shelves) -> list[dict]:
             }
         )
     return out
+
+
+def _materialize(qs: QuerySet[Shelf], *, ensure_copies: bool) -> list[Shelf]:
+    rows = list(qs)
+    if ensure_copies:
+        from .copies import ensure_shelves_have_copies
+
+        rows = ensure_shelves_have_copies(rows)
+    return rows
+
+
+def for_browse_as_viewer(
+    viewer: CustomUser, *, ensure_copies: bool = False
+) -> list[Shelf]:
+    """Physical-presence catalog excluding viewer's own rows, with request targets."""
+    qs = (
+        physical_presence_shelves_qs(exclude_user_id=viewer.id)
+        .select_related(*_SHELF_RELATED)
+        .order_by("-added_at")
+    )
+    return attach_request_targets(
+        attach_loan_info(_materialize(qs, ensure_copies=ensure_copies))
+    )
+
+
+def my_available_owned(
+    user: CustomUser, *, ensure_copies: bool = False
+) -> list[Shelf]:
+    """Viewer's free owned copies (offers / my_owned panel)."""
+    qs = (
+        available_owned_shelves_qs()
+        .filter(user=user)
+        .select_related(*_SHELF_RELATED)
+    )
+    return _materialize(qs, ensure_copies=ensure_copies)
+
+
+def get_available_owned_offer(
+    user: CustomUser, offer_shelf_id: int
+) -> Shelf | None:
+    """Single free owned shelf usable as exchange offer."""
+    return (
+        available_owned_shelves_qs()
+        .filter(pk=offer_shelf_id, user=user)
+        .select_related("book", "user", "copy")
+        .first()
+    )
+
+
+def for_user_physical_shelf(
+    owner: CustomUser, *, ensure_copies: bool = False
+) -> list[Shelf]:
+    """Rows physically at ``owner`` (free owned + borrowed-in)."""
+    qs = owner.shelf_entries.select_related(*_SHELF_RELATED).order_by("-added_at")
+    return attach_request_targets(
+        filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
+    )
+
+
+def for_book_physical_holders(
+    book: Book, *, ensure_copies: bool = False
+) -> list[Shelf]:
+    qs = (
+        Shelf.objects.filter(book=book)
+        .select_related(*_SHELF_RELATED)
+        .order_by("added_at")
+    )
+    return attach_request_targets(
+        filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
+    )
+
+
+def for_copy_physical_holders(
+    copy: BookCopy, *, ensure_copies: bool = False
+) -> list[Shelf]:
+    qs = (
+        Shelf.objects.filter(copy=copy)
+        .select_related(*_SHELF_RELATED)
+        .order_by("added_at")
+    )
+    return attach_request_targets(
+        filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
+    )
+
+
+@dataclass
+class BrowseCatalog:
+    others: list[Shelf]
+    others_grouped: list[dict]
+    my_owned: list[Shelf]
+
+
+def load_browse_catalog(
+    viewer: CustomUser, *, ensure_copies: bool = False
+) -> BrowseCatalog:
+    others = for_browse_as_viewer(viewer, ensure_copies=ensure_copies)
+    return BrowseCatalog(
+        others=others,
+        others_grouped=group_shelves_by_book(others),
+        my_owned=my_available_owned(viewer, ensure_copies=ensure_copies),
+    )
