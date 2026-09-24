@@ -94,6 +94,38 @@ services:
       retries: 10
       start_period: 90s
 
+  fastapi:
+    build:
+      context: .
+      dockerfile: deploy/qnap/fastapi/Dockerfile
+      args:
+        CACHEBUST: ${CACHEBUST:-1}
+    container_name: dds-fastapi
+    restart: unless-stopped
+    network_mode: bridge
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    links:
+      - postgres:postgres
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-bookworms}
+      POSTGRES_USER: ${POSTGRES_USER:-bookworms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      RUN_ALEMBIC: ${RUN_ALEMBIC:-1}
+    ports:
+      - "18089:8001"
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 40s
+
   nginx:
     image: nginx:1.27-alpine
     container_name: dds-nginx
@@ -101,8 +133,10 @@ services:
     network_mode: bridge
     depends_on:
       - api
+      - fastapi
     links:
       - api:api
+      - fastapi:fastapi
     ports:
       - "18088:80"
     volumes:

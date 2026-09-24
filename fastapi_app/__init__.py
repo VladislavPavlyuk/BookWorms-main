@@ -1,0 +1,1 @@
+"""BookWorms FastAPI strangler package."""
