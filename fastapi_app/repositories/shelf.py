@@ -4,7 +4,7 @@ from __future__ import annotations
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.engine import Connection
 
-from . import tables as t
+from .. import tables as t
 
 
 def _active_loan_exists(copy_col):

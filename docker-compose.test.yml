@@ -1,23 +1,109 @@
-# Postgres test DB (optional). App uses POSTGRES_* from env when set.
-# Example:
-#   docker compose -f docker-compose.test.yml up -d
-#   POSTGRES_HOST=127.0.0.1 POSTGRES_DB=bookworms_test \
-#     POSTGRES_USER=bookworms POSTGRES_PASSWORD=bookworms \
-#     python manage.py test mainApp.tests.repositories
+# QNAP-safe test stack: docker0 + links (NO user-defined bridge).
+# Do NOT use host gateway 172.17.0.1:5433 from dds-api — broken on TS-233/QNET.
 #
-# Without POSTGRES_HOST, Django TestCase uses SQLite (still a real DB file).
+# Django repo tests:
+#   docker compose -f docker-compose.test.yml up -d postgres
+#   docker compose -f docker-compose.test.yml run --rm django-test
+#
+# FastAPI Core shelf repo tests:
+#   docker compose -f docker-compose.test.yml up -d postgres
+#   docker compose -f docker-compose.test.yml run --rm fastapi-test
+#
+# Or: sh deploy/qnap/run-repo-tests.sh
+
+name: bookworms-test
 
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: dds-postgres-test
+    restart: "no"
+    network_mode: bridge
     environment:
       POSTGRES_DB: bookworms_test
       POSTGRES_USER: bookworms
       POSTGRES_PASSWORD: bookworms
-    ports:
-      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bookworms -d bookworms_test"]
       interval: 3s
       timeout: 3s
       retries: 20
+    mem_limit: 128m
+
+  django-test:
+    build:
+      context: .
+      dockerfile: deploy/qnap/api/Dockerfile
+      args:
+        CACHEBUST: ${CACHEBUST:-1}
+    container_name: dds-django-test
+    network_mode: bridge
+    links:
+      - postgres:postgres
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: bookworms_test
+      POSTGRES_USER: bookworms
+      POSTGRES_PASSWORD: bookworms
+      DJANGO_SECRET_KEY: test-not-for-prod
+      DEBUG: "1"
+      SKIP_EMAIL_ACTIVATION: "1"
+    working_dir: /app
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "wait postgres..."
+        python - <<'PY'
+        import socket, time, sys
+        for _ in range(60):
+            try:
+                s = socket.create_connection(("postgres", 5432), 2)
+                s.close()
+                print("postgres ok", flush=True)
+                sys.exit(0)
+            except OSError:
+                time.sleep(1)
+        sys.exit("postgres not reachable")
+        PY
+        exec python manage.py test mainApp.tests.repositories --verbosity=2
+    mem_limit: 384m
+
+  fastapi-test:
+    build:
+      context: .
+      dockerfile: deploy/qnap/fastapi/Dockerfile
+      args:
+        CACHEBUST: ${CACHEBUST:-1}
+    container_name: dds-fastapi-test
+    network_mode: bridge
+    links:
+      - postgres:postgres
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: bookworms_test
+      POSTGRES_USER: bookworms
+      POSTGRES_PASSWORD: bookworms
+    working_dir: /app
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        pip install -q pytest
+        echo "wait postgres..."
+        python - <<'PY'
+        import socket, time, sys
+        for _ in range(60):
+            try:
+                s = socket.create_connection(("postgres", 5432), 2)
+                s.close()
+                print("postgres ok", flush=True)
+                sys.exit(0)
+            except OSError:
+                time.sleep(1)
+        sys.exit("postgres not reachable")
+        PY
+        exec pytest fastapi_app/tests/repositories -q
+    mem_limit: 128m

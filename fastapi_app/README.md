@@ -51,3 +51,16 @@ alembic upgrade head
 | Read slice: shelf browse queries | FastAPI (this package) |
 | Table DDL for books/shelves/users | Django migrations |
 | `fastapi_schema_meta` | Alembic |
+
+## Tests (repo / live DB)
+
+```bash
+docker compose -f docker-compose.test.yml up -d
+pip install -r requirements-fastapi.txt
+POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 POSTGRES_DB=bookworms_test \
+  POSTGRES_USER=bookworms POSTGRES_PASSWORD=bookworms \
+  pytest fastapi_app/tests/repositories -q
+```
+
+Naming: `test_<method>_<when…>_<returns…>`; `actualResult` / `expectedResult`; one assert.
+Higher layers mock the repo — do not hit DB there.
