@@ -9,7 +9,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi, ShelfApi } from "../../src/api";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
-import { colors, fs, s } from "../../src/theme";
+import { colors, fs, s, btnRadius } from "../../src/theme";
 import type { Shelf } from "../../src/types";
 
 type Mode = "event" | "feedback";
@@ -148,6 +148,7 @@ const styles = StyleSheet.create({
     padding: s(14),
     marginTop: s(16),
     minHeight: s(54),
+    borderRadius: btnRadius,
   },
   btnDisabled: { opacity: 0.45 },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(16) },

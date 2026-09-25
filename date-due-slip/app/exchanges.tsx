@@ -12,7 +12,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, ExchangeApi, MsgApi } from "../src/api";
 import { useAuth } from "../src/auth";
 import { exchangeChatPartnerId } from "../src/chat";
-import { colors, fs, s } from "../src/theme";
+import { colors, fs, s, btnRadius } from "../src/theme";
 import { UserNameLink } from "../src/UserNameLink";
 import type { Exchange, User } from "../src/types";
 
@@ -336,6 +336,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: s(14),
     paddingVertical: s(10),
     minHeight: s(44),
+    borderRadius: btnRadius,
   },
   btnGhost: {
     borderWidth: 1,
@@ -344,6 +345,7 @@ const styles = StyleSheet.create({
     paddingVertical: s(10),
     backgroundColor: colors.paper,
     minHeight: s(44),
+    borderRadius: btnRadius,
   },
   chat: { color: colors.ink, fontWeight: "800", fontSize: fs(14) },
   ok: { color: "#fff", fontWeight: "800", fontSize: fs(14) },

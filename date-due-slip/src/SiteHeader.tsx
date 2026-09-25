@@ -1,22 +1,13 @@
 import { memo, useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import {
-  Image,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
-import { GestureHandlerRootView, ScrollView } from "react-native-gesture-handler";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { FeedSearch } from "./api";
 import { HeaderActions } from "./BurgerMenu";
 import { EMPTY_FEED_SEARCH, useFeedSearch } from "./feedSearch";
-import { CloseGlyph, FilterGlyph } from "./HeaderGlyphs";
+import { FilterGlyph } from "./HeaderGlyphs";
 import { CyrillicTextInput } from "./CyrillicTextInput";
-import { colors, fs, s } from "./theme";
+import { colors, fs, s, btnRadius } from "./theme";
 
 const CHROME_IDLE_MS = 2000;
 
@@ -46,7 +37,6 @@ const SearchField = memo(function SearchField({
   useEffect(() => {
     if (initialQ === lastExternal.current) return;
     if (focusedRef.current) {
-      // Autosearch updated context to the same typed string — absorb, do not remount.
       lastExternal.current = initialQ;
       return;
     }
@@ -80,10 +70,12 @@ const SearchField = memo(function SearchField({
 /** Filter + bell + burger — own state so search IME is not interrupted. */
 const HeaderTrailing = memo(function HeaderTrailing({
   apiRef,
-  onOpenFilter,
+  onToggleFilter,
+  filterOpen,
 }: {
   apiRef: MutableRefObject<ChromeApi | null>;
-  onOpenFilter: () => void;
+  onToggleFilter: () => void;
+  filterOpen: boolean;
 }) {
   const [hidden, setHidden] = useState(false);
   const idleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,6 +83,7 @@ const HeaderTrailing = memo(function HeaderTrailing({
   useEffect(() => {
     apiRef.current = {
       onTyping: () => {
+        if (filterOpen) return; // keep filter toggle visible while panel open
         setHidden(true);
         if (idleRef.current) clearTimeout(idleRef.current);
         idleRef.current = setTimeout(() => {
@@ -108,28 +101,39 @@ const HeaderTrailing = memo(function HeaderTrailing({
       if (idleRef.current) clearTimeout(idleRef.current);
       apiRef.current = null;
     };
-  }, [apiRef]);
+  }, [apiRef, filterOpen]);
 
-  if (hidden) return null;
+  if (hidden && !filterOpen) return null;
 
   return (
     <>
-      <Pressable style={styles.advBtn} onPress={onOpenFilter} accessibilityLabel="Фільтр">
-        <FilterGlyph color={colors.ink} size={s(18)} />
+      <Pressable
+        style={[styles.advBtn, filterOpen && styles.advBtnOn]}
+        onPress={onToggleFilter}
+        accessibilityRole="button"
+        accessibilityLabel="Advanced Search"
+        accessibilityState={{ expanded: filterOpen }}
+      >
+        <FilterGlyph color={filterOpen ? colors.white : colors.ink} size={s(18)} />
       </Pressable>
       <HeaderActions />
     </>
   );
 });
 
+function isHomeFeed(segments: string[]) {
+  if (segments[0] !== "(tabs)") return false;
+  return segments.length === 1 || segments[1] === "index";
+}
+
 /**
  * Спільний хром: [‹] logo | search | ⧩ filter | 🔔 | ☰
+ * Advanced Search stays open until toggle again / Reset / leave home.
  */
 export function SiteHeader() {
   const router = useRouter();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
-  const { height: winH } = useWindowDimensions();
   const { search, setSearch, clearSearch } = useFeedSearch();
 
   const typedQ = useRef(search.q || "");
@@ -150,12 +154,18 @@ export function SiteHeader() {
 
   const inTabs = segments[0] === "(tabs)";
   const showBack = !inTabs;
+  const onHome = isHomeFeed(segments as string[]);
 
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
+
+  // Leave home (or any non-feed route) → close advanced panel
+  useEffect(() => {
+    if (!onHome) setAdvOpen(false);
+  }, [onHome]);
 
   // sync from context only when not typing (Скинути etc.)
   useEffect(() => {
@@ -176,7 +186,6 @@ export function SiteHeader() {
 
   const applySearch = useCallback(
     (next: FeedSearch) => {
-      // Keep typingRef true while the user is still in the field — avoids remount/IME kill.
       setSearch(next);
       if (!inTabs) router.push("/(tabs)" as never);
     },
@@ -223,8 +232,8 @@ export function SiteHeader() {
     });
   }, [applySearch]);
 
+  /** Apply filters — keep panel open (close only via toggle / Reset / leave). */
   const applyAdvanced = () => {
-    setAdvOpen(false);
     typingRef.current = false;
     runSearch();
   };
@@ -243,7 +252,12 @@ export function SiteHeader() {
     setAdv(EMPTY_FEED_SEARCH);
     advDraft.current = EMPTY_FEED_SEARCH;
     clearSearch();
+    setAdvOpen(false);
   };
+
+  const toggleAdvanced = useCallback(() => {
+    setAdvOpen((v) => !v);
+  }, []);
 
   return (
     <View style={[styles.wrap, { paddingTop: insets.top }]}>
@@ -278,79 +292,49 @@ export function SiteHeader() {
 
         <SearchField initialQ={displayQ} onQueryChange={onQueryChange} onSubmit={runSearch} />
 
-        <HeaderTrailing apiRef={chromeApi} onOpenFilter={() => setAdvOpen(true)} />
+        <HeaderTrailing
+          apiRef={chromeApi}
+          onToggleFilter={toggleAdvanced}
+          filterOpen={advOpen}
+        />
       </View>
 
-      <Modal
-        visible={advOpen}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={() => setAdvOpen(false)}
-        statusBarTranslucent
-      >
-        <GestureHandlerRootView
-          style={[
-            styles.modalRoot,
-            {
-              height: winH,
-              paddingTop: insets.top + 12,
-              paddingBottom: Math.max(insets.bottom, 12),
-            },
-          ]}
-        >
-          <View style={styles.modalHead}>
-            <Text style={styles.modalTitle}>Фільтр · книги</Text>
-            <Pressable onPress={() => setAdvOpen(false)} hitSlop={8} style={styles.modalClose}>
-              <CloseGlyph color={colors.ink} size={18} />
+      {advOpen ? (
+        <View style={styles.advPanel}>
+          <Text style={styles.advTitle}>Advanced Search</Text>
+          {(
+            [
+              ["isbn", "ISBN"],
+              ["authors", "Автори"],
+              ["publisher", "Видавець"],
+              ["publish_date", "Дата видання"],
+              ["age_min", "Вік від (0–18)"],
+              ["age_max", "Вік до (0–18)"],
+            ] as const
+          ).map(([key, label]) => (
+            <AdvField
+              key={key}
+              label={label}
+              initial={adv[key] || ""}
+              keyboardType={key.startsWith("age_") ? "number-pad" : "default"}
+              onChange={(t) => setAdvField(key, t)}
+            />
+          ))}
+          <View style={styles.advActions}>
+            <Pressable style={styles.searchBtnWide} onPress={applyAdvanced}>
+              <Text style={styles.searchBtnText}>Застосувати</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                resetAll();
+                if (!inTabs) router.push("/(tabs)" as never);
+              }}
+            >
+              <Text style={styles.clear}>Скинути</Text>
             </Pressable>
           </View>
-          <ScrollView
-            style={styles.modalScroll}
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            showsVerticalScrollIndicator
-            bounces
-            nestedScrollEnabled
-          >
-            {(
-              [
-                ["isbn", "ISBN"],
-                ["authors", "Автори"],
-                ["publisher", "Видавець"],
-                ["publish_date", "Дата видання"],
-                ["age_min", "Вік від (0–18)"],
-                ["age_max", "Вік до (0–18)"],
-              ] as const
-            ).map(([key, label]) => (
-              <AdvField
-                key={`${key}-${advOpen}`}
-                label={label}
-                initial={adv[key] || ""}
-                keyboardType={key.startsWith("age_") ? "number-pad" : "default"}
-                onChange={(t) => setAdvField(key, t)}
-              />
-            ))}
-            <View style={styles.modalActions}>
-              <Pressable style={styles.searchBtnWide} onPress={applyAdvanced}>
-                <Text style={styles.searchBtnText}>Застосувати</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  resetAll();
-                  setAdvOpen(false);
-                  if (!inTabs) router.push("/(tabs)" as never);
-                }}
-              >
-                <Text style={styles.clear}>Скинути</Text>
-              </Pressable>
-              <Pressable onPress={() => setAdvOpen(false)}>
-                <Text style={styles.clear}>Закрити</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </GestureHandlerRootView>
-      </Modal>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -371,7 +355,7 @@ const AdvField = memo(function AdvField({
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <CyrillicTextInput
-        style={styles.modalInput}
+        style={styles.advInput}
         placeholderTextColor={colors.muted}
         defaultValue={initial}
         onChangeText={onChange}
@@ -433,6 +417,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
     paddingHorizontal: s(14),
     paddingVertical: s(10),
+    borderRadius: btnRadius,
   },
   searchBtnText: { color: colors.white, fontWeight: "700", fontSize: fs(14) },
   advBtn: {
@@ -443,53 +428,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    borderRadius: btnRadius,
   },
-  modalRoot: {
+  advBtnOn: {
+    backgroundColor: colors.ink,
+  },
+  advPanel: {
+    paddingHorizontal: s(12),
+    paddingTop: s(10),
+    paddingBottom: s(4),
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
     backgroundColor: colors.paper,
-    paddingHorizontal: s(16),
-    width: "100%",
   },
-  modalHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: s(12),
-    flexShrink: 0,
+  advTitle: {
+    fontSize: fs(14),
+    fontWeight: "800",
+    color: colors.stamp,
+    letterSpacing: 0.5,
+    marginBottom: s(8),
   },
-  modalTitle: { fontSize: fs(20), fontWeight: "800", color: colors.ink },
-  modalClose: {
-    width: s(36),
-    height: s(36),
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-  },
-  modalScroll: {
-    flex: 1,
-  },
-  modalScrollContent: {
-    paddingBottom: s(40),
-    flexGrow: 0,
-  },
-  field: { marginBottom: s(10) },
-  label: { color: colors.muted, fontSize: fs(14), marginBottom: 4, fontWeight: "600" },
-  modalInput: {
+  field: { marginBottom: s(8) },
+  label: { color: colors.muted, fontSize: fs(13), marginBottom: 2, fontWeight: "600" },
+  advInput: {
     borderBottomWidth: 1,
     borderColor: colors.line,
     color: colors.ink,
-    paddingVertical: s(10),
-    fontSize: fs(16),
-    minHeight: s(48),
+    paddingVertical: s(8),
+    fontSize: fs(15),
+    minHeight: s(40),
   },
-  modalActions: {
+  advActions: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
     gap: s(16),
-    paddingTop: s(20),
-    marginTop: s(8),
+    paddingTop: s(12),
+    paddingBottom: s(4),
   },
-  clear: { color: colors.stamp, fontWeight: "700", fontSize: fs(16) },
+  clear: { color: colors.stamp, fontWeight: "700", fontSize: fs(15) },
 });

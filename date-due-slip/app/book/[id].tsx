@@ -6,7 +6,7 @@ import { BookCover } from "../../src/BookCover";
 import { HistoryLink } from "../../src/HistoryLink";
 import { RequestModal } from "../../src/RequestModal";
 import { useAuth } from "../../src/auth";
-import { colors } from "../../src/theme";
+import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Book, Post, Shelf, User } from "../../src/types";
 
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   ownersRow: { flexDirection: "row", flexWrap: "wrap", marginTop: 8, alignItems: "center" },
   ownerLink: { color: colors.stamp, fontWeight: "700" },
   link: { color: colors.stamp, fontWeight: "700", marginTop: 8 },
-  btn: { backgroundColor: colors.ink, padding: 12, marginTop: 16 },
+  btn: { backgroundColor: colors.ink, padding: 12, marginTop: 16, borderRadius: btnRadius },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },
   h: { marginTop: 24, fontWeight: "800", color: colors.ink, marginBottom: 8 },
   card: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, padding: 12, marginBottom: 8 },

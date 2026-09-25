@@ -4,7 +4,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, CopyApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { BookCover } from "../../src/BookCover";
-import { colors } from "../../src/theme";
+import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { BookCopyDetail, CopyEvent, QueueEntry, Shelf } from "../../src/types";
 
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.stamp,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: btnRadius,
   },
   btnText: { color: "#fff", fontWeight: "800" },
   btnGhost: {
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: btnRadius,
   },
   btnGhostText: { color: colors.ink, fontWeight: "700" },
   card: {

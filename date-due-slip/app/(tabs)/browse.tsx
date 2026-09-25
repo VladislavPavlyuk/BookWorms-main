@@ -13,7 +13,7 @@ import { ApiError, BrowseApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { HistoryLink } from "../../src/HistoryLink";
 import { RequestModal } from "../../src/RequestModal";
-import { colors } from "../../src/theme";
+import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { BookBrowseGroup, Shelf } from "../../src/types";
 
@@ -224,6 +224,6 @@ const styles = StyleSheet.create({
   lent: { color: colors.stamp, fontWeight: "700", fontSize: 12 },
   free: { color: colors.muted, fontSize: 12 },
   miniAct: { color: colors.stamp, fontWeight: "800", fontSize: 12 },
-  btn: { marginTop: 10, alignSelf: "flex-start", backgroundColor: colors.ink, paddingHorizontal: 12, paddingVertical: 6 },
+  btn: { marginTop: 10, alignSelf: "flex-start", backgroundColor: colors.ink, paddingHorizontal: 12, paddingVertical: 6, borderRadius: btnRadius },
   btnText: { color: colors.white, fontWeight: "700" },
 });

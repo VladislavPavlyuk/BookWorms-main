@@ -11,7 +11,7 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, NotifApi, ShelfApi, type AppNotification } from "../src/api";
 import { formatMsgTime } from "../src/chat";
-import { colors, fs, s } from "../src/theme";
+import { colors, fs, s, btnRadius } from "../src/theme";
 import { useUnread } from "../src/unread";
 
 export default function NotificationsScreen() {
@@ -242,6 +242,7 @@ const styles = StyleSheet.create({
     paddingVertical: s(10),
     paddingHorizontal: s(14),
     minHeight: s(44),
+    borderRadius: btnRadius,
   },
   confirmBtnText: { color: "#fff", fontWeight: "800", fontSize: fs(14) },
   chat: { color: colors.ink, fontWeight: "800", fontSize: fs(15) },

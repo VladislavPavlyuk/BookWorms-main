@@ -2,6 +2,20 @@
     border: 3px solid #0d6efd;
     background-color: #e7f1ff;
 }
+
+/* Pill / fully rounded corners on all Bootstrap action buttons */
+.btn,
+button.btn,
+.site-content .btn,
+input[type="submit"].btn,
+input[type="button"].btn {
+    border-radius: 9999px !important;
+}
+
+.btn-close {
+    border-radius: 50% !important;
+}
+
 .avatar-item img:hover {
     transform: scale(1.1);
     transition: 0.2s;
@@ -520,8 +534,8 @@
         flex-grow: 1;
     }
 
-    /* typing: hide filter / feed / burger — search takes freed space */
-    html.search-chrome-compact #siteFilterToggle,
+    /* typing: hide feed / burger — keep filter if advanced panel is open */
+    html.search-chrome-compact:not(:has(#advancedSearch.show)) #siteFilterToggle,
     html.search-chrome-compact .site-navbar-feed--bar,
     html.search-chrome-compact .site-navbar .navbar-toggler {
         display: none !important;
@@ -853,6 +867,7 @@ html {
     border-color: #c9b48a;
     color: #6b5344;
     background: #fffbf3;
+    border-radius: 50% !important;
 }
 
 .password-toggle__btn:hover,

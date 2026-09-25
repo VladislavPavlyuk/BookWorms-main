@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { ApiError, ExchangeApi } from "./api";
-import { colors } from "./theme";
+import { colors, btnRadius } from "./theme";
 import type { Shelf } from "./types";
 
 type Props = {
@@ -148,8 +148,8 @@ const styles = StyleSheet.create({
   optOn: { borderColor: colors.stamp, backgroundColor: colors.paperDark },
   optText: { color: colors.ink },
   row: { flexDirection: "row", gap: 12, marginTop: 16 },
-  cancel: { flex: 1, padding: 12, borderWidth: 1, borderColor: colors.line },
+  cancel: { flex: 1, padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: btnRadius },
   cancelText: { textAlign: "center", color: colors.muted, fontWeight: "700" },
-  ok: { flex: 1, padding: 12, backgroundColor: colors.ink },
+  ok: { flex: 1, padding: 12, backgroundColor: colors.ink, borderRadius: btnRadius },
   okText: { textAlign: "center", color: colors.white, fontWeight: "700" },
 });

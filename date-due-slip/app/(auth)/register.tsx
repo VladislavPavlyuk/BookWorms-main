@@ -16,7 +16,7 @@ import { useAuth } from "../../src/auth";
 import { ApiError } from "../../src/api";
 import { PasswordField } from "../../src/PasswordField";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
-import { colors, fs, s } from "../../src/theme";
+import { colors, fs, s, btnRadius } from "../../src/theme";
 
 export default function Register() {
   const router = useRouter();
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     fontSize: fs(16),
     minHeight: s(48),
   },
-  btn: { backgroundColor: colors.stamp, padding: s(14), marginTop: s(8), minHeight: s(54) },
+  btn: { backgroundColor: colors.stamp, padding: s(14), marginTop: s(8), minHeight: s(54), borderRadius: btnRadius },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(18) },
   link: { color: colors.muted, textAlign: "center", marginTop: s(18), fontSize: fs(16) },
 });

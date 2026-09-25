@@ -11,7 +11,7 @@ import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
-import { colors } from "../../src/theme";
+import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Post } from "../../src/types";
 
@@ -164,6 +164,6 @@ const styles = StyleSheet.create({
   sec: { marginTop: 24, fontWeight: "800", color: colors.ink, marginBottom: 8 },
   comment: { borderBottomWidth: 1, borderColor: colors.line, paddingVertical: 8 },
   input: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 10, marginTop: 12 },
-  btn: { backgroundColor: colors.ink, padding: 12, marginTop: 12 },
+  btn: { backgroundColor: colors.ink, padding: 12, marginTop: 12, borderRadius: btnRadius },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },
 });

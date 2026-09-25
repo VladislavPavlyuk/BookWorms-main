@@ -13,7 +13,7 @@ import { ApiError, ShelfApi, SlipApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { HistoryLink } from "../../src/HistoryLink";
 import { useAuth } from "../../src/auth";
-import { colors, fs, s } from "../../src/theme";
+import { colors, fs, s, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Shelf } from "../../src/types";
 
@@ -246,6 +246,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.stampOk,
     paddingVertical: s(12),
     minHeight: s(48),
+    borderRadius: btnRadius,
   },
   confirmBtnText: {
     color: "#fff",

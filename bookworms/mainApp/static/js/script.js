@@ -360,12 +360,6 @@
         var navQ = document.getElementById("siteNavbarSearchQ");
         var mirror = document.getElementById("advQMirror");
         var form = document.getElementById("advancedSearchForm");
-        var scrollBeforeAdv = 0;
-
-        function isHomePage() {
-            var p = window.location.pathname || "/";
-            return p === "/" || p === "";
-        }
 
         function setToggleOpen(open) {
             if (!toggle) return;
@@ -373,47 +367,16 @@
             toggle.classList.toggle("is-open", open);
         }
 
-        function scrollToY(y) {
-            var top = Math.max(0, Math.round(y));
-            if (typeof window.scrollTo === "function") {
-                try {
-                    window.scrollTo({ top: top, left: 0, behavior: "auto" });
-                } catch (e) {
-                    window.scrollTo(0, top);
-                }
-            } else {
-                window.scrollTop = top;
-                document.documentElement.scrollTop = top;
-                document.body.scrollTop = top;
-            }
-        }
-
         if (adv && toggle) {
             setToggleOpen(adv.classList.contains("show"));
             adv.addEventListener("show.bs.collapse", function () {
                 setToggleOpen(true);
-                if (!isHomePage()) return;
-                scrollBeforeAdv = window.scrollY || window.pageYOffset || 0;
-            });
-            adv.addEventListener("shown.bs.collapse", function () {
-                if (!isHomePage()) return;
-                /* Mobile panel scrolls itself — don't shove the page */
-                if (window.matchMedia && window.matchMedia("(max-width: 991.98px)").matches) {
-                    return;
-                }
-                var h = Math.ceil(adv.getBoundingClientRect().height);
-                if (h > 0) scrollToY(scrollBeforeAdv + h);
             });
             adv.addEventListener("hide.bs.collapse", function () {
                 setToggleOpen(false);
             });
-            adv.addEventListener("hidden.bs.collapse", function () {
-                if (!isHomePage()) return;
-                if (window.matchMedia && window.matchMedia("(max-width: 991.98px)").matches) {
-                    return;
-                }
-                scrollToY(scrollBeforeAdv);
-            });
+            // Stay open until toggle / reset / navigate — do NOT auto-scroll
+            // (scrollBy panel height used to shove #advancedSearch off-screen).
         }
 
         if (form && navQ && mirror) {

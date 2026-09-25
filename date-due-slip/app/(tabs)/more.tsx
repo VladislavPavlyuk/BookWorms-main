@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../../src/auth";
 import { ApiError, AuthApi, getApiBase, setApiBase } from "../../src/api";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
-import { colors, fs, s } from "../../src/theme";
+import { colors, fs, s, btnRadius } from "../../src/theme";
 import { useUnread } from "../../src/unread";
 
 export default function More() {
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     fontSize: fs(16),
     minHeight: s(48),
   },
-  btn: { backgroundColor: colors.ink, padding: s(14), marginTop: s(12), minHeight: s(54) },
+  btn: { backgroundColor: colors.ink, padding: s(14), marginTop: s(12), minHeight: s(54), borderRadius: btnRadius },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(16) },
   cancel: {
     color: colors.muted,

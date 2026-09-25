@@ -12,7 +12,7 @@ import { useAuth } from "../../src/auth";
 import { ApiError } from "../../src/api";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { PasswordField } from "../../src/PasswordField";
-import { colors, fs, s } from "../../src/theme";
+import { colors, fs, s, btnRadius } from "../../src/theme";
 
 export default function Login() {
   const { login } = useAuth();
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     fontSize: fs(16),
     minHeight: s(48),
   },
-  btn: { backgroundColor: colors.ink, padding: s(14), marginTop: s(8), minHeight: s(54) },
+  btn: { backgroundColor: colors.ink, padding: s(14), marginTop: s(8), minHeight: s(54), borderRadius: btnRadius },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(18) },
   link: { color: colors.stamp, textAlign: "center", marginTop: s(18), fontSize: fs(16) },
 });

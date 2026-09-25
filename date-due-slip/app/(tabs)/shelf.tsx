@@ -16,7 +16,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, ShelfApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { HistoryLink } from "../../src/HistoryLink";
-import { colors } from "../../src/theme";
+import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Shelf } from "../../src/types";
 
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   slipsLink: { paddingHorizontal: 16, marginBottom: 10 },
   input: { flex: 1, borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 8 },
   inputFull: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 10, marginBottom: 12 },
-  add: { backgroundColor: colors.ink, paddingHorizontal: 12, justifyContent: "center" },
+  add: { backgroundColor: colors.ink, paddingHorizontal: 12, justifyContent: "center", borderRadius: btnRadius },
   addText: { color: colors.white, fontWeight: "700", textAlign: "center" },
   sec: { color: colors.stamp, fontWeight: "700", marginBottom: 8 },
   pendingBox: { marginBottom: 12 },
@@ -328,6 +328,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     alignSelf: "stretch",
+    borderRadius: btnRadius,
   },
   confirmBtnText: { color: "#fff", fontWeight: "800", textAlign: "center" },
   card: {
@@ -347,7 +348,7 @@ const styles = StyleSheet.create({
   link: { color: colors.ink, fontWeight: "700" },
   action: { color: colors.stamp, fontWeight: "700" },
   modalH: { fontSize: 20, fontWeight: "800", color: colors.ink, marginBottom: 12 },
-  btn: { backgroundColor: colors.ink, padding: 14, marginTop: 8 },
+  btn: { backgroundColor: colors.ink, padding: 14, marginTop: 8, borderRadius: btnRadius },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "center", padding: 24 },
   sheet: { backgroundColor: colors.paper, padding: 20 },
   age: { flex: 1, borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, textAlign: "center", fontSize: 20, paddingVertical: 8 },
