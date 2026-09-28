@@ -16,6 +16,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, ShelfApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { HistoryLink } from "../../src/HistoryLink";
+import { IsbnScanModal } from "../../src/IsbnScanModal";
 import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Shelf } from "../../src/types";
@@ -28,6 +29,7 @@ export default function ShelfScreen() {
   const [isbn, setIsbn] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [ageShelf, setAgeShelf] = useState<Shelf | null>(null);
   const [ageMin, setAgeMin] = useState("0");
   const [ageMax, setAgeMax] = useState("18");
@@ -52,14 +54,25 @@ export default function ShelfScreen() {
     }, [])
   );
 
-  const addIsbn = async () => {
+  const addIsbn = async (raw?: string) => {
+    const code = (raw ?? isbn).trim();
+    if (!code) {
+      Alert.alert("ISBN", "Введіть або відскануйте ISBN.");
+      return;
+    }
     try {
-      await ShelfApi.addIsbn(isbn.trim());
+      await ShelfApi.addIsbn(code);
       setIsbn("");
       await load();
     } catch (e) {
       Alert.alert("ISBN", e instanceof ApiError ? e.message : String(e));
     }
+  };
+
+  const onScannedIsbn = async (code: string) => {
+    setScanOpen(false);
+    setIsbn(code);
+    await addIsbn(code);
   };
 
   const addManual = async () => {
@@ -114,9 +127,18 @@ export default function ShelfScreen() {
           value={isbn}
           onChangeText={setIsbn}
           autoCapitalize="none"
+          keyboardType="number-pad"
         />
-        <Pressable style={styles.add} onPress={addIsbn}>
+        <Pressable style={styles.add} onPress={() => addIsbn()}>
           <Text style={styles.addText}>ISBN</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.add, styles.scanBtn]}
+          onPress={() => setScanOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Scan ISBN"
+        >
+          <Text style={styles.addText}>Scan</Text>
         </Pressable>
         <Pressable
           style={[styles.add, { backgroundColor: colors.stamp }]}
@@ -298,6 +320,12 @@ export default function ShelfScreen() {
           </View>
         </View>
       </Modal>
+
+      <IsbnScanModal
+        visible={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onScan={onScannedIsbn}
+      />
     </View>
   );
 }
@@ -317,6 +345,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 8 },
   inputFull: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 10, marginBottom: 12 },
   add: { backgroundColor: colors.ink, paddingHorizontal: 12, justifyContent: "center", borderRadius: btnRadius },
+  scanBtn: { backgroundColor: colors.fab },
   addText: { color: colors.white, fontWeight: "700", textAlign: "center" },
   sec: { color: colors.stamp, fontWeight: "700", marginBottom: 8 },
   pendingBox: { marginBottom: 12 },

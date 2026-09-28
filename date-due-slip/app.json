@@ -17,11 +17,19 @@
       "expo-router",
       "expo-secure-store",
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Реченець to scan ISBN barcodes on book covers.",
+          "recordAudioAndroid": false
+        }
+      ]
     ],
     "android": {
       "package": "com.bookworms.datedueslip",
       "usesCleartextTraffic": true,
+      "permissions": ["android.permission.CAMERA"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F4F0E6"
@@ -31,6 +39,7 @@
       "bundleIdentifier": "com.bookworms.datedueslip",
       "supportsTablet": true,
       "infoPlist": {
+        "NSCameraUsageDescription": "Allow Реченець to scan ISBN barcodes on book covers.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
