@@ -467,6 +467,9 @@
                 alert("Bootstrap Modal недоступний");
                 return;
             }
+            if (modalEl.parentElement !== document.body) {
+                document.body.appendChild(modalEl);
+            }
             bsModal = window.bootstrap.Modal.getOrCreateInstance(modalEl, {
                 backdrop: true,
                 keyboard: true,

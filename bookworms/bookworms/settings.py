@@ -5,11 +5,28 @@ from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Host repo root when running from source; inside Docker image BASE_DIR is /app.
+REPO_ROOT = BASE_DIR.parent
 
-# Завантажити .env до перевірки AZURE_SQL_* (локальна розробка).
-dotenv_path = BASE_DIR / ".env"
-if dotenv_path.exists():
-    load_dotenv(dotenv_path)
+# Compose often injects OCR_SPACE_API_KEY="" via ${VAR:-} — that blocks dotenv.
+# Treat blank secrets as unset so a mounted/loaded .env can fill them.
+for _blank_key in (
+    "OCR_SPACE_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+):
+    if _blank_key in os.environ and not (os.environ.get(_blank_key) or "").strip():
+        del os.environ[_blank_key]
+
+# Load .env from every plausible location (local + Docker mount /app/.env).
+for dotenv_path in (
+    Path("/app/.env"),
+    BASE_DIR / ".env",
+    REPO_ROOT / ".env",
+    Path.cwd() / ".env",
+):
+    if dotenv_path.is_file():
+        load_dotenv(dotenv_path, override=False)
 
 # Термін позики для Date Due Slip (днів від прийняття запиту).
 DEFAULT_LOAN_DAYS = int(os.environ.get("DEFAULT_LOAN_DAYS", "14"))
@@ -195,6 +212,10 @@ WEB3FORMS_ACCESS_KEY = (
 # Публічний origin для лінка активації (NAS): http://192.168.0.213:18088
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@bookworms.local")
+
+# Cover OCR (manual add) — read once so views/services share the same source.
+OCR_SPACE_API_KEY = (os.environ.get("OCR_SPACE_API_KEY") or "").strip() or "K89147673988957"
+OPENAI_API_KEY = (os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY") or "").strip()
 
 # Тип ID моделей по умолчанию (убирает Warnings)
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

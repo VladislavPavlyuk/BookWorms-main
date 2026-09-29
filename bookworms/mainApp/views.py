@@ -25,6 +25,7 @@ from django.contrib.auth.views import LoginView
 from .forms import (
     AddBookManualForm,
     AddIsbnForm,
+    EditBookManualForm,
     SendExchangePartnerMessageForm,
     UserLoginForm,
     UserRegisterForm,
@@ -531,6 +532,7 @@ def my_library(request):
     elif request.method == "POST" and "add_manual" in request.POST:
         manual_form = AddBookManualForm(request.POST, request.FILES)
         photos = request.FILES.getlist("photos")
+        is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
         if manual_form.is_valid():
             d = manual_form.cleaned_data
             raw_isbn = (d.get("isbn") or "").strip()
@@ -565,10 +567,35 @@ def my_library(request):
                     cover_url=(d.get("cover_url") or "").strip(),
                     info_url=(d.get("info_url") or "").strip(),
                 )
-                save_book_photos(book, photos, request=request)
+                saved = save_book_photos(book, photos, request=request)
                 add_owned_copy(request.user, book)
                 messages.success(request, f"Додано вручну: {book.title}")
+                if is_xhr:
+                    from django.urls import reverse
+
+                    return JsonResponse(
+                        {
+                            "ok": True,
+                            "redirect": reverse("my_library"),
+                            "title": book.title,
+                            "photos_saved": len(saved),
+                        }
+                    )
                 return redirect("my_library")
+        if is_xhr:
+            errs = []
+            for field, flist in manual_form.errors.items():
+                for e in flist:
+                    errs.append(f"{field}: {e}" if field != "__all__" else str(e))
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "detail": "; ".join(errs) or "Форма невалідна.",
+                    "errors": manual_form.errors.get_json_data(),
+                    "photos_received": len(photos),
+                },
+                status=400,
+            )
 
     # Полиця = фізичне місце: власні вільні + позичені вами.
     # Власні примірники, які зараз у когось у позиці, тут НЕ показуємо.
@@ -607,6 +634,37 @@ def my_library(request):
             s.is_overdue = False
             s.days_left = None
     shelves = [s for s in shelves_all if not s.is_lent_out]
+    from .book_photos import is_local_isbn, user_can_edit_manual_book
+    import json
+    from django.urls import reverse
+    from django.utils.safestring import mark_safe
+
+    for s in shelves:
+        s.can_edit_manual = (not s.borrowed_from_id) and user_can_edit_manual_book(
+            request.user, s.book
+        )
+        if s.can_edit_manual:
+            b = s.book
+            payload = {
+                "edit_url": reverse("update_manual_shelf_book", args=[s.id]),
+                "isbn": "" if is_local_isbn(b.isbn) else (b.isbn or ""),
+                "title": b.title or "",
+                "authors": b.authors or "",
+                "publisher": b.publisher or "",
+                "publish_date": b.publish_date or "",
+                "photos": [
+                    {"id": p.id, "url": p.image.url} for p in b.photos.all()
+                ],
+            }
+            # Safe for <script type="application/json"> (avoid </script> breakout)
+            raw = json.dumps(payload, ensure_ascii=False)
+            s.edit_payload_json = mark_safe(
+                raw.replace("<", "\\u003c")
+                .replace(">", "\\u003e")
+                .replace("&", "\\u0026")
+            )
+        else:
+            s.edit_payload_json = ""
     locked_raw = request.session.get("reader_age_locked_shelf_ids", [])
     if not isinstance(locked_raw, list):
         locked_raw = []
@@ -627,6 +685,123 @@ def my_library(request):
             "reader_age_locked_shelf_ids": reader_age_locked_shelf_ids,
         },
     )
+
+
+@login_required
+@require_POST
+def recognize_book_cover_view(request):
+    """Web: AI fill title/authors/ISBN from a cover photo (manual add)."""
+    uploaded = request.FILES.get("photo") or request.FILES.get("photos")
+    if not uploaded:
+        return JsonResponse({"detail": "Потрібне фото обкладинки (поле photo)."}, status=400)
+    from .book_cover_ai import CoverAIError, recognize_book_cover, vision_configured
+
+    if not vision_configured():
+        return JsonResponse(
+            {"detail": "Розпізнавання не налаштовано (OCR_SPACE_API_KEY або OPENAI_API_KEY)."},
+            status=503,
+        )
+    try:
+        data = recognize_book_cover(uploaded)
+    except CoverAIError as exc:
+        return JsonResponse({"detail": exc.message}, status=exc.status)
+    return JsonResponse(data)
+
+
+@login_required
+@require_POST
+def update_manual_shelf_book(request, shelf_id):
+    """Web: edit sole-owned manually added book on the shelf."""
+    from .book_photos import (
+        delete_book_photos,
+        save_book_photos,
+        update_manual_book,
+        user_can_edit_manual_book,
+    )
+
+    shelf = (
+        request.user.shelf_entries.select_related("book", "copy")
+        .prefetch_related("book__photos")
+        .filter(pk=shelf_id)
+        .first()
+    )
+    is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    if not shelf:
+        if is_xhr:
+            return JsonResponse({"ok": False, "detail": "Запис не знайдено."}, status=404)
+        messages.error(request, "Запис не знайдено.")
+        return redirect("my_library")
+    if shelf.borrowed_from_id:
+        msg = "Позичену книгу не можна редагувати."
+        if is_xhr:
+            return JsonResponse({"ok": False, "detail": msg}, status=400)
+        messages.error(request, msg)
+        return redirect("my_library")
+    if is_copy_lent_out(shelf.copy_id):
+        msg = "Примірник зараз у позиці — спочатку дочекайтесь повернення."
+        if is_xhr:
+            return JsonResponse({"ok": False, "detail": msg}, status=400)
+        messages.error(request, msg)
+        return redirect("my_library")
+    if not user_can_edit_manual_book(request.user, shelf.book):
+        msg = "Редагувати можна лише власні вручну додані книги."
+        if is_xhr:
+            return JsonResponse({"ok": False, "detail": msg}, status=403)
+        messages.error(request, msg)
+        return redirect("my_library")
+
+    form = EditBookManualForm(request.POST, request.FILES)
+    photos = request.FILES.getlist("photos")
+    if form.is_valid():
+        d = form.cleaned_data
+        try:
+            book = update_manual_book(
+                shelf.book,
+                isbn=(d.get("isbn") or "").strip(),
+                title=(d.get("title") or "").strip(),
+                authors=(d.get("authors") or "").strip(),
+                publisher=(d.get("publisher") or "").strip(),
+                publish_date=(d.get("publish_date") or "").strip(),
+                cover_url=(d.get("cover_url") or "").strip()
+                if "cover_url" in request.POST
+                else None,
+                info_url=(d.get("info_url") or "").strip()
+                if "info_url" in request.POST
+                else None,
+            )
+        except ValueError as exc:
+            if is_xhr:
+                return JsonResponse({"ok": False, "detail": str(exc)}, status=400)
+            messages.error(request, str(exc))
+            return redirect("my_library")
+
+        delete_ids = []
+        for raw in request.POST.getlist("delete_photo_ids"):
+            if str(raw).isdigit():
+                delete_ids.append(int(raw))
+        if delete_ids:
+            delete_book_photos(book, delete_ids)
+        if photos:
+            save_book_photos(book, photos, request=request)
+
+        messages.success(request, f"Оновлено: {book.title}")
+        if is_xhr:
+            from django.urls import reverse
+
+            return JsonResponse(
+                {"ok": True, "redirect": reverse("my_library"), "title": book.title}
+            )
+        return redirect("my_library")
+
+    errs = []
+    for field, flist in form.errors.items():
+        for e in flist:
+            errs.append(f"{field}: {e}" if field != "__all__" else str(e))
+    detail = "; ".join(errs) or "Форма невалідна."
+    if is_xhr:
+        return JsonResponse({"ok": False, "detail": detail, "errors": form.errors.get_json_data()}, status=400)
+    messages.error(request, detail)
+    return redirect("my_library")
 
 
 def _annotate_due_slip(shelf):

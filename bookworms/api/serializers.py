@@ -79,6 +79,8 @@ class MeUpdateSerializer(serializers.ModelSerializer):
 class BookSerializer(serializers.ModelSerializer):
     reader_age_summary = serializers.CharField(read_only=True)
     photo_urls = serializers.SerializerMethodField()
+    isbn_missing = serializers.SerializerMethodField()
+    note = serializers.SerializerMethodField()
 
     class Meta:
         model = Book
@@ -95,6 +97,8 @@ class BookSerializer(serializers.ModelSerializer):
             "min_readers_age",
             "max_readers_age",
             "reader_age_summary",
+            "isbn_missing",
+            "note",
         )
 
     def get_photo_urls(self, obj):
@@ -102,6 +106,22 @@ class BookSerializer(serializers.ModelSerializer):
 
         return book_photo_urls(obj, request=self.context.get("request"))
 
+    def get_isbn_missing(self, obj):
+        from mainApp.book_photos import is_local_isbn
+
+        flagged = getattr(obj, "_isbn_missing", None)
+        if flagged is not None:
+            return bool(flagged)
+        return is_local_isbn(obj.isbn)
+
+    def get_note(self, obj):
+        from mainApp.book_cover_ai import NO_ISBN_NOTE
+        from mainApp.book_photos import is_local_isbn
+
+        note = getattr(obj, "_isbn_note", None)
+        if note is not None:
+            return note
+        return NO_ISBN_NOTE if is_local_isbn(obj.isbn) else ""
 
 class CommentSerializer(serializers.ModelSerializer):
     author = UserPublicSerializer(read_only=True)
@@ -162,6 +182,7 @@ class ShelfSerializer(serializers.ModelSerializer):
     is_lent_out = serializers.SerializerMethodField()
     pending_return_shelf_id = serializers.SerializerMethodField()
     request_shelf_id = serializers.SerializerMethodField()
+    can_edit_manual = serializers.SerializerMethodField()
 
     class Meta:
         model = Shelf
@@ -180,8 +201,25 @@ class ShelfSerializer(serializers.ModelSerializer):
             "is_lent_out",
             "pending_return_shelf_id",
             "request_shelf_id",
+            "can_edit_manual",
             "added_at",
         )
+
+    def get_can_edit_manual(self, obj):
+        if obj.borrowed_from_id:
+            return False
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if not user or not user.is_authenticated:
+            return False
+        if user.pk != obj.user_id:
+            return False
+        from mainApp.book_photos import user_can_edit_manual_book
+        from mainApp.exchange_service import is_copy_lent_out
+
+        if is_copy_lent_out(obj.copy_id):
+            return False
+        return user_can_edit_manual_book(user, obj.book)
 
     def get_lent_to(self, obj):
         loan = getattr(obj, "loan_row", None)
@@ -286,6 +324,18 @@ class AddBookManualSerializer(serializers.Serializer):
     publish_date = serializers.CharField(required=False, allow_blank=True, default="")
     cover_url = serializers.URLField(required=False, allow_blank=True, default="")
     info_url = serializers.URLField(required=False, allow_blank=True, default="")
+
+
+class UpdateBookManualSerializer(serializers.Serializer):
+    isbn = serializers.CharField(max_length=32, required=False, allow_blank=True)
+    title = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    authors = serializers.CharField(required=False, allow_blank=True)
+    publisher = serializers.CharField(required=False, allow_blank=True)
+    publish_date = serializers.CharField(required=False, allow_blank=True)
+    cover_url = serializers.URLField(required=False, allow_blank=True)
+    info_url = serializers.URLField(required=False, allow_blank=True)
+    # Comma-separated or repeated form keys; parsed in the view.
+    delete_photo_ids = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class ReaderAgeSerializer(serializers.Serializer):

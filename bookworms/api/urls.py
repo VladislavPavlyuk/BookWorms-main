@@ -19,6 +19,8 @@ urlpatterns = [
     path("shelf/", views.my_shelf),
     path("shelf/isbn/", views.shelf_add_isbn),
     path("shelf/manual/", views.shelf_add_manual),
+    path("shelf/recognize-cover/", views.shelf_recognize_cover),
+    path("shelf/<int:shelf_id>/manual/", views.shelf_update_manual),
     path("shelf/<int:shelf_id>/", views.shelf_remove),
     path("shelf/<int:shelf_id>/reader-age/", views.shelf_reader_age),
     path("shelf/<int:shelf_id>/return/", views.shelf_return),

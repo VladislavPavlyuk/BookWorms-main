@@ -20,6 +20,9 @@ export type Book = {
   min_readers_age: number;
   max_readers_age: number;
   reader_age_summary: string;
+  /** Local 9799… code — no catalog ISBN on the cover. */
+  isbn_missing?: boolean;
+  note?: string;
 };
 
 export type Shelf = {
@@ -42,6 +45,8 @@ export type Shelf = {
   pending_return_shelf_id?: number | null;
   /** Id полиці власника для ExchangeApi.create (для позики на чужій полиці). */
   request_shelf_id?: number | null;
+  /** Sole-owned manual/local book — can PATCH /shelf/{id}/manual/ */
+  can_edit_manual?: boolean;
   added_at: string;
 };
 

@@ -19,6 +19,11 @@ PY
 
 echo "entrypoint: migrate..." >&2
 python manage.py migrate --noinput
+if [ -n "${OCR_SPACE_API_KEY:-}" ]; then
+  echo "entrypoint: OCR_SPACE_API_KEY=set" >&2
+else
+  echo "entrypoint: OCR_SPACE_API_KEY=MISSING — add to project-root .env and recreate api" >&2
+fi
 echo "entrypoint: collectstatic..." >&2
 # Named volume staticfiles persists across rebuilds — force-refresh ISBN scanner assets
 # so nginx never keeps a frozen/broken previous isbn_scan.js.

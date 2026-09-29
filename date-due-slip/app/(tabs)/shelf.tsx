@@ -36,6 +36,9 @@ export default function ShelfScreen() {
   const [isbn, setIsbn] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
+  const [editShelfId, setEditShelfId] = useState<number | null>(null);
+  const [existingPhotoUrls, setExistingPhotoUrls] = useState<{ id?: number; uri: string }[]>([]);
+  const [deletePhotoIds, setDeletePhotoIds] = useState<number[]>([]);
   const [scanOpen, setScanOpen] = useState(false);
   const [coverCamOpen, setCoverCamOpen] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -50,6 +53,8 @@ export default function ShelfScreen() {
     publish_date: "",
   });
   const [manualPhotos, setManualPhotos] = useState<ManualPhoto[]>([]);
+  const [aiStatus, setAiStatus] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
   const lastAutoRef = useRef("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -113,28 +118,101 @@ export default function ShelfScreen() {
     await addIsbn(code);
   };
 
+  const resetManualForm = () => {
+    setManual({ isbn: "", title: "", authors: "", publisher: "", publish_date: "" });
+    setManualPhotos([]);
+    setAiStatus("");
+    setEditShelfId(null);
+    setExistingPhotoUrls([]);
+    setDeletePhotoIds([]);
+  };
+
+  const openEditManual = (item: Shelf) => {
+    const b = item.book;
+    const local = b.isbn?.startsWith("9799");
+    setManual({
+      isbn: local ? "" : b.isbn || "",
+      title: b.title || "",
+      authors: b.authors || "",
+      publisher: b.publisher || "",
+      publish_date: b.publish_date || "",
+    });
+    setManualPhotos([]);
+    setDeletePhotoIds([]);
+    const urls = (b.photo_urls || []).map((uri) => ({ uri }));
+    setExistingPhotoUrls(urls);
+    setEditShelfId(item.id);
+    setAiStatus("");
+    setManualOpen(true);
+  };
+
   const addManual = async () => {
     const title = (manual.title || "").trim();
     const isbnVal = (manual.isbn || "").trim();
-    if (!title && manualPhotos.length === 0) {
+    if (!title && manualPhotos.length === 0 && !editShelfId) {
       Alert.alert("Вручну", "Вкажіть назву або зробіть хоча б одне фото обкладинки.");
       return;
     }
     try {
-      await ShelfApi.addManual({
-        isbn: isbnVal || undefined,
-        title: title || undefined,
-        authors: manual.authors || undefined,
-        publisher: manual.publisher || undefined,
-        publish_date: manual.publish_date || undefined,
-        photos: manualPhotos,
-      });
+      if (editShelfId) {
+        await ShelfApi.updateManual(editShelfId, {
+          isbn: isbnVal,
+          title: title || undefined,
+          authors: manual.authors || undefined,
+          publisher: manual.publisher || undefined,
+          publish_date: manual.publish_date || undefined,
+          photos: manualPhotos,
+          delete_photo_ids: deletePhotoIds.length ? deletePhotoIds : undefined,
+        });
+      } else {
+        await ShelfApi.addManual({
+          isbn: isbnVal || undefined,
+          title: title || undefined,
+          authors: manual.authors || undefined,
+          publisher: manual.publisher || undefined,
+          publish_date: manual.publish_date || undefined,
+          photos: manualPhotos,
+        });
+      }
       setManualOpen(false);
-      setManual({ isbn: "", title: "", authors: "", publisher: "", publish_date: "" });
-      setManualPhotos([]);
+      resetManualForm();
       await load();
     } catch (e) {
-      Alert.alert("Вручну", e instanceof ApiError ? e.message : String(e));
+      Alert.alert(
+        editShelfId ? "Редагування" : "Вручну",
+        e instanceof ApiError ? e.message : String(e)
+      );
+    }
+  };
+
+  const recognizeFromPhoto = async (photo: ManualPhoto) => {
+    setAiBusy(true);
+    setAiStatus("AI розпізнає обкладинку…");
+    try {
+      const data = await ShelfApi.recognizeCover(photo);
+      const titleGuess =
+        (data.title || "").trim() ||
+        (data.raw_text || "").split("\n").map((s) => s.trim()).find(Boolean) ||
+        "";
+      setManual((m) => ({
+        isbn: m.isbn.trim() ? m.isbn : data.isbn || "",
+        title: m.title.trim() ? m.title : titleGuess,
+        authors: m.authors.trim() ? m.authors : data.authors || "",
+        publisher: m.publisher.trim() ? m.publisher : data.publisher || "",
+        publish_date: m.publish_date.trim() ? m.publish_date : data.publish_date || "",
+      }));
+      const bits: string[] = [];
+      if (titleGuess) bits.push("назва");
+      if (data.authors) bits.push("автори");
+      if (data.isbn) bits.push("ISBN");
+      else if (data.isbn_missing || data.note) bits.push(data.note || "ISBN code not exists");
+      setAiStatus(
+        bits.length ? `AI заповнив: ${bits.join(", ")}` : "AI не знайшов текст на обкладинці"
+      );
+    } catch (e) {
+      setAiStatus(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setAiBusy(false);
     }
   };
 
@@ -200,7 +278,10 @@ export default function ShelfScreen() {
         </Pressable>
         <Pressable
           style={[styles.add, { backgroundColor: colors.stamp }]}
-          onPress={() => setManualOpen(true)}
+          onPress={() => {
+            resetManualForm();
+            setManualOpen(true);
+          }}
           accessibilityRole="button"
           accessibilityLabel="Додати книгу вручну"
         >
@@ -289,8 +370,8 @@ export default function ShelfScreen() {
                 <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
                   <Text style={styles.meta}>
                     {item.copy_id ? `Примірник #${item.copy_id} · ` : ""}
-                    {item.book.isbn?.startsWith("9799")
-                      ? "локальний запис"
+                    {item.book.isbn?.startsWith("9799") || item.book.isbn_missing
+                      ? item.book.note || "ISBN code not exists"
                       : item.book.isbn
                         ? `ISBN ${item.book.isbn}`
                         : ""}
@@ -329,6 +410,11 @@ export default function ShelfScreen() {
                   <Text style={styles.link}>Чат з власником</Text>
                 </Pressable>
               )}
+              {!item.borrowed_from && item.can_edit_manual && (
+                <Pressable onPress={() => openEditManual(item)}>
+                  <Text style={styles.link}>Редагувати</Text>
+                </Pressable>
+              )}
               {!item.borrowed_from && (
                 <Pressable
                   onPress={() => {
@@ -363,13 +449,13 @@ export default function ShelfScreen() {
         animationType="slide"
         onRequestClose={() => {
           setManualOpen(false);
-          setManualPhotos([]);
+          resetManualForm();
         }}
       >
         <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ padding: 20, paddingTop: 56 }}>
-          <Text style={styles.modalH}>Додати книгу вручну</Text>
+          <Text style={styles.modalH}>{editShelfId ? "Редагувати книгу" : "Додати книгу вручну"}</Text>
           <Text style={[styles.physHint, { paddingHorizontal: 0, marginBottom: 12 }]}>
-            ISBN не обов’язковий. Фото обкладинки обрізається і зберігається на полиці навіть без каталогу.
+            ISBN не обов’язковий. Після знімка AI заповнить порожні поля (назва / автори / ISBN).
           </Text>
           {(
             [
@@ -392,8 +478,17 @@ export default function ShelfScreen() {
           ))}
           <Text style={[styles.sec, { marginTop: 8 }]}>Фото книги</Text>
           <Text style={[styles.physHint, { paddingHorizontal: 0 }]}>
-            Камера сама зніме обкладинку в рамці і обріже фон. До {MAX_MANUAL_PHOTOS}. Без ISBN теж збережеться.
+            Камера зніме обкладинку в рамці і обріже фон. До {MAX_MANUAL_PHOTOS}. AI заповнить поля автоматично.
           </Text>
+          {existingPhotoUrls.length > 0 ? (
+            <View style={styles.photoRow}>
+              {existingPhotoUrls.map((p, i) => (
+                <View key={`ex-${p.uri}-${i}`} style={styles.photoThumb}>
+                  <Image source={{ uri: p.uri }} style={styles.photoImg} />
+                </View>
+              ))}
+            </View>
+          ) : null}
           <View style={styles.photoActions}>
             <Pressable
               style={[styles.add, styles.scanBtn, styles.camOnlyBtn]}
@@ -403,12 +498,25 @@ export default function ShelfScreen() {
             >
               <Ionicons name="camera" size={22} color={colors.white} />
             </Pressable>
+            <Pressable
+              style={[styles.add, { backgroundColor: colors.stamp }, aiBusy && { opacity: 0.5 }]}
+              onPress={() => {
+                const last = manualPhotos[manualPhotos.length - 1];
+                if (last) void recognizeFromPhoto(last);
+              }}
+              disabled={aiBusy || manualPhotos.length === 0}
+              accessibilityRole="button"
+              accessibilityLabel="AI розпізнати"
+            >
+              <Text style={styles.addText}>{aiBusy ? "AI…" : "AI розпізнати"}</Text>
+            </Pressable>
             {manualPhotos.length > 0 ? (
               <Text style={styles.photoCount}>
                 {manualPhotos.length} / {MAX_MANUAL_PHOTOS}
               </Text>
             ) : null}
           </View>
+          {aiStatus ? <Text style={[styles.physHint, { paddingHorizontal: 0 }]}>{aiStatus}</Text> : null}
           <View style={styles.photoRow}>
             {manualPhotos.map((p, i) => (
               <View key={`${p.uri}-${i}`} style={styles.photoThumb}>
@@ -424,13 +532,13 @@ export default function ShelfScreen() {
             ))}
           </View>
           <Pressable style={styles.btn} onPress={addManual}>
-            <Text style={styles.addText}>Зберегти</Text>
+            <Text style={styles.addText}>{editShelfId ? "Оновити" : "Зберегти"}</Text>
           </Pressable>
           <Pressable
             style={[styles.btn, { backgroundColor: colors.muted, marginTop: 8 }]}
             onPress={() => {
               setManualOpen(false);
-              setManualPhotos([]);
+              resetManualForm();
             }}
           >
             <Text style={styles.addText}>Закрити</Text>
@@ -477,6 +585,7 @@ export default function ShelfScreen() {
             }
             return next;
           });
+          void recognizeFromPhoto(photo);
         }}
       />
     </View>

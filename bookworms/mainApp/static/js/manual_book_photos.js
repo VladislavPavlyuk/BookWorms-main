@@ -399,6 +399,7 @@
             if (countEl) {
                 countEl.textContent = files.length ? files.length + " / " + MAX : "";
             }
+            if (aiBtn) aiBtn.disabled = !files.length || recognizing;
             files.forEach(function (f, idx) {
                 var wrap = document.createElement("div");
                 wrap.className = "manual-photo-thumb";
@@ -431,7 +432,113 @@
             files.push(file);
             syncInput();
             render();
+            recognizeCover(file);
             return true;
+        }
+
+        var aiStatusEl = document.getElementById("manualPhotoAiStatus");
+        var aiBtn = document.getElementById("manualPhotoRecognize");
+        var recognizeUrlEl = document.getElementById("manualRecognizeUrl");
+        var recognizing = false;
+
+        function setAiStatus(msg) {
+            if (aiStatusEl) aiStatusEl.textContent = msg || "";
+        }
+
+        function fillEmptyField(id, value) {
+            if (!value) return;
+            var el = document.getElementById(id);
+            if (!el) return;
+            if ((el.value || "").trim()) return; // don't overwrite user input
+            el.value = value;
+            try {
+                el.dispatchEvent(new Event("input", { bubbles: true }));
+                el.dispatchEvent(new Event("change", { bubbles: true }));
+            } catch (e) {}
+        }
+
+        function csrfToken() {
+            var el = form.querySelector('[name="csrfmiddlewaretoken"]');
+            return el ? el.value : "";
+        }
+
+        function recognizeCover(file) {
+            if (!file || recognizing) return;
+            var url = recognizeUrlEl && recognizeUrlEl.value;
+            if (!url) return;
+            recognizing = true;
+            if (aiBtn) aiBtn.disabled = true;
+            setAiStatus("AI розпізнає обкладинку…");
+            var fd = new FormData();
+            fd.append("photo", file, file.name || file._manualName || "cover.jpg");
+            fetch(url, {
+                method: "POST",
+                body: fd,
+                credentials: "same-origin",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRFToken": csrfToken(),
+                },
+            })
+                .then(function (res) {
+                    return res.text().then(function (text) {
+                        var data = null;
+                        try {
+                            data = text ? JSON.parse(text) : null;
+                        } catch (e) {
+                            data = { detail: text.slice(0, 160) };
+                        }
+                        if (!res.ok) {
+                            var msg =
+                                (data && data.detail) ||
+                                "HTTP " + res.status;
+                            throw new Error(msg);
+                        }
+                        return data || {};
+                    });
+                })
+                .then(function (data) {
+                    fillEmptyField("manualIsbn", data.isbn);
+                    fillEmptyField(
+                        "manualTitle",
+                        data.title ||
+                            (data.raw_text
+                                ? String(data.raw_text).split("\n")[0]
+                                : "")
+                    );
+                    fillEmptyField("manualAuthors", data.authors);
+                    fillEmptyField("manualPublisher", data.publisher);
+                    fillEmptyField("manualPublishDate", data.publish_date);
+                    var bits = [];
+                    if (data.title || data.raw_text) bits.push("назва");
+                    if (data.authors) bits.push("автори");
+                    if (data.isbn) bits.push("ISBN");
+                    else if (data.isbn_missing || data.note)
+                        bits.push(data.note || "ISBN code not exists");
+                    setAiStatus(
+                        bits.length
+                            ? "AI заповнив: " + bits.join(", ")
+                            : "AI не знайшов текст на обкладинці"
+                    );
+                })
+                .catch(function (err) {
+                    console.warn("[manual-photo] AI", err);
+                    setAiStatus(
+                        "AI: " +
+                            (err && err.message ? err.message : String(err))
+                    );
+                })
+                .finally(function () {
+                    recognizing = false;
+                    if (aiBtn) aiBtn.disabled = !files.length;
+                });
+        }
+
+        if (aiBtn) {
+            aiBtn.addEventListener("click", function () {
+                if (!files.length) return;
+                recognizeCover(files[files.length - 1]);
+            });
         }
 
         function openStream() {
@@ -635,7 +742,6 @@
             stopStream();
 
             var fd = new FormData();
-            // Copy all non-file fields
             Array.prototype.forEach.call(form.elements, function (el) {
                 if (!el || !el.name) return;
                 if (el === dest) return;
@@ -646,7 +752,6 @@
                 }
                 fd.append(el.name, el.value);
             });
-            // Only currently kept photos
             files.forEach(function (f, i) {
                 var fname = f.name || f._manualName || "book_" + (i + 1) + ".jpg";
                 fd.append("photos", f, fname);
@@ -660,21 +765,48 @@
                 method: method,
                 body: fd,
                 credentials: "same-origin",
-                headers: { "X-Requested-With": "XMLHttpRequest" },
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRFToken": csrfToken(),
+                    Accept: "application/json",
+                },
                 redirect: "follow",
             })
                 .then(function (res) {
-                    if (res.redirected && res.url) {
-                        window.location.href = res.url;
-                        return;
-                    }
-                    // Django usually 302 → follow gives 200 of library page
-                    if (res.ok) {
-                        window.location.href = res.url || window.location.pathname;
-                        return;
-                    }
-                    return res.text().then(function (t) {
-                        throw new Error("HTTP " + res.status + " " + t.slice(0, 120));
+                    return res.text().then(function (text) {
+                        var data = null;
+                        try {
+                            data = text ? JSON.parse(text) : null;
+                        } catch (e) {
+                            data = null;
+                        }
+                        if (data && typeof data === "object") {
+                            if (data.ok && data.redirect) {
+                                window.location.href = data.redirect;
+                                return;
+                            }
+                            if (!res.ok || data.ok === false) {
+                                throw new Error(
+                                    data.detail ||
+                                        "Не збережено (photos=" +
+                                            (data.photos_received || 0) +
+                                            ")"
+                                );
+                            }
+                        }
+                        // Legacy HTML response / redirect follow
+                        if (res.redirected && res.url) {
+                            window.location.href = res.url;
+                            return;
+                        }
+                        if (res.ok) {
+                            window.location.href =
+                                res.url || window.location.pathname;
+                            return;
+                        }
+                        throw new Error(
+                            "HTTP " + res.status + " " + String(text).slice(0, 120)
+                        );
                     });
                 })
                 .catch(function (err) {
@@ -704,13 +836,15 @@
                     playShutter._ctx.resume();
                 }
             } catch (e) {}
+            if (modalEl.parentElement !== document.body) {
+                document.body.appendChild(modalEl);
+            }
             bsModal = window.bootstrap.Modal.getOrCreateInstance(modalEl, {
                 backdrop: true,
                 keyboard: true,
             });
             bsModal.show();
         });
-
         modalEl.addEventListener("shown.bs.modal", function () {
             if (starting) return;
             startCamera();
@@ -743,5 +877,202 @@
         document.addEventListener("DOMContentLoaded", init);
     } else {
         init();
+    }
+})();
+
+/* Edit manually-added shelf books */
+(function () {
+    "use strict";
+
+    function csrfToken() {
+        var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        if (m) return decodeURIComponent(m[1]);
+        var el = document.querySelector("#editManualBookForm input[name=csrfmiddlewaretoken]");
+        return el ? el.value : "";
+    }
+
+    function showModal(modalEl) {
+        // Escape .site-main { z-index:1 } stacking context so modal beats navbar (1030)
+        if (modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+        if (typeof bootstrap !== "undefined" && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            return;
+        }
+        modalEl.classList.add("show");
+        modalEl.style.display = "block";
+        modalEl.removeAttribute("aria-hidden");
+        modalEl.setAttribute("aria-modal", "true");
+        document.body.classList.add("modal-open");
+        if (!document.getElementById("editManualBookBackdrop")) {
+            var bd = document.createElement("div");
+            bd.className = "modal-backdrop fade show";
+            bd.id = "editManualBookBackdrop";
+            document.body.appendChild(bd);
+        }
+    }
+
+    function initEditManual() {
+        var modalEl = document.getElementById("editManualBookModal");
+        var form = document.getElementById("editManualBookForm");
+        if (!modalEl || !form) {
+            console.warn("[edit-manual] modal/form missing");
+            return;
+        }
+        if (modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+
+        var existingBox = document.getElementById("editManualExistingPhotos");
+        var statusEl = document.getElementById("editManualStatus");
+        var saveBtn = document.getElementById("editManualSaveBtn");
+        var submitting = false;
+
+        function setStatus(msg) {
+            if (statusEl) statusEl.textContent = msg || "";
+        }
+
+        document.querySelectorAll(".js-edit-manual-book").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var sid = btn.getAttribute("data-shelf-id") || "";
+                var payloadEl = document.getElementById("edit-book-payload-" + sid);
+                var data = {};
+                try {
+                    data = JSON.parse(
+                        (payloadEl && payloadEl.textContent) || "{}"
+                    );
+                } catch (e) {
+                    console.warn("[edit-manual] bad payload", e);
+                    alert("Не вдалося відкрити редагування (пошкоджені дані).");
+                    return;
+                }
+                form.action = data.edit_url || "";
+                if (!form.action) {
+                    alert("Немає URL збереження.");
+                    return;
+                }
+                form.querySelector("#editManualIsbn").value = data.isbn || "";
+                form.querySelector("#editManualTitle").value = data.title || "";
+                form.querySelector("#editManualAuthors").value = data.authors || "";
+                form.querySelector("#editManualPublisher").value = data.publisher || "";
+                form.querySelector("#editManualPublishDate").value =
+                    data.publish_date || "";
+                var photosInput = form.querySelector("#editManualPhotos");
+                if (photosInput) photosInput.value = "";
+                if (existingBox) existingBox.innerHTML = "";
+                setStatus("");
+                (data.photos || []).forEach(function (p) {
+                    if (!existingBox || !p || !p.id || !p.url) return;
+                    var wrap = document.createElement("label");
+                    wrap.className = "manual-photo-thumb position-relative";
+                    wrap.style.cssText = "display:inline-block;width:72px;";
+                    var img = document.createElement("img");
+                    img.src = p.url;
+                    img.alt = "";
+                    img.style.cssText =
+                        "width:72px;height:96px;object-fit:cover;border-radius:4px;";
+                    var span = document.createElement("span");
+                    span.className = "small d-block text-center mt-1";
+                    var cb = document.createElement("input");
+                    cb.type = "checkbox";
+                    cb.name = "delete_photo_ids";
+                    cb.value = String(p.id);
+                    span.appendChild(cb);
+                    span.appendChild(document.createTextNode(" видалити"));
+                    wrap.appendChild(img);
+                    wrap.appendChild(span);
+                    existingBox.appendChild(wrap);
+                });
+                showModal(modalEl);
+            });
+        });
+
+        form.addEventListener("submit", function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (submitting) return;
+            if (!form.action) {
+                setStatus("Немає URL збереження.");
+                return;
+            }
+            submitting = true;
+            if (saveBtn) saveBtn.disabled = true;
+            setStatus("Збереження…");
+
+            var fd = new FormData();
+            Array.prototype.forEach.call(form.elements, function (el) {
+                if (!el || !el.name) return;
+                if (el.type === "file") return;
+                if (el.type === "submit" || el.type === "button") return;
+                if ((el.type === "checkbox" || el.type === "radio") && !el.checked) {
+                    return;
+                }
+                fd.append(el.name, el.value);
+            });
+            var photosInput = form.querySelector("#editManualPhotos");
+            if (photosInput && photosInput.files) {
+                Array.prototype.forEach.call(photosInput.files, function (f) {
+                    if (f && f.size > 0) fd.append("photos", f, f.name || "book.jpg");
+                });
+            }
+
+            fetch(form.action, {
+                method: "POST",
+                body: fd,
+                credentials: "same-origin",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRFToken": csrfToken(),
+                    Accept: "application/json",
+                },
+                redirect: "follow",
+            })
+                .then(function (res) {
+                    return res.text().then(function (text) {
+                        var data = null;
+                        try {
+                            data = text ? JSON.parse(text) : null;
+                        } catch (e) {
+                            data = null;
+                        }
+                        if (data && typeof data === "object") {
+                            if (data.ok && data.redirect) {
+                                window.location.href = data.redirect;
+                                return;
+                            }
+                            if (!res.ok || data.ok === false) {
+                                throw new Error(data.detail || "Не збережено");
+                            }
+                        }
+                        if (res.redirected && res.url) {
+                            window.location.href = res.url;
+                            return;
+                        }
+                        if (res.ok) {
+                            window.location.href =
+                                res.url || window.location.pathname;
+                            return;
+                        }
+                        throw new Error(
+                            "HTTP " + res.status + " " + String(text).slice(0, 160)
+                        );
+                    });
+                })
+                .catch(function (err) {
+                    console.warn("[edit-manual] submit", err);
+                    setStatus(err && err.message ? err.message : String(err));
+                })
+                .finally(function () {
+                    submitting = false;
+                    if (saveBtn) saveBtn.disabled = false;
+                });
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initEditManual);
+    } else {
+        initEditManual();
     }
 })();

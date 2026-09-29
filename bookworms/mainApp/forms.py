@@ -126,6 +126,7 @@ class AddBookManualForm(forms.Form):
         widget=forms.TextInput(
             attrs={
                 "class": "form-control",
+                "id": "manualIsbn",
                 "placeholder": "якщо є — інакше збережемо з фото",
             }
         ),
@@ -135,26 +136,36 @@ class AddBookManualForm(forms.Form):
         max_length=500,
         required=False,
         widget=forms.TextInput(
-            attrs={"class": "form-control", "placeholder": "або залиште порожнім — «Книга (локальний запис)»"}
+            attrs={
+                "class": "form-control",
+                "id": "manualTitle",
+                "placeholder": "або залиште порожнім — «Книга (локальний запис)»",
+            }
         ),
     )
     authors = forms.CharField(
         label="Автори",
         max_length=500,
         required=False,
-        widget=forms.TextInput(attrs={"class": "form-control"}),
+        widget=forms.TextInput(attrs={"class": "form-control", "id": "manualAuthors"}),
     )
     publisher = forms.CharField(
         label="Видавець",
         max_length=300,
         required=False,
-        widget=forms.TextInput(attrs={"class": "form-control"}),
+        widget=forms.TextInput(attrs={"class": "form-control", "id": "manualPublisher"}),
     )
     publish_date = forms.CharField(
         label="Дата видання",
         max_length=64,
         required=False,
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "2020 або 15.03.2020"}),
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "manualPublishDate",
+                "placeholder": "2020 або 15.03.2020",
+            }
+        ),
     )
     cover_url = forms.URLField(
         label="URL обкладинки",
@@ -171,6 +182,8 @@ class AddBookManualForm(forms.Form):
 
     def clean_isbn(self):
         raw = (self.cleaned_data.get("isbn") or "").strip().upper()
+        if not raw:
+            return ""
         compact = raw.replace("-", "").replace(" ", "")
         if len(compact) == 10 and compact[-1] == "X":
             head = "".join(c for c in compact[:9] if c.isdigit())
@@ -185,6 +198,12 @@ class AddBookManualForm(forms.Form):
                 "ISBN має містити 10 або 13 цифр (можна з дефісами; для ISBN-10 допускається X в кінці)."
             )
         return digits
+
+
+class EditBookManualForm(AddBookManualForm):
+    """Same fields as manual add; used to patch an owned manual shelf book."""
+
+    pass
 
 
 class SendExchangePartnerMessageForm(forms.Form):

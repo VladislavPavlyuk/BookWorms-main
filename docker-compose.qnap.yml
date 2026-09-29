@@ -74,6 +74,16 @@ services:
       ISBNDB_API_KEY: ${ISBNDB_API_KEY:-}
       GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
       BOOK_METADATA_PROVIDERS: ${BOOK_METADATA_PROVIDERS:-openlibrary,isbndb,googlebooks,librarything}
+      # OCR keys: default free OCR.space key so blank ${VAR:-} cannot wipe recognition.
+      # Override in project-root .env anytime.
+      OCR_SPACE_API_KEY: ${OCR_SPACE_API_KEY:-K89147673988957}
+      OCR_SPACE_API_URL: ${OCR_SPACE_API_URL:-https://api.ocr.space/parse/image}
+      OCR_SPACE_LANGUAGE: ${OCR_SPACE_LANGUAGE:-auto}
+      OCR_SPACE_ENGINE: ${OCR_SPACE_ENGINE:-3}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_VISION_MODEL: ${OPENAI_VISION_MODEL:-gpt-4o-mini}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENLIBRARY_CONTACT_EMAIL: ${OPENLIBRARY_CONTACT_EMAIL:-admin@datedueslip.com}
       OPENLIBRARY_USER_AGENT: ${OPENLIBRARY_USER_AGENT:-DateDueSlip/1.0 (mailto:admin@datedueslip.com)}
       GUNICORN_WORKERS: "1"
@@ -86,6 +96,9 @@ services:
     volumes:
       - media:/app/media
       - staticfiles:/app/staticfiles
+      # Mount host .env so OCR_SPACE_API_KEY is readable even if compose
+      # previously blanked the env var (settings loads /app/.env).
+      - ./.env:/app/.env:ro
     mem_limit: 384m
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=3)"]

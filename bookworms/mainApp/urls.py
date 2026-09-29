@@ -20,9 +20,11 @@ from .views import (
     edit_post,
     mark_post_watched,
     my_library,
+    recognize_book_cover_view,
     due_slips,
     update_shelf_book_reader_age,
     unlock_shelf_reader_age_edit,
+    update_manual_shelf_book,
     remove_shelf_entry,
     return_borrowed_shelf_book,
     confirm_return_borrowed_shelf_book,
@@ -48,6 +50,11 @@ urlpatterns = [
     path('', home, name='home'),
     # --- Бібліотека та обмін книгами ---
     path('library/', my_library, name='my_library'),
+    path(
+        'library/recognize-cover/',
+        recognize_book_cover_view,
+        name='recognize_book_cover',
+    ),
     # ISBN scanner assets (not /static/ — named volume can keep frozen old JS)
     path(
         "library/isbn-scan-assets/<str:name>",
@@ -64,6 +71,11 @@ urlpatterns = [
         'library/shelf/<int:shelf_id>/reader-age/unlock/',
         unlock_shelf_reader_age_edit,
         name='unlock_shelf_reader_age_edit',
+    ),
+    path(
+        'library/shelf/<int:shelf_id>/edit/',
+        update_manual_shelf_book,
+        name='update_manual_shelf_book',
     ),
     path('library/remove/<int:shelf_id>/', remove_shelf_entry, name='remove_shelf_entry'),
     path('library/return/<int:shelf_id>/', return_borrowed_shelf_book, name='return_borrowed_shelf_book'),

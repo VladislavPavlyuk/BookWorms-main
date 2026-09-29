@@ -85,6 +85,7 @@ from .serializers import (
     RegisterSerializer,
     SendMessageSerializer,
     ShelfSerializer,
+    UpdateBookManualSerializer,
     UserPublicSerializer,
 )
 
@@ -537,6 +538,106 @@ def shelf_add_manual(request):
         .get(pk=shelf.pk)
     )
     return Response(ShelfSerializer(shelf, context={"request": request}).data, status=201)
+
+
+@api_view(["POST", "PATCH", "PUT"])
+@parser_classes([JSONParser, MultiPartParser, FormParser])
+def shelf_update_manual(request, shelf_id):
+    """Update bibliographic fields / photos of a sole-owned manually added book."""
+    shelf = (
+        Shelf.objects.select_related("book", "copy", "borrowed_from", "user")
+        .prefetch_related("book__photos")
+        .filter(pk=shelf_id, user=request.user)
+        .first()
+    )
+    if not shelf:
+        return _error("Запис не знайдено.", 404)
+    if shelf.borrowed_from_id:
+        return _error("Позичену книгу не можна редагувати.")
+    if is_copy_lent_out(shelf.copy_id):
+        return _error("Примірник зараз у позиці — спочатку дочекайтесь повернення.")
+
+    from mainApp.book_photos import (
+        delete_book_photos,
+        save_book_photos,
+        update_manual_book,
+        user_can_edit_manual_book,
+    )
+
+    book = shelf.book
+    if not user_can_edit_manual_book(request.user, book):
+        return _error(
+            "Редагувати можна лише власні вручну додані книги (локальний ISBN або з вашими фото).",
+            403,
+        )
+
+    ser = UpdateBookManualSerializer(data=request.data, partial=True)
+    ser.is_valid(raise_exception=True)
+    d = ser.validated_data
+
+    raw_delete = d.pop("delete_photo_ids", "") or ""
+    if hasattr(request.data, "getlist"):
+        extra = request.data.getlist("delete_photo_ids")
+        if extra:
+            raw_delete = ",".join(str(x) for x in extra if x)
+    delete_ids: list[int] = []
+    for part in str(raw_delete).replace(" ", ",").split(","):
+        part = part.strip()
+        if part.isdigit():
+            delete_ids.append(int(part))
+
+    try:
+        book = update_manual_book(
+            book,
+            isbn=d["isbn"] if "isbn" in d else None,
+            title=d["title"] if "title" in d else None,
+            authors=d["authors"] if "authors" in d else None,
+            publisher=d["publisher"] if "publisher" in d else None,
+            publish_date=d["publish_date"] if "publish_date" in d else None,
+            cover_url=d["cover_url"] if "cover_url" in d else None,
+            info_url=d["info_url"] if "info_url" in d else None,
+        )
+    except ValueError as exc:
+        return _error(str(exc))
+
+    if delete_ids:
+        delete_book_photos(book, delete_ids)
+
+    files = request.FILES.getlist("photos")
+    if not files and request.FILES.get("photo"):
+        files = [request.FILES.get("photo")]
+    if files:
+        save_book_photos(book, files, request=request)
+
+    book.refresh_from_db()
+    shelf = (
+        Shelf.objects.select_related("book", "borrowed_from", "user", "copy")
+        .prefetch_related("book__photos")
+        .get(pk=shelf.pk)
+    )
+    return Response(ShelfSerializer(shelf, context={"request": request}).data)
+
+
+@api_view(["POST"])
+@parser_classes([MultiPartParser, FormParser])
+def shelf_recognize_cover(request):
+    """AI: extract title / authors / ISBN from a cover photo (manual add)."""
+    uploaded = request.FILES.get("photo") or request.FILES.get("photos")
+    if not uploaded:
+        return _error("Потрібне фото обкладинки (поле photo).")
+    from mainApp.book_cover_ai import CoverAIError, recognize_book_cover, vision_configured
+
+    # Always attempt recognition — vision_configured now has a free-key fallback.
+    if not vision_configured():
+        return _error(
+            "Розпізнавання не налаштовано (OCR_SPACE_API_KEY або OPENAI_API_KEY).",
+            503,
+        )
+    try:
+        data = recognize_book_cover(uploaded)
+    except CoverAIError as exc:
+        return _error(exc.message, exc.status)
+    return Response(data)
 
 
 @api_view(["DELETE"])

@@ -182,12 +182,13 @@ def save_book_photos(book: Book, uploaded_files, request=None) -> list[BookPhoto
         if not f or not getattr(f, "name", None):
             continue
         size = getattr(f, "size", 0) or 0
-        if size < 0 or size > MAX_PHOTO_BYTES:
+        if size <= 0 or size > MAX_PHOTO_BYTES:
             continue
         content_type = (getattr(f, "content_type", "") or "").lower()
+        # Browsers/RN often omit or send octet-stream — still accept
         if content_type and not (
             content_type.startswith("image/")
-            or content_type in ("application/octet-stream", "")
+            or content_type in ("application/octet-stream", "binary/octet-stream", "")
         ):
             continue
 
@@ -200,9 +201,16 @@ def save_book_photos(book: Book, uploaded_files, request=None) -> list[BookPhoto
         )
         saved.append(photo)
 
-    if saved and not (book.cover_url or "").strip():
-        book.cover_url = _absolute_url(request, saved[0].image)[:500]
-        book.save(update_fields=["cover_url"])
+    if saved:
+        # Always refresh cover from first photo of this batch when cover empty
+        # or when previous cover was a placeholder / missing
+        first_url = _absolute_url(request, saved[0].image)[:500]
+        cover = (book.cover_url or "").strip()
+        if not cover:
+            book.cover_url = first_url
+            book.save(update_fields=["cover_url"])
+        # If cover already set from an earlier photo URL pattern, keep it;
+        # if this is the first photo ever, ensure_cover handles above.
 
     return saved
 
@@ -221,6 +229,123 @@ def book_photo_urls(book: Book, request=None) -> list[str]:
     return [_absolute_url(request, p.image) for p in book.photos.all()]
 
 
+def is_local_isbn(isbn: str | None) -> bool:
+    return bool(isbn) and str(isbn).startswith("9799")
+
+
+def user_can_edit_manual_book(user, book: Book) -> bool:
+    """
+    Manual / private catalog rows only.
+    Shared catalog books (other owners) are read-only for metadata.
+    """
+    from .models import BookCopy
+
+    if BookCopy.objects.filter(book=book).exclude(owner=user).exists():
+        return False
+    return is_local_isbn(book.isbn) or book.photos.exists()
+
+
+def delete_book_photos(book: Book, photo_ids: list[int]) -> int:
+    if not photo_ids:
+        return 0
+    qs = book.photos.filter(pk__in=photo_ids)
+    n = 0
+    for photo in qs:
+        try:
+            photo.image.delete(save=False)
+        except Exception:
+            pass
+        photo.delete()
+        n += 1
+    if n:
+        first = book.photos.order_by("sort_order", "id").first()
+        if first:
+            # leave cover_url; ensure_cover only fills empty
+            pass
+        elif (book.cover_url or "").strip() and "/media/book_photos/" in (book.cover_url or ""):
+            book.cover_url = ""
+            book.save(update_fields=["cover_url"])
+    return n
+
+
+def update_manual_book(
+    book: Book,
+    *,
+    isbn: str | None = None,
+    title: str | None = None,
+    authors: str | None = None,
+    publisher: str | None = None,
+    publish_date: str | None = None,
+    cover_url: str | None = None,
+    info_url: str | None = None,
+) -> Book:
+    """
+    Overwrite bibliographic fields on a sole-owned manual book.
+    Empty isbn keeps the current code (incl. local 9799…).
+    New valid ISBN replaces it when unique.
+    """
+    from .book_cover_ai import NO_ISBN_NOTE
+    from .book_lookup import normalize_isbn
+
+    changed: list[str] = []
+
+    if title is not None:
+        t = (title or "").strip()[:500] or book.title
+        if t != book.title:
+            book.title = t
+            changed.append("title")
+    if authors is not None:
+        a = (authors or "").strip()[:500]
+        if a != (book.authors or ""):
+            book.authors = a
+            changed.append("authors")
+    if publisher is not None:
+        p = (publisher or "").strip()[:300]
+        if p != (book.publisher or ""):
+            book.publisher = p
+            changed.append("publisher")
+    if publish_date is not None:
+        d = (publish_date or "").strip()[:64]
+        if d != (book.publish_date or ""):
+            book.publish_date = d
+            changed.append("publish_date")
+    if cover_url is not None:
+        c = (cover_url or "").strip()[:500]
+        if c != (book.cover_url or ""):
+            book.cover_url = c
+            changed.append("cover_url")
+    if info_url is not None:
+        u = (info_url or "").strip()[:500]
+        if u != (book.info_url or ""):
+            book.info_url = u
+            changed.append("info_url")
+
+    if isbn is not None:
+        raw = (isbn or "").strip()
+        if raw:
+            norm = normalize_isbn(raw)
+            if not norm:
+                raise ValueError(
+                    "Невірний ISBN (10 або 13). Залиште порожнім, щоб зберегти поточний код."
+                )
+            if norm != book.isbn:
+                if Book.objects.filter(isbn=norm).exclude(pk=book.pk).exists():
+                    raise ValueError("Книга з таким ISBN вже є в каталозі.")
+                book.isbn = norm
+                changed.append("isbn")
+        # blank isbn → keep existing (including local 9799)
+
+    if changed:
+        try:
+            book.save(update_fields=changed)
+        except IntegrityError as exc:
+            raise ValueError("Не вдалося зберегти ISBN (конфлікт).") from exc
+
+    book._isbn_missing = is_local_isbn(book.isbn)  # type: ignore[attr-defined]
+    book._isbn_note = NO_ISBN_NOTE if book._isbn_missing else ""  # type: ignore[attr-defined]
+    return book
+
+
 def create_manual_book(
     *,
     isbn: str | None,
@@ -233,14 +358,17 @@ def create_manual_book(
 ) -> Book:
     """
     Create/update catalog Book without Open Library / ISBNdb.
-    Empty ISBN → allocate local 9799… code.
+    Empty / invalid ISBN → allocate local 9799… code (note: ISBN code not exists).
     """
+    from .book_cover_ai import NO_ISBN_NOTE
     from .book_lookup import normalize_isbn
     from .exchange.catalog import get_or_create_book_from_payload
 
     raw = (isbn or "").strip()
     norm = normalize_isbn(raw) if raw else None
+    allocated_local = False
     if not norm:
+        allocated_local = True
         # retry allocate on rare collision
         for _ in range(5):
             norm = allocate_local_isbn()
@@ -260,5 +388,9 @@ def create_manual_book(
         book, _ = get_or_create_book_from_payload(payload)
     except IntegrityError:
         payload["isbn"] = allocate_local_isbn()
+        allocated_local = True
         book, _ = get_or_create_book_from_payload(payload)
+    # Stash on instance for API/views (not a DB column)
+    book._isbn_missing = allocated_local or is_local_isbn(book.isbn)  # type: ignore[attr-defined]
+    book._isbn_note = NO_ISBN_NOTE if book._isbn_missing else ""  # type: ignore[attr-defined]
     return book

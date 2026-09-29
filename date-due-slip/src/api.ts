@@ -258,6 +258,60 @@ export const ShelfApi = {
     });
     return api<Shelf>("/api/shelf/manual/", { method: "POST", body: fd, formData: true });
   },
+  updateManual: (
+    shelfId: number,
+    body: {
+      isbn?: string;
+      title?: string;
+      authors?: string;
+      publisher?: string;
+      publish_date?: string;
+      cover_url?: string;
+      info_url?: string;
+      delete_photo_ids?: number[];
+      photos?: { uri: string; name?: string; type?: string }[];
+    }
+  ) => {
+    const photos = body.photos || [];
+    const deletes = body.delete_photo_ids || [];
+    // Always multipart/POST — avoids PATCH quirks and empty JSON edge cases.
+    const fd = new FormData();
+    if (body.isbn != null) fd.append("isbn", body.isbn);
+    if (body.title != null) fd.append("title", body.title);
+    if (body.authors != null) fd.append("authors", body.authors);
+    if (body.publisher != null) fd.append("publisher", body.publisher);
+    if (body.publish_date != null) fd.append("publish_date", body.publish_date);
+    if (body.cover_url) fd.append("cover_url", body.cover_url);
+    if (body.info_url) fd.append("info_url", body.info_url);
+    deletes.forEach((id) => fd.append("delete_photo_ids", String(id)));
+    photos.forEach((p, i) => {
+      fd.append("photos", {
+        uri: p.uri,
+        name: p.name || `book_${i}.jpg`,
+        type: p.type || "image/jpeg",
+      } as unknown as Blob);
+    });
+    return api<Shelf>(`/api/shelf/${shelfId}/manual/`, { method: "POST", body: fd, formData: true });
+  },
+  recognizeCover: (photo: { uri: string; name?: string; type?: string }) => {
+    const fd = new FormData();
+    fd.append("photo", {
+      uri: photo.uri,
+      name: photo.name || "cover.jpg",
+      type: photo.type || "image/jpeg",
+    } as unknown as Blob);
+    return api<{
+      title: string;
+      authors: string;
+      isbn: string;
+      publisher: string;
+      publish_date: string;
+      source?: string;
+      raw_text?: string;
+      isbn_missing?: boolean;
+      note?: string;
+    }>("/api/shelf/recognize-cover/", { method: "POST", body: fd, formData: true });
+  },
   remove: (id: number) => api(`/api/shelf/${id}/`, { method: "DELETE" }),
   returnBook: (id: number) => api(`/api/shelf/${id}/return/`, { method: "POST" }),
   confirmReturn: (id: number) => api(`/api/shelf/${id}/confirm-return/`, { method: "POST" }),
