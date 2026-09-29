@@ -24,12 +24,23 @@
           "cameraPermission": "Allow Реченець to scan ISBN barcodes on book covers.",
           "recordAudioAndroid": false
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Реченець to attach book photos when adding a book manually.",
+          "cameraPermission": "Allow Реченець to photograph books when adding them manually."
+        }
       ]
     ],
     "android": {
       "package": "com.bookworms.datedueslip",
       "usesCleartextTraffic": true,
-      "permissions": ["android.permission.CAMERA"],
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F4F0E6"
@@ -39,7 +50,8 @@
       "bundleIdentifier": "com.bookworms.datedueslip",
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow Реченець to scan ISBN barcodes on book covers.",
+        "NSCameraUsageDescription": "Allow Реченець to scan ISBN barcodes and photograph books.",
+        "NSPhotoLibraryUsageDescription": "Allow Реченець to attach book photos from your library.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },

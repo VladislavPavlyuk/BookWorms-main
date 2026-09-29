@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
+import { Audio } from "expo-av";
 import { colors, fs, s, btnRadius } from "./theme";
 
 /** Digits only; keep 10 or 13 for ISBN-10 / EAN-13 (978/979). */
@@ -13,6 +14,36 @@ export function normalizeIsbn(raw: string): string | null {
     if (/^\d{13}$/.test(tail13)) return tail13;
   }
   return null;
+}
+
+/** For auto-add while typing: 978/979 wait until 13 digits (don't fire at 10). */
+export function isbnReadyToAdd(raw: string): string | null {
+  const digits = (raw || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+  if (/^\d{13}$/.test(digits)) return digits;
+  if (/^97[89]/.test(digits)) return null;
+  if (/^[\dX]{10}$/.test(digits)) return digits;
+  return null;
+}
+
+async function playShutterClick() {
+  try {
+    await Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+    });
+    const { sound } = await Audio.Sound.createAsync(
+      require("../assets/shutter_click.wav"),
+      { shouldPlay: true, volume: 1 }
+    );
+    sound.setOnPlaybackStatusUpdate((st) => {
+      if (!st.isLoaded) return;
+      if (st.didJustFinish) {
+        sound.unloadAsync().catch(() => {});
+      }
+    });
+  } catch {
+    /* ignore — recognition still proceeds */
+  }
 }
 
 type Props = {
@@ -51,6 +82,7 @@ export function IsbnScanModal({ visible, onClose, onScan }: Props) {
       }
       setScanned(true);
       setHint(isbn);
+      void playShutterClick();
       onScan(isbn);
     },
     [onScan, scanned, visible]
@@ -75,14 +107,16 @@ export function IsbnScanModal({ visible, onClose, onScan }: Props) {
           </View>
         ) : (
           <>
-            <CameraView
-              style={StyleSheet.absoluteFill}
-              facing="back"
-              barcodeScannerSettings={{
-                barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128", "code39"],
-              }}
-              onBarcodeScanned={scanned ? undefined : onBarcode}
-            />
+            {visible ? (
+              <CameraView
+                style={StyleSheet.absoluteFill}
+                facing="back"
+                barcodeScannerSettings={{
+                  barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128", "code39"],
+                }}
+                onBarcodeScanned={scanned ? undefined : onBarcode}
+              />
+            ) : null}
             <View style={styles.overlay} pointerEvents="box-none">
               <View style={styles.frame} />
               <Text style={styles.hint}>{hint}</Text>

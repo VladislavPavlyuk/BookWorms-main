@@ -78,6 +78,7 @@ class MeUpdateSerializer(serializers.ModelSerializer):
 
 class BookSerializer(serializers.ModelSerializer):
     reader_age_summary = serializers.CharField(read_only=True)
+    photo_urls = serializers.SerializerMethodField()
 
     class Meta:
         model = Book
@@ -90,10 +91,16 @@ class BookSerializer(serializers.ModelSerializer):
             "publish_date",
             "cover_url",
             "info_url",
+            "photo_urls",
             "min_readers_age",
             "max_readers_age",
             "reader_age_summary",
         )
+
+    def get_photo_urls(self, obj):
+        from mainApp.book_photos import book_photo_urls
+
+        return book_photo_urls(obj, request=self.context.get("request"))
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -272,8 +279,8 @@ class AddIsbnSerializer(serializers.Serializer):
 
 
 class AddBookManualSerializer(serializers.Serializer):
-    isbn = serializers.CharField(max_length=32)
-    title = serializers.CharField(max_length=500)
+    isbn = serializers.CharField(max_length=32, required=False, allow_blank=True, default="")
+    title = serializers.CharField(max_length=500, required=False, allow_blank=True, default="")
     authors = serializers.CharField(required=False, allow_blank=True, default="")
     publisher = serializers.CharField(required=False, allow_blank=True, default="")
     publish_date = serializers.CharField(required=False, allow_blank=True, default="")

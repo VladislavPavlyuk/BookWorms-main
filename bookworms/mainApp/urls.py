@@ -42,11 +42,18 @@ from .views import (
 )
 from .views import add_comment
 from .views import toggle_like
+from .isbn_scan_assets import isbn_scan_asset
 
 urlpatterns = [
     path('', home, name='home'),
     # --- Бібліотека та обмін книгами ---
     path('library/', my_library, name='my_library'),
+    # ISBN scanner assets (not /static/ — named volume can keep frozen old JS)
+    path(
+        "library/isbn-scan-assets/<str:name>",
+        isbn_scan_asset,
+        name="isbn_scan_asset",
+    ),
     path('library/slips/', due_slips, name='due_slips'),
     path(
         'library/shelf/<int:shelf_id>/reader-age/',

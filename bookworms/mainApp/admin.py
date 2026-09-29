@@ -5,6 +5,7 @@ from .models import (
     Book,
     BookCopy,
     BookExchangeRequest,
+    BookPhoto,
     CopyEvent,
     CustomUser,
     LoanHandoff,
@@ -53,10 +54,16 @@ class PostAdmin(admin.ModelAdmin):
 # Нижче - реєстрація моделей бібліотеки в адмінці Django (/admin/) для перегляду та правок у БД.
 
 
+class BookPhotoInline(admin.TabularInline):
+    model = BookPhoto
+    extra = 0
+
+
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
     list_display = ("title", "isbn", "authors", "min_readers_age", "max_readers_age", "created_at")
     search_fields = ("title", "isbn", "authors")
+    inlines = (BookPhotoInline,)
 
 
 @admin.register(BookCopy)

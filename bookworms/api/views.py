@@ -53,6 +53,7 @@ from mainApp.models import (
     Shelf,
 )
 from mainApp.exceptions import ExchangeError
+from mainApp.book_lookup import normalize_isbn
 
 from mainApp.web3forms_mail import (
     activation_payload,
@@ -425,6 +426,7 @@ def post_comment(request, post_id):
 def my_shelf(request):
     shelves_all = list(
         request.user.shelf_entries.select_related("book", "borrowed_from", "user", "copy")
+        .prefetch_related("book__photos")
         .order_by("-added_at")
     )
     shelves_all = ensure_shelves_have_copies(shelves_all)
@@ -499,26 +501,40 @@ def shelf_add_isbn(request):
 
 
 @api_view(["POST"])
+@parser_classes([JSONParser, MultiPartParser, FormParser])
 def shelf_add_manual(request):
     ser = AddBookManualSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
     d = ser.validated_data
-    isbn = normalize_isbn(d["isbn"])
-    if not isbn:
-        return _error("Невірний ISBN.")
-    payload = {
-        "isbn": isbn,
-        "title": d["title"].strip(),
-        "authors": (d.get("authors") or "").strip(),
-        "publisher": (d.get("publisher") or "").strip(),
-        "publish_date": (d.get("publish_date") or "").strip(),
-        "cover_url": (d.get("cover_url") or "").strip(),
-        "info_url": (d.get("info_url") or "").strip(),
-    }
-    book, _ = get_or_create_book_from_payload(payload)
+    raw_isbn = (d.get("isbn") or "").strip()
+    title = (d.get("title") or "").strip()
+    files = request.FILES.getlist("photos")
+    if not files and request.FILES.get("photo"):
+        files = [request.FILES.get("photo")]
+    if raw_isbn and not normalize_isbn(raw_isbn):
+        return _error(
+            "Невірний ISBN (10 або 13). Залиште порожнім — збережемо з фото."
+        )
+    if not title and not files:
+        return _error("Вкажіть назву або прикріпіть хоча б одне фото обкладинки.")
+    from mainApp.book_photos import create_manual_book, save_book_photos
+
+    book = create_manual_book(
+        isbn=raw_isbn,
+        title=title,
+        authors=(d.get("authors") or "").strip(),
+        publisher=(d.get("publisher") or "").strip(),
+        publish_date=(d.get("publish_date") or "").strip(),
+        cover_url=(d.get("cover_url") or "").strip(),
+        info_url=(d.get("info_url") or "").strip(),
+    )
+    save_book_photos(book, files, request=request)
+    book.refresh_from_db()
     shelf = add_owned_copy(request.user, book)
-    shelf = Shelf.objects.select_related("book", "borrowed_from", "user", "copy").get(
-        pk=shelf.pk
+    shelf = (
+        Shelf.objects.select_related("book", "borrowed_from", "user", "copy")
+        .prefetch_related("book__photos")
+        .get(pk=shelf.pk)
     )
     return Response(ShelfSerializer(shelf, context={"request": request}).data, status=201)
 

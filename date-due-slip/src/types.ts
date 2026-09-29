@@ -16,6 +16,7 @@ export type Book = {
   publish_date: string;
   cover_url: string;
   info_url: string;
+  photo_urls?: string[];
   min_readers_age: number;
   max_readers_age: number;
   reader_age_summary: string;

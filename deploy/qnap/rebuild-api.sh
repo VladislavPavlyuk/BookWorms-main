@@ -9,7 +9,15 @@ test -f bookworms/mainApp/migrations/0018_bookcopy_shelf_copy.py
 test -f bookworms/mainApp/migrations/0019_copyevent.py
 test -f bookworms/mainApp/migrations/0021_copy_queue_and_transmit.py
 test -f bookworms/mainApp/migrations/0022_loan_handoff.py
+test -f bookworms/mainApp/migrations/0023_bookphoto.py
+test -f bookworms/mainApp/static/js/isbn_scan.js
+test -f bookworms/mainApp/static/js/isbn_scan_worker.js
+test -f bookworms/mainApp/static/js/zxing-0.21.3.min.js
+test -f bookworms/mainApp/static/js/manual_book_photos.js
+test -f bookworms/mainApp/isbn_scan_assets.py
+grep -q 'isbn_scan_asset' bookworms/mainApp/urls.py
 grep -q 'class LoanHandoff' bookworms/mainApp/models.py
+grep -q 'class BookPhoto' bookworms/mainApp/models.py
 grep -q 'class AddIsbnForm' bookworms/mainApp/forms.py
 grep -q 'Cheap by default' bookworms/api/views.py
 grep -q 'code_rev' bookworms/api/views.py

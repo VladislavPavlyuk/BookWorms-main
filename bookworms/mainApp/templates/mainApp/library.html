@@ -54,22 +54,33 @@
 <div class="card mb-4">
     <div class="card-body">
         <h5 class="card-title">Додати книгу за ISBN</h5>
-        <form method="post" class="row g-2 align-items-end">
+        <form method="post" class="row g-2 align-items-end" id="addIsbnForm">
             {% csrf_token %}
             <input type="hidden" name="add_isbn" value="1">
-            <div class="col-md-6">
+            <div class="col-10 col-md-10">
                 <label class="form-label" for="{{ form.isbn.id_for_label }}">{{ form.isbn.label }}</label>
                 {{ form.isbn }}
                 {% if form.isbn.errors %}
                     <div class="text-danger small">{{ form.isbn.errors }}</div>
                 {% endif %}
+                <div class="form-text" id="isbnAutoHint">Книга додається автоматично після введення повного ISBN (10 або 13).</div>
             </div>
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-primary w-100">Знайти та додати</button>
+            <div class="col-2 col-md-2">
+                <label class="form-label d-none d-md-block">&nbsp;</label>
+                <button type="button"
+                        class="btn btn-dark w-100 isbn-scan-btn"
+                        id="isbnScanOpen"
+                        title="Сканувати ISBN камерою"
+                        aria-label="Сканувати ISBN камерою">
+                    <svg class="isbn-scan-cam-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path fill="currentColor" d="M9 2 7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3.17L15 2H9zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6z"/>
+                    </svg>
+                </button>
             </div>
         </form>
         <p class="small text-muted mt-2 mb-0">
             Метадані за ISBN: Open Library, потім LibraryThing (якщо є <code>LIBRARYTHING_API_KEY</code>).
+            Іконка камери — сканер штрихкоду.
         </p>
         <div class="mt-3">
             <button type="button"
@@ -84,12 +95,34 @@
     </div>
 </div>
 
+{# Camera ISBN scanner modal #}
+<div class="modal fade" id="isbnScanModal" tabindex="-1" aria-labelledby="isbnScanModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="isbnScanModalLabel">Scan ISBN</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted" id="isbnScanStatus">Запит доступу до камери…</p>
+                <div class="isbn-scan-stage bg-dark rounded overflow-hidden mb-3">
+                    <video id="isbnScanVideo" class="w-100" playsinline muted autoplay></video>
+                </div>
+                <p class="small text-muted mb-0">Наведіть штрихкод ISBN на обкладинці в центр кадру — розпізнавання лише з камери.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="isbnScanClose">Закрити</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="collapse{% if manual_open %} show{% endif %} mb-4" id="manualAddBook">
     <div class="card">
         <div class="card-body">
             <h5 class="card-title">Додати книгу вручну</h5>
-            <p class="small text-muted mb-3">Якщо книги немає за ISBN або зручніше ввести дані самостійно — заповніть поля (ISBN обов’язковий, унікальний у системі).</p>
-            <form method="post" class="row g-3">
+            <p class="small text-muted mb-3">ISBN не обов’язковий: зробіть фото обкладинки (камера обріже фон) — книга потрапить на полицю навіть без знайденого ISBN у каталогах.</p>
+            <form method="post" enctype="multipart/form-data" class="row g-3" id="manualAddBookForm">
                 {% csrf_token %}
                 <input type="hidden" name="add_manual" value="1">
                 <div class="col-md-6">
@@ -124,6 +157,24 @@
                     {{ manual_form.info_url }}
                     {% if manual_form.info_url.errors %}<div class="text-danger small">{{ manual_form.info_url.errors }}</div>{% endif %}
                 </div>
+                <div class="col-12">
+                    <label class="form-label">Фото книги</label>
+                    <p class="small text-muted mb-2">Камера обріже обкладинку без фону. Фото зберігаються на полиці навіть без ISBN / без знахідки в каталогах. Перше фото стане обкладинкою, якщо URL порожній. До 8 фото.</p>
+                    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                        <button type="button"
+                                class="btn btn-dark isbn-scan-btn"
+                                id="manualPhotoCamera"
+                                title="Зняти фото книги"
+                                aria-label="Зняти фото книги">
+                            <svg class="isbn-scan-cam-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path fill="currentColor" d="M9 2 7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3.17L15 2H9zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6z"/>
+                            </svg>
+                        </button>
+                        <span class="small text-muted" id="manualPhotoCount"></span>
+                    </div>
+                    <input type="file" name="photos" id="manualPhotos" class="d-none" accept="image/*" multiple>
+                    <div id="manualPhotoPreview" class="manual-photo-preview d-flex flex-wrap gap-2"></div>
+                </div>
                 <div class="col-12 d-flex flex-wrap gap-2">
                     <button type="submit" class="btn btn-outline-primary">Додати на полицю</button>
                     <button type="button"
@@ -136,6 +187,39 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+{# Live camera capture for manual book photos (getUserMedia — not file picker) #}
+<div class="modal fade" id="manualPhotoCaptureModal" tabindex="-1" aria-labelledby="manualPhotoCaptureLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="manualPhotoCaptureLabel">Фото книги</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="manualPhotoCaptureX"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted" id="manualPhotoCaptureStatus">Запит доступу до камери…</p>
+                <div class="manual-photo-capture-stage isbn-scan-stage bg-dark rounded overflow-hidden mb-2 position-relative">
+                    <video id="manualPhotoCaptureVideo" class="w-100" playsinline muted autoplay></video>
+                    <div id="manualPhotoCropGuide" class="manual-photo-crop-guide" aria-hidden="true"></div>
+                </div>
+                <p class="small text-muted mb-0">Наведіть обкладинку в білу рамку — зйомка автоматична; фон обріжеться. «Зняти» — вручну.</p>
+            </div>
+            <div class="modal-footer justify-content-between align-items-center">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="manualPhotoCaptureClose">Закрити</button>
+                <button type="button"
+                        class="btn btn-dark manual-photo-shutter-btn"
+                        id="manualPhotoShutter"
+                        title="Зняти кадр"
+                        aria-label="Зняти кадр">
+                    <svg class="isbn-scan-cam-icon me-1" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path fill="currentColor" d="M9 2 7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3.17L15 2H9zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6z"/>
+                    </svg>
+                    Зняти
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -154,10 +238,27 @@
                         <a href="{% url 'copy_history' shelf.copy_id %}" class="d-block text-center text-decoration-none library-book-cover-link">
                             <img src="{{ book.cover_url }}" class="card-img-top" alt="" style="max-height: 220px; object-fit: contain; background: #f8f9fa;">
                         </a>
+                    {% elif book.photos.all %}
+                        <a href="{% url 'copy_history' shelf.copy_id %}" class="d-block text-center text-decoration-none library-book-cover-link">
+                            <img src="{{ book.photos.all.0.image.url }}" class="card-img-top" alt="" style="max-height: 220px; object-fit: contain; background: #f8f9fa;">
+                        </a>
+                    {% endif %}
+                    {% if book.photos.all %}
+                        <div class="library-book-photo-strip px-2 pt-2 d-flex flex-wrap gap-1">
+                            {% for photo in book.photos.all %}
+                                <a href="{{ photo.image.url }}" target="_blank" rel="noopener" class="library-book-photo-thumb">
+                                    <img src="{{ photo.image.url }}" alt="">
+                                </a>
+                            {% endfor %}
+                        </div>
                     {% endif %}
                     <div class="card-body d-flex flex-column">
                         <h5 class="card-title"><a href="{% url 'copy_history' shelf.copy_id %}" class="link-dark text-decoration-none library-book-title-link">{{ book.title }}</a></h5>
-                        <p class="card-text small text-muted mb-1">ISBN: {{ book.isbn }}</p>
+                        {% if book.isbn|slice:":4" == "9799" %}
+                            <p class="card-text small text-muted mb-1">Локальний запис (без каталожного ISBN)</p>
+                        {% else %}
+                            <p class="card-text small text-muted mb-1">ISBN: {{ book.isbn }}</p>
+                        {% endif %}
                         {% if book.authors %}
                             <p class="card-text small mb-1">{{ book.authors }}</p>
                         {% endif %}
@@ -236,4 +337,10 @@
     <p class="text-muted">Поки що порожньо -додайте першу книгу за ISBN.</p>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_js %}
+{% load static %}
+<script src="{% url 'isbn_scan_asset' 'isbn_scan.js' %}?v=8"></script>
+<script src="{% url 'isbn_scan_asset' 'manual_book_photos.js' %}?v=8"></script>
 {% endblock %}

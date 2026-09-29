@@ -20,6 +20,16 @@ PY
 echo "entrypoint: migrate..." >&2
 python manage.py migrate --noinput
 echo "entrypoint: collectstatic..." >&2
+# Named volume staticfiles persists across rebuilds — force-refresh ISBN scanner assets
+# so nginx never keeps a frozen/broken previous isbn_scan.js.
+rm -f \
+  /app/staticfiles/js/isbn_scan.js \
+  /app/staticfiles/js/isbn_scan.js.gz \
+  /app/staticfiles/js/isbn_scan_worker.js \
+  /app/staticfiles/js/isbn_scan_worker.js.gz \
+  /app/staticfiles/js/zxing-0.21.3.min.js \
+  /app/staticfiles/js/zxing-0.21.3.min.js.gz \
+  2>/dev/null || true
 python manage.py collectstatic --noinput
 
 if [ -n "${DJANGO_SUPERUSER_USERNAME:-}" ]; then

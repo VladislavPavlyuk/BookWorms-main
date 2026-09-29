@@ -529,27 +529,53 @@ def my_library(request):
                 return redirect("my_library")
 
     elif request.method == "POST" and "add_manual" in request.POST:
-        manual_form = AddBookManualForm(request.POST)
+        manual_form = AddBookManualForm(request.POST, request.FILES)
+        photos = request.FILES.getlist("photos")
         if manual_form.is_valid():
             d = manual_form.cleaned_data
-            payload = {
-                "isbn": d["isbn"],
-                "title": d["title"].strip(),
-                "authors": (d.get("authors") or "").strip(),
-                "publisher": (d.get("publisher") or "").strip(),
-                "publish_date": (d.get("publish_date") or "").strip(),
-                "cover_url": (d.get("cover_url") or "").strip(),
-                "info_url": (d.get("info_url") or "").strip(),
-            }
-            book, _ = get_or_create_book_from_payload(payload)
-            add_owned_copy(request.user, book)
-            messages.success(request, f"Додано вручну: {book.title}")
-            return redirect("my_library")
+            raw_isbn = (d.get("isbn") or "").strip()
+            title = (d.get("title") or "").strip()
+            if raw_isbn:
+                from .book_lookup import normalize_isbn
+
+                if not normalize_isbn(raw_isbn):
+                    manual_form.add_error(
+                        "isbn",
+                        "Невірний ISBN (10 або 13). Залиште порожнім — збережемо з фото.",
+                    )
+                elif not title and not photos:
+                    manual_form.add_error(
+                        "title",
+                        "Вкажіть назву або зробіть хоча б одне фото обкладинки.",
+                    )
+            elif not title and not photos:
+                manual_form.add_error(
+                    "title",
+                    "Вкажіть назву або зробіть хоча б одне фото обкладинки.",
+                )
+            if not manual_form.errors:
+                from .book_photos import create_manual_book, save_book_photos
+
+                book = create_manual_book(
+                    isbn=raw_isbn,
+                    title=title,
+                    authors=(d.get("authors") or "").strip(),
+                    publisher=(d.get("publisher") or "").strip(),
+                    publish_date=(d.get("publish_date") or "").strip(),
+                    cover_url=(d.get("cover_url") or "").strip(),
+                    info_url=(d.get("info_url") or "").strip(),
+                )
+                save_book_photos(book, photos, request=request)
+                add_owned_copy(request.user, book)
+                messages.success(request, f"Додано вручну: {book.title}")
+                return redirect("my_library")
 
     # Полиця = фізичне місце: власні вільні + позичені вами.
     # Власні примірники, які зараз у когось у позиці, тут НЕ показуємо.
     shelves_all = list(
-        request.user.shelf_entries.select_related("book", "borrowed_from", "copy").all()
+        request.user.shelf_entries.select_related("book", "borrowed_from", "copy")
+        .prefetch_related("book__photos")
+        .all()
     )
     pending_returns_to_confirm = list(
         Shelf.objects.filter(borrowed_from=request.user, return_pending=True)

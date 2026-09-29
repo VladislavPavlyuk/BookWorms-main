@@ -117,19 +117,26 @@ class AddIsbnForm(forms.Form):
 
 
 class AddBookManualForm(forms.Form):
-    """Додавання книги на полицю без Open Library - усі поля вводяться вручну."""
+    """Додавання книги на полицю вручну — ISBN необов'язковий (локальний код якщо немає)."""
 
     isbn = forms.CharField(
-        label="ISBN (10 або 13 цифр)",
+        label="ISBN (необов’язково)",
         max_length=32,
+        required=False,
         widget=forms.TextInput(
-            attrs={"class": "form-control", "placeholder": "9780140328721"}
+            attrs={
+                "class": "form-control",
+                "placeholder": "якщо є — інакше збережемо з фото",
+            }
         ),
     )
     title = forms.CharField(
         label="Назва",
         max_length=500,
-        widget=forms.TextInput(attrs={"class": "form-control"}),
+        required=False,
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "placeholder": "або залиште порожнім — «Книга (локальний запис)»"}
+        ),
     )
     authors = forms.CharField(
         label="Автори",

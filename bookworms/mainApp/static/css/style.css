@@ -152,6 +152,26 @@ input[type="button"].btn {
     text-decoration: underline !important;
 }
 
+.library-book-photo-strip {
+    background: #f8f9fa;
+}
+
+.library-book-photo-thumb {
+    display: block;
+    width: 52px;
+    height: 52px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    flex-shrink: 0;
+}
+
+.library-book-photo-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .due-slip--overdue {
     background: #fbe9e5;
     border-left: 4px solid #c62828 !important;
@@ -845,11 +865,139 @@ html {
     }
 }
 
-/* Prefer reduced motion */
-@media (prefers-reduced-motion: reduce) {
-    .avatar-item img:hover {
-        transform: none;
-    }
+.isbn-scan-stage {
+    min-height: 200px;
+    max-height: 42vh;
+    background: #111;
+    position: relative;
+    z-index: 1;
+}
+
+.isbn-scan-stage video {
+    max-height: 42vh;
+    width: 100%;
+    object-fit: contain;
+    background: #000;
+    display: block;
+    pointer-events: none;
+}
+
+#isbnScanModal .modal-footer {
+    position: relative;
+    z-index: 5;
+}
+
+#isbnScanModal .modal-header {
+    position: relative;
+    z-index: 5;
+}
+
+.isbn-scan-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+
+.isbn-scan-cam-icon {
+    display: block;
+    flex-shrink: 0;
+}
+
+.manual-photo-preview {
+    min-height: 0;
+}
+
+.manual-photo-thumb {
+    position: relative;
+    width: 88px;
+    height: 88px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #eee;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.manual-photo-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.manual-photo-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.manual-photo-capture-stage {
+    position: relative;
+}
+
+.manual-photo-crop-guide {
+    position: absolute;
+    left: 18%;
+    top: 6%;
+    width: 64%;
+    height: 88%;
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    border-radius: 4px;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    z-index: 2;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.manual-photo-crop-guide--ready {
+    border-color: #7CFC9A;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4), 0 0 0 3px rgba(124, 252, 154, 0.55);
+}
+
+.manual-photo-shutter-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-width: 140px;
+    min-height: 48px;
+    font-weight: 700;
+    z-index: 10;
+    position: relative;
+}
+
+.manual-photo-shutter-btn .isbn-scan-cam-icon {
+    pointer-events: none;
+}
+
+#manualPhotoCaptureModal .modal-footer {
+    position: relative;
+    z-index: 10;
+}
+
+.isbn-scan-region {
+    width: 100%;
+    min-height: 320px;
+}
+
+.isbn-scan-region video {
+    max-height: 70vh !important;
+}
+
+.isbn-scan-region img {
+    max-width: 100%;
 }
 
 /* Password show/hide — classic eye switch */

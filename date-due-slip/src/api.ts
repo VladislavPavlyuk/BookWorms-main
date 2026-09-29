@@ -60,6 +60,8 @@ type Opts = {
   method?: string;
   body?: unknown;
   auth?: boolean;
+  /** When true, body is FormData — do not set JSON Content-Type. */
+  formData?: boolean;
 };
 
 function flattenError(payload: unknown): string {
@@ -101,16 +103,23 @@ export async function api<T>(path: string, opts: Opts = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   let token = opts.auth === false ? null : await getAccess();
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json; charset=utf-8";
+  const isForm = opts.formData || (typeof FormData !== "undefined" && opts.body instanceof FormData);
+  if (opts.body !== undefined && !isForm) {
+    headers["Content-Type"] = "application/json; charset=utf-8";
+  }
 
   const exec = (t: string | null) => {
     const h = { ...headers };
     if (t) h.Authorization = `Bearer ${t}`;
     else delete h.Authorization;
+    let body: BodyInit | undefined;
+    if (opts.body !== undefined) {
+      body = isForm ? (opts.body as FormData) : JSON.stringify(opts.body);
+    }
     return fetch(`${base}${path}`, {
       method: opts.method || "GET",
       headers: h,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body,
     });
   };
 
@@ -218,14 +227,37 @@ export const ShelfApi = {
     ),
   addIsbn: (isbn: string) => api<Shelf>("/api/shelf/isbn/", { method: "POST", body: { isbn } }),
   addManual: (body: {
-    isbn: string;
-    title: string;
+    isbn?: string;
+    title?: string;
     authors?: string;
     publisher?: string;
     publish_date?: string;
     cover_url?: string;
     info_url?: string;
-  }) => api<Shelf>("/api/shelf/manual/", { method: "POST", body }),
+    photos?: { uri: string; name?: string; type?: string }[];
+  }) => {
+    const photos = body.photos || [];
+    if (!photos.length) {
+      const { photos: _p, ...json } = body;
+      return api<Shelf>("/api/shelf/manual/", { method: "POST", body: json });
+    }
+    const fd = new FormData();
+    if (body.isbn) fd.append("isbn", body.isbn);
+    if (body.title) fd.append("title", body.title);
+    if (body.authors) fd.append("authors", body.authors);
+    if (body.publisher) fd.append("publisher", body.publisher);
+    if (body.publish_date) fd.append("publish_date", body.publish_date);
+    if (body.cover_url) fd.append("cover_url", body.cover_url);
+    if (body.info_url) fd.append("info_url", body.info_url);
+    photos.forEach((p, i) => {
+      fd.append("photos", {
+        uri: p.uri,
+        name: p.name || `book_${i}.jpg`,
+        type: p.type || "image/jpeg",
+      } as unknown as Blob);
+    });
+    return api<Shelf>("/api/shelf/manual/", { method: "POST", body: fd, formData: true });
+  },
   remove: (id: number) => api(`/api/shelf/${id}/`, { method: "DELETE" }),
   returnBook: (id: number) => api(`/api/shelf/${id}/return/`, { method: "POST" }),
   confirmReturn: (id: number) => api(`/api/shelf/${id}/confirm-return/`, { method: "POST" }),

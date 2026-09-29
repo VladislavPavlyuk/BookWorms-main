@@ -1,0 +1,747 @@
+/**
+ * Manual book cover photos — auto-detect + auto-shoot + hard crop (no desk bg).
+ * Photos live only in JS `files[]`; deleted thumbs never reach the server.
+ * Form submit builds FormData from `files[]` (file input is display-sync only).
+ */
+(function () {
+    "use strict";
+
+    var MAX = 8;
+    var DETECT_MS = 280;
+    var STABLE_NEED = 4;
+    var COOLDOWN_MS = 2200;
+    var ANALYSIS_W = 96;
+    var ANALYSIS_H = 144;
+    /** Must match .manual-photo-crop-guide CSS. */
+    var GUIDE_W_FRAC = 0.64;
+    var GUIDE_H_FRAC = 0.88;
+
+    function playShutter() {
+        try {
+            var AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return;
+            if (!playShutter._ctx) playShutter._ctx = new AC();
+            var ctx = playShutter._ctx;
+            if (ctx.state === "suspended") ctx.resume();
+            var t0 = ctx.currentTime;
+            var osc = ctx.createOscillator();
+            var g = ctx.createGain();
+            osc.type = "square";
+            osc.frequency.setValueAtTime(200, t0);
+            osc.frequency.exponentialRampToValueAtTime(55, t0 + 0.04);
+            g.gain.setValueAtTime(0.22, t0);
+            g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.05);
+            osc.connect(g);
+            g.connect(ctx.destination);
+            osc.start(t0);
+            osc.stop(t0 + 0.05);
+        } catch (e) {}
+    }
+
+    function canvasToJpegFile(canvas, name) {
+        var dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+        var parts = dataUrl.split(",");
+        var mime = ((parts[0].match(/:(.*?);/) || [])[1]) || "image/jpeg";
+        var bin = atob(parts[1] || "");
+        var u8 = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        try {
+            return new File([u8], name, { type: mime });
+        } catch (e) {
+            var b = new Blob([u8], { type: mime });
+            b._manualName = name;
+            return b;
+        }
+    }
+
+    function centerGuideRect(vw, vh) {
+        var rw = Math.max(32, Math.floor(vw * GUIDE_W_FRAC));
+        var rh = Math.max(32, Math.floor(vh * GUIDE_H_FRAC));
+        return {
+            x: Math.floor((vw - rw) / 2),
+            y: Math.floor((vh - rh) / 2),
+            w: rw,
+            h: rh,
+        };
+    }
+
+    /**
+     * Aggressive edge trim: strip near-uniform desk from each side until
+     * content density rises. Always returns ≤ source size.
+     */
+    function trimBackgroundCanvas(srcCanvas) {
+        var w = srcCanvas.width;
+        var h = srcCanvas.height;
+        if (w < 24 || h < 24) return srcCanvas;
+        var ctx;
+        try {
+            ctx = srcCanvas.getContext("2d", { willReadFrequently: true });
+        } catch (e) {
+            ctx = srcCanvas.getContext("2d");
+        }
+        var img;
+        try {
+            img = ctx.getImageData(0, 0, w, h);
+        } catch (e2) {
+            return srcCanvas;
+        }
+        var d = img.data;
+
+        function sample(x, y) {
+            var i = (y * w + x) * 4;
+            return [d[i], d[i + 1], d[i + 2]];
+        }
+
+        function avgCorner(cx, cy) {
+            var r = 0, g = 0, b = 0, n = 0;
+            for (var dy = 0; dy < 8; dy++) {
+                for (var dx = 0; dx < 8; dx++) {
+                    var p = sample(
+                        Math.max(0, Math.min(w - 1, cx + dx)),
+                        Math.max(0, Math.min(h - 1, cy + dy))
+                    );
+                    r += p[0];
+                    g += p[1];
+                    b += p[2];
+                    n++;
+                }
+            }
+            return [r / n, g / n, b / n];
+        }
+
+        var c1 = avgCorner(1, 1);
+        var c2 = avgCorner(w - 9, 1);
+        var c3 = avgCorner(1, h - 9);
+        var c4 = avgCorner(w - 9, h - 9);
+        var br = (c1[0] + c2[0] + c3[0] + c4[0]) / 4;
+        var bg = (c1[1] + c2[1] + c3[1] + c4[1]) / 4;
+        var bb = (c1[2] + c2[2] + c3[2] + c4[2]) / 4;
+        var thresh = 48;
+
+        function isBgAt(x, y) {
+            var p = sample(x, y);
+            return (
+                Math.abs(p[0] - br) < thresh &&
+                Math.abs(p[1] - bg) < thresh &&
+                Math.abs(p[2] - bb) < thresh
+            );
+        }
+
+        function rowBgRatio(y) {
+            var bgN = 0, n = 0;
+            for (var x = 0; x < w; x += 2) {
+                n++;
+                if (isBgAt(x, y)) bgN++;
+            }
+            return n ? bgN / n : 1;
+        }
+
+        function colBgRatio(x, y0, y1) {
+            var bgN = 0, n = 0;
+            for (var y = y0; y <= y1; y += 2) {
+                n++;
+                if (isBgAt(x, y)) bgN++;
+            }
+            return n ? bgN / n : 1;
+        }
+
+        var maxTrim = Math.floor(Math.min(w, h) * 0.42);
+        var top = 0, bottom = h - 1, left = 0, right = w - 1;
+        var bgRow = 0.78;
+
+        while (top < maxTrim && rowBgRatio(top) >= bgRow) top++;
+        while (bottom > h - 1 - maxTrim && rowBgRatio(bottom) >= bgRow) bottom--;
+        while (left < maxTrim && colBgRatio(left, top, bottom) >= bgRow) left++;
+        while (right > w - 1 - maxTrim && colBgRatio(right, top, bottom) >= bgRow) {
+            right--;
+        }
+
+        var pad = Math.max(2, (Math.min(w, h) * 0.008) | 0);
+        left = Math.max(0, left - pad);
+        top = Math.max(0, top - pad);
+        right = Math.min(w - 1, right + pad);
+        bottom = Math.min(h - 1, bottom + pad);
+        var cw = right - left + 1;
+        var ch = bottom - top + 1;
+        if (cw < 24 || ch < 24) return srcCanvas;
+        if (cw >= w && ch >= h) return srcCanvas;
+
+        var out = document.createElement("canvas");
+        out.width = cw;
+        out.height = ch;
+        out.getContext("2d").drawImage(srcCanvas, left, top, cw, ch, 0, 0, cw, ch);
+        return out;
+    }
+
+    function cropBookFromVideo(video) {
+        var vw = video.videoWidth;
+        var vh = video.videoHeight;
+        if (!vw || !vh) throw new Error("no video frame");
+
+        var rect = centerGuideRect(vw, vh);
+        var guided = document.createElement("canvas");
+        guided.width = rect.w;
+        guided.height = rect.h;
+        guided
+            .getContext("2d")
+            .drawImage(video, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+
+        var trimmed = trimBackgroundCanvas(guided);
+        // Second pass on tighter crop
+        if (trimmed.width < guided.width * 0.98 || trimmed.height < guided.height * 0.98) {
+            trimmed = trimBackgroundCanvas(trimmed);
+        }
+        if (trimmed.width >= vw * 0.95 && trimmed.height >= vh * 0.95) {
+            return guided;
+        }
+        return trimmed;
+    }
+
+    function scoreGuideFill(video) {
+        if (!video.videoWidth) return 0;
+        var rect = centerGuideRect(video.videoWidth, video.videoHeight);
+        var c = document.createElement("canvas");
+        c.width = ANALYSIS_W;
+        c.height = ANALYSIS_H;
+        var ctx = c.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return 0;
+        try {
+            ctx.drawImage(
+                video,
+                rect.x,
+                rect.y,
+                rect.w,
+                rect.h,
+                0,
+                0,
+                ANALYSIS_W,
+                ANALYSIS_H
+            );
+        } catch (e) {
+            return 0;
+        }
+        var img;
+        try {
+            img = ctx.getImageData(0, 0, ANALYSIS_W, ANALYSIS_H);
+        } catch (e2) {
+            return 0;
+        }
+        var d = img.data;
+        var border = [];
+        function pushPx(x, y) {
+            var i = (y * ANALYSIS_W + x) * 4;
+            border.push([d[i], d[i + 1], d[i + 2]]);
+        }
+        for (var x = 0; x < ANALYSIS_W; x += 2) {
+            pushPx(x, 0);
+            pushPx(x, ANALYSIS_H - 1);
+        }
+        for (var y = 0; y < ANALYSIS_H; y += 2) {
+            pushPx(0, y);
+            pushPx(ANALYSIS_W - 1, y);
+        }
+        var br = 0, bg = 0, bb = 0;
+        for (var bi = 0; bi < border.length; bi++) {
+            br += border[bi][0];
+            bg += border[bi][1];
+            bb += border[bi][2];
+        }
+        br /= border.length;
+        bg /= border.length;
+        bb /= border.length;
+
+        var thresh = 30;
+        var nonBg = 0;
+        var total = 0;
+        var sum = 0;
+        var sum2 = 0;
+        var x0 = (ANALYSIS_W * 0.15) | 0;
+        var x1 = (ANALYSIS_W * 0.85) | 0;
+        var y0 = (ANALYSIS_H * 0.12) | 0;
+        var y1 = (ANALYSIS_H * 0.88) | 0;
+        for (var yy = y0; yy < y1; yy += 2) {
+            for (var xx = x0; xx < x1; xx += 2) {
+                var i = (yy * ANALYSIS_W + xx) * 4;
+                var r = d[i],
+                    g = d[i + 1],
+                    b = d[i + 2];
+                var lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                sum += lum;
+                sum2 += lum * lum;
+                total++;
+                if (
+                    Math.abs(r - br) >= thresh ||
+                    Math.abs(g - bg) >= thresh ||
+                    Math.abs(b - bb) >= thresh
+                ) {
+                    nonBg++;
+                }
+            }
+        }
+        if (!total) return 0;
+        var fill = nonBg / total;
+        var mean = sum / total;
+        var variance = sum2 / total - mean * mean;
+        if (variance < 80) return fill * 0.3;
+        return fill;
+    }
+
+    function init() {
+        var form = document.getElementById("manualAddBookForm");
+        var dest = document.getElementById("manualPhotos");
+        var preview = document.getElementById("manualPhotoPreview");
+        var openBtn = document.getElementById("manualPhotoCamera");
+        var countEl = document.getElementById("manualPhotoCount");
+        var modalEl = document.getElementById("manualPhotoCaptureModal");
+        var video = document.getElementById("manualPhotoCaptureVideo");
+        var statusEl = document.getElementById("manualPhotoCaptureStatus");
+        var shutterBtn = document.getElementById("manualPhotoShutter");
+        var guideEl = document.getElementById("manualPhotoCropGuide");
+
+        if (!form || !dest || !preview || !openBtn || !modalEl || !video) {
+            console.warn("[manual-photo] core DOM missing");
+            return;
+        }
+        if (!guideEl) {
+            guideEl = document.createElement("div");
+            guideEl.id = "manualPhotoCropGuide";
+            guideEl.className = "manual-photo-crop-guide";
+            var stage = modalEl.querySelector(".manual-photo-capture-stage");
+            if (stage) stage.appendChild(guideEl);
+        }
+
+        /** Sole source of truth — deleted entries never leave this array. */
+        var files = [];
+        var objectUrls = [];
+        var stream = null;
+        var bsModal = null;
+        var starting = false;
+        var busy = false;
+        var detectTimer = null;
+        var stableHits = 0;
+        var lastAutoAt = 0;
+        var gen = 0;
+        var submitting = false;
+
+        function setStatus(msg) {
+            if (statusEl) statusEl.textContent = msg || "";
+        }
+
+        function stopDetect() {
+            if (detectTimer != null) {
+                clearTimeout(detectTimer);
+                detectTimer = null;
+            }
+            gen += 1;
+            stableHits = 0;
+        }
+
+        function stopStream() {
+            stopDetect();
+            try {
+                if (stream && stream.getTracks) {
+                    stream.getTracks().forEach(function (t) {
+                        try {
+                            t.stop();
+                        } catch (e) {}
+                    });
+                }
+            } catch (e2) {}
+            stream = null;
+            try {
+                video.srcObject = null;
+            } catch (e3) {}
+            try {
+                video.pause();
+            } catch (e4) {}
+        }
+
+        /** Mirror files[] → <input type=file> (best-effort). Always clear first. */
+        function syncInput() {
+            try {
+                dest.value = "";
+            } catch (e0) {}
+            if (!files.length) return;
+            if (typeof DataTransfer === "undefined") return;
+            try {
+                var dt = new DataTransfer();
+                files.forEach(function (f) {
+                    try {
+                        if (typeof File !== "undefined" && f instanceof File) {
+                            dt.items.add(f);
+                        } else if (f) {
+                            dt.items.add(
+                                new File([f], f._manualName || f.name || "book.jpg", {
+                                    type: f.type || "image/jpeg",
+                                })
+                            );
+                        }
+                    } catch (e) {}
+                });
+                dest.files = dt.files;
+            } catch (e2) {
+                console.warn("[manual-photo] syncInput", e2);
+            }
+        }
+
+        function clearObjectUrls() {
+            objectUrls.forEach(function (u) {
+                try {
+                    URL.revokeObjectURL(u);
+                } catch (e) {}
+            });
+            objectUrls = [];
+        }
+
+        function render() {
+            clearObjectUrls();
+            preview.innerHTML = "";
+            if (countEl) {
+                countEl.textContent = files.length ? files.length + " / " + MAX : "";
+            }
+            files.forEach(function (f, idx) {
+                var wrap = document.createElement("div");
+                wrap.className = "manual-photo-thumb";
+                var img = document.createElement("img");
+                img.alt = "";
+                var url = URL.createObjectURL(f);
+                objectUrls.push(url);
+                img.src = url;
+                var rm = document.createElement("button");
+                rm.type = "button";
+                rm.className = "manual-photo-remove";
+                rm.setAttribute("aria-label", "Видалити фото");
+                rm.textContent = "×";
+                rm.addEventListener("click", function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    files.splice(idx, 1);
+                    syncInput();
+                    render();
+                    console.info("[manual-photo] deleted idx", idx, "left", files.length);
+                });
+                wrap.appendChild(img);
+                wrap.appendChild(rm);
+                preview.appendChild(wrap);
+            });
+        }
+
+        function addFile(file) {
+            if (!file || files.length >= MAX) return false;
+            files.push(file);
+            syncInput();
+            render();
+            return true;
+        }
+
+        function openStream() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                return Promise.reject(
+                    new Error("getUserMedia недоступний (потрібен HTTPS)")
+                );
+            }
+            var attempts = [
+                {
+                    audio: false,
+                    video: {
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                    },
+                },
+                {
+                    audio: false,
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+                },
+                { audio: false, video: true },
+            ];
+            function tryAt(i) {
+                if (i >= attempts.length) {
+                    return Promise.reject(new Error("Немає доступу до камери"));
+                }
+                return navigator.mediaDevices
+                    .getUserMedia(attempts[i])
+                    .catch(function () {
+                        return tryAt(i + 1);
+                    });
+            }
+            return tryAt(0);
+        }
+
+        function doSnap(reason) {
+            if (busy) return false;
+            if (files.length >= MAX) {
+                setStatus("Максимум " + MAX + " фото.");
+                stopDetect();
+                return false;
+            }
+            if (!video.videoWidth) {
+                setStatus("Камера ще не готова…");
+                return false;
+            }
+            busy = true;
+            setStatus(
+                reason === "auto"
+                    ? "Обкладинку розпізнано — зйомка + обрізка…"
+                    : "Зйомка та обрізка…"
+            );
+            setTimeout(function () {
+                try {
+                    playShutter();
+                    var cropped = cropBookFromVideo(video);
+                    console.info(
+                        "[manual-photo] crop",
+                        video.videoWidth + "x" + video.videoHeight,
+                        "→",
+                        cropped.width + "x" + cropped.height
+                    );
+                    var name =
+                        "book_" +
+                        Date.now() +
+                        "_" +
+                        (files.length + 1) +
+                        ".jpg";
+                    var file = canvasToJpegFile(cropped, name);
+                    addFile(file);
+                    lastAutoAt = Date.now();
+                    stableHits = 0;
+                    setStatus(
+                        "Знято " +
+                            files.length +
+                            "/" +
+                            MAX +
+                            " (обрізано " +
+                            cropped.width +
+                            "×" +
+                            cropped.height +
+                            "). Видалені з прев’ю не потраплять у базу."
+                    );
+                    if (files.length >= MAX) {
+                        stopDetect();
+                        if (bsModal) {
+                            try {
+                                bsModal.hide();
+                            } catch (e) {}
+                        }
+                    }
+                } catch (err) {
+                    console.warn("[manual-photo] snap", err);
+                    setStatus(
+                        "Помилка зйомки: " +
+                            (err && err.message ? err.message : String(err))
+                    );
+                } finally {
+                    busy = false;
+                }
+            }, 30);
+            return true;
+        }
+
+        function detectTick(myGen) {
+            if (myGen !== gen) return;
+            detectTimer = null;
+            if (busy || files.length >= MAX || !stream) return;
+
+            var score = 0;
+            try {
+                score = scoreGuideFill(video);
+            } catch (e) {
+                score = 0;
+            }
+
+            var ready = score >= 0.42;
+            if (ready) {
+                stableHits += 1;
+                if (guideEl) guideEl.classList.add("manual-photo-crop-guide--ready");
+                setStatus(
+                    "Книгу видно (" +
+                        Math.round(score * 100) +
+                        "%). Стабілізація " +
+                        stableHits +
+                        "/" +
+                        STABLE_NEED +
+                        "…"
+                );
+            } else {
+                stableHits = 0;
+                if (guideEl) guideEl.classList.remove("manual-photo-crop-guide--ready");
+                setStatus(
+                    "Наведіть обкладинку в рамку — зйомка + автообрізка."
+                );
+            }
+
+            if (
+                stableHits >= STABLE_NEED &&
+                Date.now() - lastAutoAt > COOLDOWN_MS
+            ) {
+                doSnap("auto");
+            }
+
+            detectTimer = setTimeout(function () {
+                detectTick(myGen);
+            }, DETECT_MS);
+        }
+
+        function startDetect() {
+            stopDetect();
+            var myGen = gen;
+            detectTimer = setTimeout(function () {
+                detectTick(myGen);
+            }, 400);
+        }
+
+        function startCamera() {
+            starting = true;
+            stopStream();
+            setStatus("Запит доступу до камери…");
+            video.setAttribute("playsinline", "true");
+            video.muted = true;
+            video.playsInline = true;
+            return openStream()
+                .then(function (mediaStream) {
+                    stream = mediaStream;
+                    video.srcObject = mediaStream;
+                    var p = video.play();
+                    return p && typeof p.then === "function"
+                        ? p.catch(function () {})
+                        : null;
+                })
+                .then(function () {
+                    starting = false;
+                    setStatus(
+                        "Наведіть обкладинку в рамку — зйомка + автообрізка."
+                    );
+                    startDetect();
+                })
+                .catch(function (err) {
+                    starting = false;
+                    console.warn("[manual-photo] camera", err);
+                    stopStream();
+                    setStatus(
+                        "Камера: " +
+                            (err && err.message ? err.message : String(err))
+                    );
+                });
+        }
+
+        /**
+         * Never trust <input type=file> for photos — only files[] (post-delete).
+         */
+        form.addEventListener("submit", function (ev) {
+            if (submitting) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            submitting = true;
+            stopStream();
+
+            var fd = new FormData();
+            // Copy all non-file fields
+            Array.prototype.forEach.call(form.elements, function (el) {
+                if (!el || !el.name) return;
+                if (el === dest) return;
+                if (el.type === "file") return;
+                if (el.type === "submit" || el.type === "button") return;
+                if ((el.type === "checkbox" || el.type === "radio") && !el.checked) {
+                    return;
+                }
+                fd.append(el.name, el.value);
+            });
+            // Only currently kept photos
+            files.forEach(function (f, i) {
+                var fname = f.name || f._manualName || "book_" + (i + 1) + ".jpg";
+                fd.append("photos", f, fname);
+            });
+            console.info("[manual-photo] submit photos=", files.length);
+
+            var action = form.getAttribute("action") || window.location.href;
+            var method = (form.getAttribute("method") || "POST").toUpperCase();
+
+            fetch(action, {
+                method: method,
+                body: fd,
+                credentials: "same-origin",
+                headers: { "X-Requested-With": "XMLHttpRequest" },
+                redirect: "follow",
+            })
+                .then(function (res) {
+                    if (res.redirected && res.url) {
+                        window.location.href = res.url;
+                        return;
+                    }
+                    // Django usually 302 → follow gives 200 of library page
+                    if (res.ok) {
+                        window.location.href = res.url || window.location.pathname;
+                        return;
+                    }
+                    return res.text().then(function (t) {
+                        throw new Error("HTTP " + res.status + " " + t.slice(0, 120));
+                    });
+                })
+                .catch(function (err) {
+                    console.warn("[manual-photo] submit", err);
+                    submitting = false;
+                    alert(
+                        "Не вдалося зберегти: " +
+                            (err && err.message ? err.message : String(err))
+                    );
+                });
+        });
+
+        openBtn.addEventListener("click", function () {
+            if (files.length >= MAX) {
+                alert("Максимум " + MAX + " фото.");
+                return;
+            }
+            if (!window.bootstrap || !window.bootstrap.Modal) {
+                alert("Bootstrap Modal недоступний");
+                return;
+            }
+            try {
+                playShutter._ctx =
+                    playShutter._ctx ||
+                    new (window.AudioContext || window.webkitAudioContext)();
+                if (playShutter._ctx.state === "suspended") {
+                    playShutter._ctx.resume();
+                }
+            } catch (e) {}
+            bsModal = window.bootstrap.Modal.getOrCreateInstance(modalEl, {
+                backdrop: true,
+                keyboard: true,
+            });
+            bsModal.show();
+        });
+
+        modalEl.addEventListener("shown.bs.modal", function () {
+            if (starting) return;
+            startCamera();
+        });
+        modalEl.addEventListener("hide.bs.modal", stopStream);
+        modalEl.addEventListener("hidden.bs.modal", function () {
+            stopStream();
+            setStatus("");
+            starting = false;
+            busy = false;
+            if (guideEl) guideEl.classList.remove("manual-photo-crop-guide--ready");
+        });
+
+        function onShutter(ev) {
+            if (ev) {
+                try {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                } catch (e) {}
+            }
+            doSnap("manual");
+        }
+        if (shutterBtn) {
+            shutterBtn.type = "button";
+            shutterBtn.onclick = onShutter;
+        }
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+    } else {
+        init();
+    }
+})();

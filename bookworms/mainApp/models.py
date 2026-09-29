@@ -122,6 +122,28 @@ class Book(models.Model):
         return f"{lo}–{hi} років"
 
 
+class BookPhoto(models.Model):
+    """Фото книги, зроблені користувачем при ручному додаванні (обкладинка, розворот тощо)."""
+
+    book = models.ForeignKey(
+        Book,
+        on_delete=models.CASCADE,
+        related_name="photos",
+        verbose_name="Книга",
+    )
+    image = models.ImageField(upload_to="book_photos/%Y/%m/", verbose_name="Фото")
+    sort_order = models.PositiveSmallIntegerField(default=0, verbose_name="Порядок")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "фото книги"
+        verbose_name_plural = "фото книг"
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return f"photo#{self.pk} book={self.book_id}"
+
+
 class BookCopy(models.Model):
     """
     Фізичний примірник книги (екземпляр).
