@@ -93,6 +93,7 @@ class BookSerializer(serializers.ModelSerializer):
             "publish_date",
             "cover_url",
             "info_url",
+            "cover_text",
             "photo_urls",
             "min_readers_age",
             "max_readers_age",
@@ -324,6 +325,7 @@ class AddBookManualSerializer(serializers.Serializer):
     publish_date = serializers.CharField(required=False, allow_blank=True, default="")
     cover_url = serializers.URLField(required=False, allow_blank=True, default="")
     info_url = serializers.URLField(required=False, allow_blank=True, default="")
+    cover_text = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class UpdateBookManualSerializer(serializers.Serializer):
@@ -334,6 +336,7 @@ class UpdateBookManualSerializer(serializers.Serializer):
     publish_date = serializers.CharField(required=False, allow_blank=True)
     cover_url = serializers.URLField(required=False, allow_blank=True)
     info_url = serializers.URLField(required=False, allow_blank=True)
+    cover_text = serializers.CharField(required=False, allow_blank=True)
     # Comma-separated or repeated form keys; parsed in the view.
     delete_photo_ids = serializers.CharField(required=False, allow_blank=True, default="")
 

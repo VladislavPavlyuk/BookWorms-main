@@ -528,6 +528,7 @@ def shelf_add_manual(request):
         publish_date=(d.get("publish_date") or "").strip(),
         cover_url=(d.get("cover_url") or "").strip(),
         info_url=(d.get("info_url") or "").strip(),
+        cover_text=(d.get("cover_text") or "").strip(),
     )
     save_book_photos(book, files, request=request)
     book.refresh_from_db()
@@ -596,6 +597,7 @@ def shelf_update_manual(request, shelf_id):
             publish_date=d["publish_date"] if "publish_date" in d else None,
             cover_url=d["cover_url"] if "cover_url" in d else None,
             info_url=d["info_url"] if "info_url" in d else None,
+            cover_text=d["cover_text"] if "cover_text" in d else None,
         )
     except ValueError as exc:
         return _error(str(exc))
@@ -621,20 +623,23 @@ def shelf_update_manual(request, shelf_id):
 @api_view(["POST"])
 @parser_classes([MultiPartParser, FormParser])
 def shelf_recognize_cover(request):
-    """AI: extract title / authors / ISBN from a cover photo (manual add)."""
-    uploaded = request.FILES.get("photo") or request.FILES.get("photos")
-    if not uploaded:
-        return _error("Потрібне фото обкладинки (поле photo).")
-    from mainApp.book_cover_ai import CoverAIError, recognize_book_cover, vision_configured
+    """AI: extract title / authors / ISBN from cover photo(s) (manual add)."""
+    files = list(request.FILES.getlist("photos") or [])
+    if not files:
+        one = request.FILES.get("photo")
+        if one:
+            files = [one]
+    if not files:
+        return _error("Потрібне фото обкладинки (поле photo або photos).")
+    from mainApp.book_cover_ai import CoverAIError, recognize_book_covers, vision_configured
 
-    # Always attempt recognition — vision_configured now has a free-key fallback.
     if not vision_configured():
         return _error(
             "Розпізнавання не налаштовано (OCR_SPACE_API_KEY або OPENAI_API_KEY).",
             503,
         )
     try:
-        data = recognize_book_cover(uploaded)
+        data = recognize_book_covers(files)
     except CoverAIError as exc:
         return _error(exc.message, exc.status)
     return Response(data)

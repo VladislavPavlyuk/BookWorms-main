@@ -16,6 +16,8 @@ export type Book = {
   publish_date: string;
   cover_url: string;
   info_url: string;
+  /** Full OCR text from cover photo (AI). */
+  cover_text?: string;
   photo_urls?: string[];
   min_readers_age: number;
   max_readers_age: number;

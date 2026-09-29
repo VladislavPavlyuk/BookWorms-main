@@ -51,6 +51,7 @@ export default function ShelfScreen() {
     authors: "",
     publisher: "",
     publish_date: "",
+    cover_text: "",
   });
   const [manualPhotos, setManualPhotos] = useState<ManualPhoto[]>([]);
   const [aiStatus, setAiStatus] = useState("");
@@ -119,7 +120,7 @@ export default function ShelfScreen() {
   };
 
   const resetManualForm = () => {
-    setManual({ isbn: "", title: "", authors: "", publisher: "", publish_date: "" });
+    setManual({ isbn: "", title: "", authors: "", publisher: "", publish_date: "", cover_text: "" });
     setManualPhotos([]);
     setAiStatus("");
     setEditShelfId(null);
@@ -136,6 +137,7 @@ export default function ShelfScreen() {
       authors: b.authors || "",
       publisher: b.publisher || "",
       publish_date: b.publish_date || "",
+      cover_text: b.cover_text || "",
     });
     setManualPhotos([]);
     setDeletePhotoIds([]);
@@ -161,6 +163,7 @@ export default function ShelfScreen() {
           authors: manual.authors || undefined,
           publisher: manual.publisher || undefined,
           publish_date: manual.publish_date || undefined,
+          cover_text: manual.cover_text || undefined,
           photos: manualPhotos,
           delete_photo_ids: deletePhotoIds.length ? deletePhotoIds : undefined,
         });
@@ -171,6 +174,7 @@ export default function ShelfScreen() {
           authors: manual.authors || undefined,
           publisher: manual.publisher || undefined,
           publish_date: manual.publish_date || undefined,
+          cover_text: manual.cover_text || undefined,
           photos: manualPhotos,
         });
       }
@@ -185,29 +189,46 @@ export default function ShelfScreen() {
     }
   };
 
-  const recognizeFromPhoto = async (photo: ManualPhoto) => {
+  const recognizeFromPhotos = async (photos?: ManualPhoto[]) => {
+    const list = photos && photos.length ? photos : manualPhotos;
+    if (!list.length) {
+      setAiStatus("Спочатку зробіть фото обкладинки.");
+      return;
+    }
     setAiBusy(true);
-    setAiStatus("AI розпізнає обкладинку…");
+    setAiStatus(
+      list.length > 1
+        ? `AI читає всі ${list.length} фото…`
+        : "AI розпізнає обкладинку…"
+    );
     try {
-      const data = await ShelfApi.recognizeCover(photo);
+      const data = await ShelfApi.recognizeCover(list);
       const titleGuess =
         (data.title || "").trim() ||
         (data.raw_text || "").split("\n").map((s) => s.trim()).find(Boolean) ||
         "";
+      const coverDump = (data.cover_text || data.raw_text || "").trim();
       setManual((m) => ({
         isbn: m.isbn.trim() ? m.isbn : data.isbn || "",
         title: m.title.trim() ? m.title : titleGuess,
         authors: m.authors.trim() ? m.authors : data.authors || "",
         publisher: m.publisher.trim() ? m.publisher : data.publisher || "",
         publish_date: m.publish_date.trim() ? m.publish_date : data.publish_date || "",
+        cover_text: coverDump || m.cover_text,
       }));
       const bits: string[] = [];
       if (titleGuess) bits.push("назва");
       if (data.authors) bits.push("автори");
       if (data.isbn) bits.push("ISBN");
       else if (data.isbn_missing || data.note) bits.push(data.note || "ISBN code not exists");
+      if (coverDump) bits.push("повний текст");
+      const n = data.photos_scanned || list.length;
+      const extra =
+        n > 1
+          ? ` (краще з ${(data.best_photo_index ?? 0) + 1}/${n})`
+          : "";
       setAiStatus(
-        bits.length ? `AI заповнив: ${bits.join(", ")}` : "AI не знайшов текст на обкладинці"
+        bits.length ? `AI заповнив: ${bits.join(", ")}${extra}` : "AI не знайшов текст на обкладинці"
       );
     } catch (e) {
       setAiStatus(e instanceof ApiError ? e.message : String(e));
@@ -476,6 +497,16 @@ export default function ShelfScreen() {
               autoCapitalize="none"
             />
           ))}
+          <Text style={[styles.sec, { marginTop: 8 }]}>Текст з обкладинки (AI)</Text>
+          <CyrillicTextInput
+            placeholder="Після знімка тут з’явиться весь розпізнаний текст"
+            placeholderTextColor={colors.muted}
+            style={[styles.inputFull, { minHeight: 140, textAlignVertical: "top" }]}
+            value={manual.cover_text}
+            onChangeText={(v) => setManual((m) => ({ ...m, cover_text: v }))}
+            multiline
+            autoCapitalize="sentences"
+          />
           <Text style={[styles.sec, { marginTop: 8 }]}>Фото книги</Text>
           <Text style={[styles.physHint, { paddingHorizontal: 0 }]}>
             Камера зніме обкладинку в рамці і обріже фон. До {MAX_MANUAL_PHOTOS}. AI заповнить поля автоматично.
@@ -501,8 +532,7 @@ export default function ShelfScreen() {
             <Pressable
               style={[styles.add, { backgroundColor: colors.stamp }, aiBusy && { opacity: 0.5 }]}
               onPress={() => {
-                const last = manualPhotos[manualPhotos.length - 1];
-                if (last) void recognizeFromPhoto(last);
+                void recognizeFromPhotos();
               }}
               disabled={aiBusy || manualPhotos.length === 0}
               accessibilityRole="button"
@@ -533,6 +563,17 @@ export default function ShelfScreen() {
           </View>
           <Pressable style={styles.btn} onPress={addManual}>
             <Text style={styles.addText}>{editShelfId ? "Оновити" : "Зберегти"}</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.btn, { backgroundColor: colors.stamp, marginTop: 8 }]}
+            onPress={() => {
+              const keepEdit = editShelfId;
+              resetManualForm();
+              if (keepEdit) setEditShelfId(keepEdit);
+              setAiStatus("");
+            }}
+          >
+            <Text style={styles.addText}>Очистити всі поля</Text>
           </Pressable>
           <Pressable
             style={[styles.btn, { backgroundColor: colors.muted, marginTop: 8 }]}
@@ -583,9 +624,9 @@ export default function ShelfScreen() {
             if (next.length >= MAX_MANUAL_PHOTOS) {
               setTimeout(() => setCoverCamOpen(false), 0);
             }
+            void recognizeFromPhotos(next);
             return next;
           });
-          void recognizeFromPhoto(photo);
         }}
       />
     </View>

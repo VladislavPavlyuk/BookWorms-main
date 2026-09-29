@@ -78,6 +78,11 @@ class Book(models.Model):
     publish_date = models.CharField(max_length=64, blank=True, verbose_name="Дата видання")
     cover_url = models.URLField(max_length=500, blank=True, verbose_name="Обкладинка (URL)")
     info_url = models.URLField(max_length=500, blank=True, verbose_name="Open Library")
+    cover_text = models.TextField(
+        blank=True,
+        verbose_name="Текст з обкладинки (AI/OCR)",
+        help_text="Повний текст, розпізнаний з фото обкладинки.",
+    )
     min_readers_age = models.PositiveSmallIntegerField(
         default=READER_AGE_MIN,
         validators=[MinValueValidator(READER_AGE_MIN), MaxValueValidator(READER_AGE_MAX)],

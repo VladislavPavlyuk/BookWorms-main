@@ -10,6 +10,7 @@ test -f bookworms/mainApp/migrations/0019_copyevent.py
 test -f bookworms/mainApp/migrations/0021_copy_queue_and_transmit.py
 test -f bookworms/mainApp/migrations/0022_loan_handoff.py
 test -f bookworms/mainApp/migrations/0023_bookphoto.py
+test -f bookworms/mainApp/migrations/0024_book_cover_text.py
 test -f bookworms/mainApp/static/js/isbn_scan.js
 test -f bookworms/mainApp/static/js/isbn_scan_worker.js
 test -f bookworms/mainApp/static/js/zxing-0.21.3.min.js

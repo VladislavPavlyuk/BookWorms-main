@@ -234,6 +234,7 @@ export const ShelfApi = {
     publish_date?: string;
     cover_url?: string;
     info_url?: string;
+    cover_text?: string;
     photos?: { uri: string; name?: string; type?: string }[];
   }) => {
     const photos = body.photos || [];
@@ -249,6 +250,7 @@ export const ShelfApi = {
     if (body.publish_date) fd.append("publish_date", body.publish_date);
     if (body.cover_url) fd.append("cover_url", body.cover_url);
     if (body.info_url) fd.append("info_url", body.info_url);
+    if (body.cover_text) fd.append("cover_text", body.cover_text);
     photos.forEach((p, i) => {
       fd.append("photos", {
         uri: p.uri,
@@ -268,6 +270,7 @@ export const ShelfApi = {
       publish_date?: string;
       cover_url?: string;
       info_url?: string;
+      cover_text?: string;
       delete_photo_ids?: number[];
       photos?: { uri: string; name?: string; type?: string }[];
     }
@@ -283,6 +286,7 @@ export const ShelfApi = {
     if (body.publish_date != null) fd.append("publish_date", body.publish_date);
     if (body.cover_url) fd.append("cover_url", body.cover_url);
     if (body.info_url) fd.append("info_url", body.info_url);
+    if (body.cover_text != null) fd.append("cover_text", body.cover_text);
     deletes.forEach((id) => fd.append("delete_photo_ids", String(id)));
     photos.forEach((p, i) => {
       fd.append("photos", {
@@ -293,13 +297,20 @@ export const ShelfApi = {
     });
     return api<Shelf>(`/api/shelf/${shelfId}/manual/`, { method: "POST", body: fd, formData: true });
   },
-  recognizeCover: (photo: { uri: string; name?: string; type?: string }) => {
+  recognizeCover: (
+    photos:
+      | { uri: string; name?: string; type?: string }
+      | { uri: string; name?: string; type?: string }[]
+  ) => {
+    const list = Array.isArray(photos) ? photos : [photos];
     const fd = new FormData();
-    fd.append("photo", {
-      uri: photo.uri,
-      name: photo.name || "cover.jpg",
-      type: photo.type || "image/jpeg",
-    } as unknown as Blob);
+    list.forEach((photo, i) => {
+      fd.append("photos", {
+        uri: photo.uri,
+        name: photo.name || `cover_${i + 1}.jpg`,
+        type: photo.type || "image/jpeg",
+      } as unknown as Blob);
+    });
     return api<{
       title: string;
       authors: string;
@@ -308,8 +319,12 @@ export const ShelfApi = {
       publish_date: string;
       source?: string;
       raw_text?: string;
+      cover_text?: string;
       isbn_missing?: boolean;
       note?: string;
+      photos_scanned?: number;
+      photos_ok?: number;
+      best_photo_index?: number;
     }>("/api/shelf/recognize-cover/", { method: "POST", body: fd, formData: true });
   },
   remove: (id: number) => api(`/api/shelf/${id}/`, { method: "DELETE" }),

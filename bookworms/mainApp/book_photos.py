@@ -278,6 +278,7 @@ def update_manual_book(
     publish_date: str | None = None,
     cover_url: str | None = None,
     info_url: str | None = None,
+    cover_text: str | None = None,
 ) -> Book:
     """
     Overwrite bibliographic fields on a sole-owned manual book.
@@ -319,6 +320,11 @@ def update_manual_book(
         if u != (book.info_url or ""):
             book.info_url = u
             changed.append("info_url")
+    if cover_text is not None:
+        ct = (cover_text or "").strip()
+        if ct != (book.cover_text or ""):
+            book.cover_text = ct
+            changed.append("cover_text")
 
     if isbn is not None:
         raw = (isbn or "").strip()
@@ -355,6 +361,7 @@ def create_manual_book(
     publish_date: str = "",
     cover_url: str = "",
     info_url: str = "",
+    cover_text: str = "",
 ) -> Book:
     """
     Create/update catalog Book without Open Library / ISBNdb.
@@ -383,6 +390,7 @@ def create_manual_book(
         "publish_date": (publish_date or "").strip(),
         "cover_url": (cover_url or "").strip(),
         "info_url": (info_url or "").strip(),
+        "cover_text": (cover_text or "").strip(),
     }
     try:
         book, _ = get_or_create_book_from_payload(payload)
@@ -390,6 +398,11 @@ def create_manual_book(
         payload["isbn"] = allocate_local_isbn()
         allocated_local = True
         book, _ = get_or_create_book_from_payload(payload)
+    # Always apply cover_text on create path (sync may skip if already set)
+    ct = (cover_text or "").strip()
+    if ct and (book.cover_text or "") != ct:
+        book.cover_text = ct
+        book.save(update_fields=["cover_text"])
     # Stash on instance for API/views (not a DB column)
     book._isbn_missing = allocated_local or is_local_isbn(book.isbn)  # type: ignore[attr-defined]
     book._isbn_note = NO_ISBN_NOTE if book._isbn_missing else ""  # type: ignore[attr-defined]

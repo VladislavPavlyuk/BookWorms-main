@@ -432,7 +432,7 @@
             files.push(file);
             syncInput();
             render();
-            recognizeCover(file);
+            recognizeAllCovers();
             return true;
         }
 
@@ -457,20 +457,41 @@
             } catch (e) {}
         }
 
+        function setField(id, value) {
+            if (value == null || value === "") return;
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.value = value;
+            try {
+                el.dispatchEvent(new Event("input", { bubbles: true }));
+                el.dispatchEvent(new Event("change", { bubbles: true }));
+            } catch (e) {}
+        }
+
         function csrfToken() {
             var el = form.querySelector('[name="csrfmiddlewaretoken"]');
             return el ? el.value : "";
         }
 
-        function recognizeCover(file) {
-            if (!file || recognizing) return;
+        function recognizeAllCovers() {
+            if (!files.length || recognizing) return;
             var url = recognizeUrlEl && recognizeUrlEl.value;
             if (!url) return;
             recognizing = true;
             if (aiBtn) aiBtn.disabled = true;
-            setAiStatus("AI розпізнає обкладинку…");
+            setAiStatus(
+                files.length > 1
+                    ? "AI читає всі " + files.length + " фото…"
+                    : "AI розпізнає обкладинку…"
+            );
             var fd = new FormData();
-            fd.append("photo", file, file.name || file._manualName || "cover.jpg");
+            files.forEach(function (file, i) {
+                fd.append(
+                    "photos",
+                    file,
+                    file.name || file._manualName || "cover_" + (i + 1) + ".jpg"
+                );
+            });
             fetch(url, {
                 method: "POST",
                 body: fd,
@@ -509,15 +530,29 @@
                     fillEmptyField("manualAuthors", data.authors);
                     fillEmptyField("manualPublisher", data.publisher);
                     fillEmptyField("manualPublishDate", data.publish_date);
+                    setField(
+                        "manualCoverText",
+                        data.cover_text || data.raw_text || ""
+                    );
                     var bits = [];
                     if (data.title || data.raw_text) bits.push("назва");
                     if (data.authors) bits.push("автори");
                     if (data.isbn) bits.push("ISBN");
                     else if (data.isbn_missing || data.note)
                         bits.push(data.note || "ISBN code not exists");
+                    if (data.raw_text || data.cover_text) bits.push("повний текст");
+                    var nScan = data.photos_scanned || files.length;
+                    var extra =
+                        nScan > 1
+                            ? " (краще з " +
+                              ((data.best_photo_index || 0) + 1) +
+                              "/" +
+                              nScan +
+                              ")"
+                            : "";
                     setAiStatus(
                         bits.length
-                            ? "AI заповнив: " + bits.join(", ")
+                            ? "AI заповнив: " + bits.join(", ") + extra
                             : "AI не знайшов текст на обкладинці"
                     );
                 })
@@ -536,8 +571,62 @@
 
         if (aiBtn) {
             aiBtn.addEventListener("click", function () {
-                if (!files.length) return;
-                recognizeCover(files[files.length - 1]);
+                if (!files.length) {
+                    setAiStatus("Спочатку зробіть фото обкладинки.");
+                    return;
+                }
+                recognizeAllCovers();
+            });
+        }
+
+        var clearBtn = document.getElementById("manualClearAllBtn");
+        if (clearBtn) {
+            clearBtn.addEventListener("click", function () {
+                if (recognizing || submitting) return;
+                var ids = [
+                    "manualIsbn",
+                    "manualTitle",
+                    "manualAuthors",
+                    "manualPublisher",
+                    "manualPublishDate",
+                    "manualCoverText",
+                ];
+                ids.forEach(function (id) {
+                    var el = document.getElementById(id);
+                    if (el) el.value = "";
+                });
+                // Optional URL fields from Django form (may lack fixed ids)
+                Array.prototype.forEach.call(form.elements, function (el) {
+                    if (!el || !el.name) return;
+                    if (el.type === "hidden" || el.type === "submit" || el.type === "button") {
+                        return;
+                    }
+                    if (el.type === "file") {
+                        el.value = "";
+                        return;
+                    }
+                    if (el.type === "checkbox" || el.type === "radio") {
+                        el.checked = false;
+                        return;
+                    }
+                    if (
+                        el.name === "cover_url" ||
+                        el.name === "info_url" ||
+                        el.name === "isbn" ||
+                        el.name === "title" ||
+                        el.name === "authors" ||
+                        el.name === "publisher" ||
+                        el.name === "publish_date" ||
+                        el.name === "cover_text"
+                    ) {
+                        el.value = "";
+                    }
+                });
+                files = [];
+                syncInput();
+                render();
+                setAiStatus("");
+                console.info("[manual-photo] cleared all fields");
             });
         }
 
@@ -958,6 +1047,8 @@
                 form.querySelector("#editManualPublisher").value = data.publisher || "";
                 form.querySelector("#editManualPublishDate").value =
                     data.publish_date || "";
+                var coverTextEl = form.querySelector("#editManualCoverText");
+                if (coverTextEl) coverTextEl.value = data.cover_text || "";
                 var photosInput = form.querySelector("#editManualPhotos");
                 if (photosInput) photosInput.value = "";
                 if (existingBox) existingBox.innerHTML = "";

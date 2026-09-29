@@ -15,6 +15,7 @@ def get_or_create_book_from_payload(payload: dict) -> tuple[Book, bool]:
         "publish_date": (payload.get("publish_date") or "").strip()[:64],
         "cover_url": (payload.get("cover_url") or "").strip()[:500],
         "info_url": (payload.get("info_url") or "").strip()[:500],
+        "cover_text": (payload.get("cover_text") or "").strip(),
     }
     book, created = Book.objects.get_or_create(isbn=isbn, defaults=defaults)
     if not created:
@@ -40,6 +41,10 @@ def sync_book_from_payload(book: Book, payload: dict) -> Book:
         if not old:
             setattr(book, field, new)
             changed_fields.append(field)
+    cover_text = (payload.get("cover_text") or "").strip()
+    if cover_text and not (book.cover_text or "").strip():
+        book.cover_text = cover_text
+        changed_fields.append("cover_text")
     if changed_fields:
         book.save(update_fields=changed_fields)
     return book

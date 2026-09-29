@@ -566,6 +566,7 @@ def my_library(request):
                     publish_date=(d.get("publish_date") or "").strip(),
                     cover_url=(d.get("cover_url") or "").strip(),
                     info_url=(d.get("info_url") or "").strip(),
+                    cover_text=(d.get("cover_text") or "").strip(),
                 )
                 saved = save_book_photos(book, photos, request=request)
                 add_owned_copy(request.user, book)
@@ -652,6 +653,7 @@ def my_library(request):
                 "authors": b.authors or "",
                 "publisher": b.publisher or "",
                 "publish_date": b.publish_date or "",
+                "cover_text": b.cover_text or "",
                 "photos": [
                     {"id": p.id, "url": p.image.url} for p in b.photos.all()
                 ],
@@ -690,11 +692,18 @@ def my_library(request):
 @login_required
 @require_POST
 def recognize_book_cover_view(request):
-    """Web: AI fill title/authors/ISBN from a cover photo (manual add)."""
-    uploaded = request.FILES.get("photo") or request.FILES.get("photos")
-    if not uploaded:
-        return JsonResponse({"detail": "Потрібне фото обкладинки (поле photo)."}, status=400)
-    from .book_cover_ai import CoverAIError, recognize_book_cover, vision_configured
+    """Web: AI fill title/authors/ISBN from cover photo(s) (manual add)."""
+    files = list(request.FILES.getlist("photos") or [])
+    if not files:
+        one = request.FILES.get("photo")
+        if one:
+            files = [one]
+    if not files:
+        return JsonResponse(
+            {"detail": "Потрібне фото обкладинки (поле photo або photos)."},
+            status=400,
+        )
+    from .book_cover_ai import CoverAIError, recognize_book_covers, vision_configured
 
     if not vision_configured():
         return JsonResponse(
@@ -702,7 +711,7 @@ def recognize_book_cover_view(request):
             status=503,
         )
     try:
-        data = recognize_book_cover(uploaded)
+        data = recognize_book_covers(files)
     except CoverAIError as exc:
         return JsonResponse({"detail": exc.message}, status=exc.status)
     return JsonResponse(data)
@@ -767,6 +776,9 @@ def update_manual_shelf_book(request, shelf_id):
                 else None,
                 info_url=(d.get("info_url") or "").strip()
                 if "info_url" in request.POST
+                else None,
+                cover_text=(d.get("cover_text") or "").strip()
+                if "cover_text" in request.POST
                 else None,
             )
         except ValueError as exc:

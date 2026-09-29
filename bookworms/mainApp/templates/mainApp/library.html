@@ -125,6 +125,11 @@
                     <label class="form-label" for="{{ manual_form.publish_date.id_for_label }}">{{ manual_form.publish_date.label }}</label>
                     {{ manual_form.publish_date }}
                 </div>
+                <div class="col-12">
+                    <label class="form-label" for="{{ manual_form.cover_text.id_for_label }}">{{ manual_form.cover_text.label }}</label>
+                    {{ manual_form.cover_text }}
+                    <p class="small text-muted mb-0">Повний текст з фото після AI-розпізнавання (можна правити вручну).</p>
+                </div>
                 <div class="col-md-6">
                     <label class="form-label" for="{{ manual_form.cover_url.id_for_label }}">{{ manual_form.cover_url.label }}</label>
                     {{ manual_form.cover_url }}
@@ -164,6 +169,9 @@
                 </div>
                 <div class="col-12 d-flex flex-wrap gap-2">
                     <button type="submit" class="btn btn-outline-primary">Додати на полицю</button>
+                    <button type="button" class="btn btn-outline-danger" id="manualClearAllBtn">
+                        Очистити всі поля
+                    </button>
                     <button type="button"
                             class="btn btn-outline-secondary"
                             data-bs-toggle="collapse"
@@ -388,6 +396,11 @@
                             <input type="text" name="publish_date" id="editManualPublishDate" class="form-control">
                         </div>
                         <div class="col-12">
+                            <label class="form-label" for="editManualCoverText">Текст з обкладинки (AI)</label>
+                            <textarea name="cover_text" id="editManualCoverText" class="form-control" rows="8"
+                                      placeholder="Повний розпізнаний текст обкладинки"></textarea>
+                        </div>
+                        <div class="col-12">
                             <label class="form-label">Поточні фото</label>
                             <div id="editManualExistingPhotos" class="d-flex flex-wrap gap-2 mb-2"></div>
                             <label class="form-label" for="editManualPhotos">Додати фото</label>
@@ -409,5 +422,5 @@
 {% block extra_js %}
 {% load static %}
 <script src="{% url 'isbn_scan_asset' 'isbn_scan.js' %}?v=9"></script>
-<script src="{% url 'isbn_scan_asset' 'manual_book_photos.js' %}?v=14"></script>
+<script src="{% url 'isbn_scan_asset' 'manual_book_photos.js' %}?v=17"></script>
 {% endblock %}

@@ -633,6 +633,7 @@ def recognize_book_cover(uploaded) -> dict[str, Any]:
     fields["source"] = source
     if raw_text:
         fields["raw_text"] = raw_text
+        fields["cover_text"] = raw_text
     isbn_ok = bool((fields.get("isbn") or "").strip())
     fields["isbn_missing"] = not isbn_ok
     fields["note"] = "" if isbn_ok else NO_ISBN_NOTE
@@ -645,3 +646,96 @@ def recognize_book_cover(uploaded) -> dict[str, Any]:
         fields.get("note") or "",
     )
     return fields
+
+
+def _result_quality(fields: dict[str, Any]) -> int:
+    """Score a recognition result: letter density + useful bibliographic fields."""
+    raw = str(fields.get("raw_text") or fields.get("cover_text") or "")
+    score = _ocr_text_score(raw)
+    score += min(40, len(raw) // 15)
+    if (fields.get("isbn") or "").strip():
+        score += 80
+    title = (fields.get("title") or "").strip()
+    if title:
+        score += 25 + min(40, len(title))
+    if (fields.get("authors") or "").strip():
+        score += 25
+    if (fields.get("publisher") or "").strip():
+        score += 10
+    if (fields.get("publish_date") or "").strip():
+        score += 5
+    return score
+
+
+def recognize_book_covers(uploads) -> dict[str, Any]:
+    """
+    OCR every uploaded cover photo, pick the best-quality result for
+    bibliographic fields and «Текст з обкладинки» (raw_text / cover_text).
+    """
+    files = [f for f in (uploads or []) if f]
+    if not files:
+        raise CoverAIError("Потрібне хоча б одне фото обкладинки.", status=400)
+    if len(files) == 1:
+        out = recognize_book_cover(files[0])
+        out["photos_scanned"] = 1
+        out["photos_ok"] = 1
+        out["best_photo_index"] = 0
+        return out
+
+    if not vision_configured():
+        raise CoverAIError(
+            "Розпізнавання не налаштовано (OCR_SPACE_API_KEY або OPENAI_API_KEY).",
+            status=503,
+        )
+
+    candidates: list[tuple[int, int, dict[str, Any]]] = []
+    errors: list[CoverAIError] = []
+    for idx, uploaded in enumerate(files):
+        try:
+            fields = recognize_book_cover(uploaded)
+            q = _result_quality(fields)
+            candidates.append((idx, q, fields))
+            logger.info(
+                "cover_ai.multi idx=%s score=%s title=%r chars=%s",
+                idx,
+                q,
+                (fields.get("title") or "")[:40],
+                len(fields.get("raw_text") or ""),
+            )
+        except CoverAIError as exc:
+            errors.append(exc)
+            logger.warning("cover_ai.multi_fail idx=%s err=%s", idx, exc.message)
+
+    if not candidates:
+        if errors:
+            raise errors[0]
+        raise CoverAIError("OCR не знайшов текст на жодному фото.", status=422)
+
+    candidates.sort(key=lambda row: (row[1], len(row[2].get("raw_text") or "")), reverse=True)
+    best_idx, best_score, best = candidates[0]
+    best = dict(best)
+
+    # Fill missing bibliographic fields from other shots
+    for _idx, _score, fields in candidates[1:]:
+        for key in ("isbn", "title", "authors", "publisher", "publish_date"):
+            if not (best.get(key) or "").strip() and (fields.get(key) or "").strip():
+                best[key] = fields[key]
+
+    raw = (best.get("raw_text") or best.get("cover_text") or "").strip()
+    best["raw_text"] = raw
+    best["cover_text"] = raw
+    isbn_ok = bool((best.get("isbn") or "").strip())
+    best["isbn_missing"] = not isbn_ok
+    best["note"] = "" if isbn_ok else NO_ISBN_NOTE
+    best["photos_scanned"] = len(files)
+    best["photos_ok"] = len(candidates)
+    best["best_photo_index"] = best_idx
+    best["best_score"] = best_score
+    logger.info(
+        "cover_ai.multi_best idx=%s/%s score=%s title=%r",
+        best_idx,
+        len(files),
+        best_score,
+        (best.get("title") or "")[:40],
+    )
+    return best

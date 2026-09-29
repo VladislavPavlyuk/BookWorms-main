@@ -167,6 +167,18 @@ class AddBookManualForm(forms.Form):
             }
         ),
     )
+    cover_text = forms.CharField(
+        label="Текст з обкладинки (AI)",
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "id": "manualCoverText",
+                "rows": 8,
+                "placeholder": "Після знімка тут з’явиться весь розпізнаний текст обкладинки",
+            }
+        ),
+    )
     cover_url = forms.URLField(
         label="URL обкладинки",
         max_length=500,
