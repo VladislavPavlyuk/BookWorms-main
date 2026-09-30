@@ -282,11 +282,12 @@ export default function ShelfScreen() {
         <CyrillicTextInput
           placeholder={adding ? "Додаємо…" : "ISBN 10/13 — додається сам"}
           placeholderTextColor={colors.muted}
-          style={styles.input}
+          style={styles.isbnInput}
           value={isbn}
           onChangeText={onIsbnChange}
           autoCapitalize="none"
           keyboardType="number-pad"
+          maxLength={13}
           editable={!adding}
         />
         <Pressable
@@ -432,8 +433,13 @@ export default function ShelfScreen() {
                 </Pressable>
               )}
               {!item.borrowed_from && item.can_edit_manual && (
-                <Pressable onPress={() => openEditManual(item)}>
-                  <Text style={styles.link}>Редагувати</Text>
+                <Pressable
+                  onPress={() => openEditManual(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Редагувати"
+                  hitSlop={8}
+                >
+                  <Ionicons name="create-outline" size={22} color={colors.ink} />
                 </Pressable>
               )}
               {!item.borrowed_from && (
@@ -646,6 +652,18 @@ const styles = StyleSheet.create({
   },
   slipsLink: { paddingHorizontal: 16, marginBottom: 10 },
   input: { flex: 1, borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 8 },
+  isbnInput: {
+    width: 148,
+    maxWidth: 148,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderBottomWidth: 1,
+    borderColor: colors.line,
+    color: colors.ink,
+    paddingVertical: 8,
+    fontSize: 16,
+    fontVariant: ["tabular-nums"],
+  },
   inputFull: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 10, marginBottom: 12 },
   add: { backgroundColor: colors.ink, paddingHorizontal: 12, justifyContent: "center", borderRadius: btnRadius, flexDirection: "row", alignItems: "center" },
   scanBtn: { backgroundColor: colors.fab },

@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { ApiError, ExchangeApi, HandoffApi, MsgApi, ShelfApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { formatMsgTime, otherPartners } from "../../src/chat";
@@ -315,10 +316,14 @@ export default function Chat() {
           multiline
           editable={!busy}
         />
-        <Pressable onPress={send} disabled={busy || !body.trim()}>
-          <Text style={[styles.send, (!body.trim() || busy) && { opacity: 0.4 }]}>
-            Надіслати
-          </Text>
+        <Pressable
+          onPress={send}
+          disabled={busy || !body.trim()}
+          accessibilityRole="button"
+          accessibilityLabel="Відправити"
+          style={[styles.sendBtn, (!body.trim() || busy) && { opacity: 0.4 }]}
+        >
+          <Ionicons name="send" size={22} color={colors.stamp} />
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -397,4 +402,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   send: { color: colors.stamp, fontWeight: "800", paddingVertical: 10, paddingHorizontal: 4 },
+  sendBtn: { paddingVertical: 10, paddingHorizontal: 8, justifyContent: "center" },
 });

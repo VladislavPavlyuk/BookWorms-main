@@ -114,7 +114,7 @@ const HeaderTrailing = memo(function HeaderTrailing({
         accessibilityLabel="Advanced Search"
         accessibilityState={{ expanded: filterOpen }}
       >
-        <FilterGlyph color={filterOpen ? colors.white : colors.ink} size={s(18)} />
+        <FilterGlyph color={filterOpen ? colors.white : colors.ink} size={s(36)} />
       </Pressable>
       <HeaderActions />
     </>
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   logoHit: { flexShrink: 0, marginRight: 2 },
-  logo: { width: s(48), height: s(48) },
+  logo: { width: s(72), height: s(72) },
   searchInput: {
     flex: 1,
     minWidth: 0,
@@ -423,8 +423,8 @@ const styles = StyleSheet.create({
   advBtn: {
     borderWidth: 0,
     backgroundColor: "transparent",
-    width: s(36),
-    height: s(36),
+    width: s(48),
+    height: s(48),
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,

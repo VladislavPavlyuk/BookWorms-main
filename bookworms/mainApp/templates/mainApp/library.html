@@ -57,7 +57,7 @@
         <form method="post" class="row g-2 align-items-end" id="addIsbnForm">
             {% csrf_token %}
             <input type="hidden" name="add_isbn" value="1">
-            <div class="col-10 col-md-10">
+            <div class="col-auto">
                 <label class="form-label" for="{{ form.isbn.id_for_label }}">{{ form.isbn.label }}</label>
                 {{ form.isbn }}
                 {% if form.isbn.errors %}
@@ -65,10 +65,10 @@
                 {% endif %}
                 <div class="form-text" id="isbnAutoHint">Книга додається автоматично після введення повного ISBN (10 або 13).</div>
             </div>
-            <div class="col-2 col-md-2">
+            <div class="col-auto">
                 <label class="form-label d-none d-md-block">&nbsp;</label>
                 <button type="button"
-                        class="btn btn-dark w-100 isbn-scan-btn"
+                        class="btn btn-dark isbn-scan-btn"
                         id="isbnScanOpen"
                         title="Сканувати ISBN камерою"
                         aria-label="Сканувати ISBN камерою">
@@ -251,9 +251,13 @@
                             <a href="{% url 'create_post' %}?mode=feedback&amp;book_id={{ book.id }}" class="btn btn-sm btn-outline-success">Написати відгук</a>
                             {% if shelf.can_edit_manual %}
                             <button type="button"
-                                    class="btn btn-sm btn-outline-primary js-edit-manual-book"
-                                    data-shelf-id="{{ shelf.id }}">
-                                Редагувати
+                                    class="btn btn-sm btn-outline-primary js-edit-manual-book btn-icon-action"
+                                    data-shelf-id="{{ shelf.id }}"
+                                    title="Редагувати"
+                                    aria-label="Редагувати">
+                                <svg class="btn-icon-action__glyph" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/>
+                                </svg>
                             </button>
                             <script type="application/json" id="edit-book-payload-{{ shelf.id }}">{{ shelf.edit_payload_json }}</script>
                             {% endif %}

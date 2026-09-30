@@ -111,8 +111,18 @@ class AddIsbnForm(forms.Form):
     """Поле ISBN для сторінки "Моя полиця"; вікові групи задаються окремо на картці книги."""
     isbn = forms.CharField(
         label="ISBN (10 або 13)",
-        max_length=32,
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "9780140328721"}),
+        max_length=13,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control isbn-add-input",
+                "placeholder": "9780140328721",
+                "maxlength": "13",
+                "size": "13",
+                "inputmode": "numeric",
+                "autocomplete": "off",
+                "spellcheck": "false",
+            }
+        ),
     )
 
 

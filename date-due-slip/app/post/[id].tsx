@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi } from "../../src/api";
@@ -115,19 +116,39 @@ export default function PostDetail() {
         </>
       )}
 
-      <Pressable onPress={like}>
-        <Text style={[styles.like, post.liked_by_me && { color: colors.stamp }]}>
-          ♥ {post.likes_count}
+      <Pressable
+        onPress={like}
+        style={styles.likeRow}
+        accessibilityRole="button"
+        accessibilityLabel={`Вподобайка ${post.likes_count}`}
+      >
+        <Ionicons
+          name={post.liked_by_me ? "heart" : "heart-outline"}
+          size={22}
+          color="#E11D48"
+        />
+        <Text style={[styles.like, post.liked_by_me && styles.likeOn]}>
+          {post.likes_count}
         </Text>
       </Pressable>
 
       {mine && !editing && (
         <View style={styles.row}>
-          <Pressable onPress={() => setEditing(true)}>
-            <Text style={styles.link}>Редагувати</Text>
+          <Pressable
+            onPress={() => setEditing(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Редагувати"
+            hitSlop={8}
+          >
+            <Ionicons name="create-outline" size={22} color={colors.ink} />
           </Pressable>
-          <Pressable onPress={remove}>
-            <Text style={[styles.link, { color: colors.stamp }]}>Видалити</Text>
+          <Pressable
+            onPress={remove}
+            accessibilityRole="button"
+            accessibilityLabel="Видалити"
+            hitSlop={8}
+          >
+            <Ionicons name="trash-outline" size={22} color="#E11D48" />
           </Pressable>
         </View>
       )}
@@ -139,16 +160,23 @@ export default function PostDetail() {
           <Text style={styles.body}>{c.text}</Text>
         </View>
       ))}
-      <CyrillicTextInput
-        style={styles.input}
-        placeholder="Новий коментар"
-        placeholderTextColor={colors.muted}
-        value={comment}
-        onChangeText={setComment}
-      />
-      <Pressable style={styles.btn} onPress={sendComment}>
-        <Text style={styles.btnText}>Надіслати</Text>
-      </Pressable>
+      <View style={styles.commentSendRow}>
+        <CyrillicTextInput
+          style={[styles.input, { flex: 1, marginTop: 0 }]}
+          placeholder="Новий коментар"
+          placeholderTextColor={colors.muted}
+          value={comment}
+          onChangeText={setComment}
+        />
+        <Pressable
+          style={styles.sendIconBtn}
+          onPress={sendComment}
+          accessibilityRole="button"
+          accessibilityLabel="Відправити"
+        >
+          <Ionicons name="send" size={22} color={colors.white} />
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
@@ -158,12 +186,23 @@ const styles = StyleSheet.create({
   book: { color: colors.stamp, fontWeight: "700", marginTop: 4 },
   title: { fontSize: 22, fontWeight: "800", color: colors.ink, marginTop: 8 },
   body: { color: colors.ink, marginTop: 8, lineHeight: 22 },
-  like: { marginTop: 14, color: colors.muted, fontWeight: "700", fontSize: 16 },
-  row: { flexDirection: "row", gap: 20, marginTop: 12 },
+  like: { marginTop: 0, color: colors.muted, fontWeight: "700", fontSize: 16 },
+  likeOn: { color: "#E11D48", fontWeight: "800" },
+  likeRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 },
+  row: { flexDirection: "row", gap: 20, marginTop: 12, alignItems: "center" },
   link: { color: colors.ink, fontWeight: "700" },
   sec: { marginTop: 24, fontWeight: "800", color: colors.ink, marginBottom: 8 },
   comment: { borderBottomWidth: 1, borderColor: colors.line, paddingVertical: 8 },
   input: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 10, marginTop: 12 },
+  commentSendRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
+  sendIconBtn: {
+    backgroundColor: colors.ink,
+    width: 44,
+    height: 44,
+    borderRadius: btnRadius,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   btn: { backgroundColor: colors.ink, padding: 12, marginTop: 12, borderRadius: btnRadius },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },
 });

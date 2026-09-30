@@ -165,7 +165,14 @@
                         {{ form.body }}
                         {% if form.body.errors %}<div class="text-danger small">{{ form.body.errors }}</div>{% endif %}
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Надіслати</button>
+                    <button type="submit"
+                            class="btn btn-primary btn-icon-action"
+                            title="Відправити"
+                            aria-label="Відправити">
+                        <svg class="btn-icon-action__glyph" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path fill="currentColor" d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/>
+                        </svg>
+                    </button>
                 </form>
             </div>
         </div>

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  ImageBackground,
   Modal,
   Pressable,
   RefreshControl,
@@ -14,6 +15,7 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { ApiError, AuthApi, BooksApi, FeedApi, type FeedSearch } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { hasFeedSearch, useFeedSearch } from "../../src/feedSearch";
@@ -291,9 +293,19 @@ export default function Feed() {
                   <Text style={styles.body} numberOfLines={landscape ? 6 : 4}>
                     {item.text}
                   </Text>
-                  <Pressable onPress={() => like(item.id)}>
-                    <Text style={[styles.like, item.liked_by_me && { color: colors.stamp }]}>
-                      ♥ {item.likes_count} · коментарі {item.comments_count}
+                  <Pressable
+                    onPress={() => like(item.id)}
+                    style={styles.likeRow}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Вподобайка ${item.likes_count}`}
+                  >
+                    <Ionicons
+                      name={item.liked_by_me ? "heart" : "heart-outline"}
+                      size={20}
+                      color="#E11D48"
+                    />
+                    <Text style={[styles.like, item.liked_by_me && styles.likeOn]}>
+                      {item.likes_count} · коментарі {item.comments_count}
                     </Text>
                   </Pressable>
                 </View>
@@ -315,7 +327,13 @@ export default function Feed() {
             accessibilityRole="button"
             accessibilityLabel="Створити пост"
           >
-            <Text style={styles.fabPlus}>+</Text>
+            <ImageBackground
+              source={require("../../assets/fab-gradient.png")}
+              style={styles.fabBg}
+              imageStyle={styles.fabBgImg}
+            >
+              <Text style={styles.fabPlus}>+</Text>
+            </ImageBackground>
           </Pressable>
 
           <Modal
@@ -409,20 +427,30 @@ const styles = StyleSheet.create({
     width: s(64),
     height: s(64),
     borderRadius: s(32),
-    backgroundColor: colors.fab,
+    zIndex: 40,
+    elevation: 12,
+    shadowColor: "#E83E8C",
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.55)",
+    overflow: "hidden",
+    backgroundColor: "#E83E8C",
+  },
+  fabBg: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 40,
-    elevation: 10,
-    shadowColor: colors.fab,
-    shadowOpacity: 0.45,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    borderWidth: 2,
-    borderColor: "#14A3A8",
+  },
+  fabBgImg: {
+    borderRadius: s(32),
   },
   fabPressed: {
-    backgroundColor: colors.fabPressed,
+    opacity: 0.92,
+    transform: [{ scale: 0.96 }],
   },
   fabPlus: {
     color: colors.white,
@@ -431,6 +459,9 @@ const styles = StyleSheet.create({
     lineHeight: s(40),
     includeFontPadding: false,
     marginTop: -2,
+    textShadowColor: "rgba(0,0,0,0.25)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   createScrim: {
     flex: 1,
@@ -505,10 +536,20 @@ const styles = StyleSheet.create({
   },
   body: { color: colors.ink, marginTop: 6, lineHeight: fs(20), fontSize: fs(15) },
   like: {
-    marginTop: s(10),
+    marginTop: 0,
     color: colors.muted,
     fontWeight: "600",
     fontSize: fs(14),
+  },
+  likeOn: {
+    color: "#E11D48",
+    fontWeight: "700",
+  },
+  likeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: s(10),
   },
   empty: { textAlign: "center", color: colors.muted, marginTop: s(24), fontSize: fs(16) },
 });

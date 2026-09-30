@@ -385,10 +385,10 @@
             });
         }
 
-        /* Mobile: hide filter / feed / burger while typing; restore after 2s idle */
+        /* Search typing: widen field to burger; hide logo / feed / + ; restore after 1s idle */
         if (navQ) {
             var chromeIdleTimer = null;
-            var CHROME_IDLE_MS = 2000;
+            var CHROME_IDLE_MS = 1000;
 
             function setChromeCompact(on) {
                 document.documentElement.classList.toggle("search-chrome-compact", !!on);
@@ -396,10 +396,6 @@
             }
 
             function onSearchTyping() {
-                if (window.matchMedia && !window.matchMedia("(max-width: 991.98px)").matches) {
-                    setChromeCompact(false);
-                    return;
-                }
                 setChromeCompact(true);
                 if (chromeIdleTimer) clearTimeout(chromeIdleTimer);
                 chromeIdleTimer = setTimeout(function () {
@@ -410,6 +406,9 @@
 
             navQ.addEventListener("input", onSearchTyping);
             navQ.addEventListener("compositionend", onSearchTyping);
+            navQ.addEventListener("focus", function () {
+                if ((navQ.value || "").trim()) onSearchTyping();
+            });
         }
     }
 
