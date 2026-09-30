@@ -597,3 +597,79 @@ class Like(models.Model):
 
     def __str__(self):
         return f'{self.user.username} likes {self.post.title}'
+
+
+class BookPriceEvaluation(models.Model):
+    """
+    Автооцінка ринкової вартості книги за ISBN з інтернет-джерел.
+    Показується лише на «Моя полиця»; оновлення — лише за запитом користувача
+    (перший запуск — при додаванні примірника).
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Оцінка…"
+        READY = "ready", "Є оцінка"
+        MISSING = "missing", "Не знайдено"
+        ERROR = "error", "Помилка"
+
+    book = models.OneToOneField(
+        Book,
+        on_delete=models.CASCADE,
+        related_name="price_evaluation",
+        verbose_name="Книга",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    currency = models.CharField(max_length=8, default="UAH", verbose_name="Валюта")
+    price_avg = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Середня ціна"
+    )
+    price_min = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Мін. ціна"
+    )
+    price_max = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Макс. ціна"
+    )
+    source_count = models.PositiveSmallIntegerField(default=0)
+    evaluated_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "оцінка ціни книги"
+        verbose_name_plural = "оцінки цін книг"
+
+    def __str__(self):
+        return f"price#{self.pk} book={self.book_id} {self.status}"
+
+
+class BookPriceQuote(models.Model):
+    """Одна пропозиція ціни з інтернет-джерела (3–10 на оцінку)."""
+
+    evaluation = models.ForeignKey(
+        BookPriceEvaluation,
+        on_delete=models.CASCADE,
+        related_name="quotes",
+        verbose_name="Оцінка",
+    )
+    source_name = models.CharField(max_length=120, verbose_name="Джерело")
+    source_url = models.URLField(max_length=500, blank=True, verbose_name="URL")
+    price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Ціна")
+    currency = models.CharField(max_length=8, default="UAH")
+    price_uah = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="Ціна (UAH)"
+    )
+    fetched_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "цінова пропозиція"
+        verbose_name_plural = "цінові пропозиції"
+        ordering = ["price_uah", "id"]
+
+    def __str__(self):
+        return f"{self.source_name}: {self.price} {self.currency}"

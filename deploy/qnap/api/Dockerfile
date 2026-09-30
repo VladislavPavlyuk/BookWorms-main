@@ -29,6 +29,11 @@ RUN chmod +x /entrypoint.sh \
     && test -f /app/mainApp/migrations/0020_customuser_last_watched_post.py \
     && test -f /app/mainApp/migrations/0021_copy_queue_and_transmit.py \
     && test -f /app/mainApp/migrations/0022_loan_handoff.py \
+    && test -f /app/mainApp/migrations/0023_bookphoto.py \
+    && test -f /app/mainApp/migrations/0024_book_cover_text.py \
+    && test -f /app/mainApp/migrations/0025_book_price_evaluation.py \
+    && test -f /app/mainApp/book_price.py \
+    && grep -q 'class BookPriceEvaluation' /app/mainApp/models.py \
     && grep -q 'class LoanHandoff' /app/mainApp/models.py \
     && grep -q 'last_watched_post' /app/mainApp/models.py \
     && grep -q 'code_rev' /app/api/views.py \

@@ -184,6 +184,7 @@ class ShelfSerializer(serializers.ModelSerializer):
     pending_return_shelf_id = serializers.SerializerMethodField()
     request_shelf_id = serializers.SerializerMethodField()
     can_edit_manual = serializers.SerializerMethodField()
+    price_eval = serializers.SerializerMethodField()
 
     class Meta:
         model = Shelf
@@ -203,8 +204,23 @@ class ShelfSerializer(serializers.ModelSerializer):
             "pending_return_shelf_id",
             "request_shelf_id",
             "can_edit_manual",
+            "price_eval",
             "added_at",
         )
+
+    def get_price_eval(self, obj):
+        # Only expose on the owner's library endpoint (my_shelf / refresh).
+        if not self.context.get("include_price_eval"):
+            return None
+        from mainApp.book_price import serialize_evaluation
+
+        ev = getattr(obj.book, "price_evaluation", None)
+        if ev is None:
+            try:
+                ev = obj.book.price_evaluation
+            except Exception:
+                ev = None
+        return serialize_evaluation(ev)
 
     def get_can_edit_manual(self, obj):
         if obj.borrowed_from_id:

@@ -222,8 +222,16 @@ export const BooksApi = {
 
 export const ShelfApi = {
   mine: () =>
-    api<{ shelves: Shelf[]; pending_returns: Shelf[]; lent_out_count?: number }>(
-      "/api/shelf/"
+    api<{
+      shelves: Shelf[];
+      pending_returns: Shelf[];
+      lent_out_count?: number;
+      price_total_uah?: string;
+    }>("/api/shelf/"),
+  refreshPrice: (bookId: number) =>
+    api<{ ok: boolean; price_eval: import("./types").BookPriceEval | null }>(
+      `/api/books/${bookId}/price/refresh/`,
+      { method: "POST" }
     ),
   addIsbn: (isbn: string) => api<Shelf>("/api/shelf/isbn/", { method: "POST", body: { isbn } }),
   addManual: (body: {

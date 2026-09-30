@@ -16,6 +16,12 @@ def add_owned_copy(user: CustomUser, book: Book) -> Shelf:
         holder=user,
         legal_owner=user,
     )
+    try:
+        from ..book_price import ensure_pending_and_schedule
+
+        ensure_pending_and_schedule(book, force=False)
+    except Exception:
+        pass
     return shelf
 
 

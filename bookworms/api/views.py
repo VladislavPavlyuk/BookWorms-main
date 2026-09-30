@@ -426,8 +426,10 @@ def post_comment(request, post_id):
 @api_view(["GET"])
 def my_shelf(request):
     shelves_all = list(
-        request.user.shelf_entries.select_related("book", "borrowed_from", "user", "copy")
-        .prefetch_related("book__photos")
+        request.user.shelf_entries.select_related(
+            "book", "borrowed_from", "user", "copy", "book__price_evaluation"
+        )
+        .prefetch_related("book__photos", "book__price_evaluation__quotes")
         .order_by("-added_at")
     )
     shelves_all = ensure_shelves_have_copies(shelves_all)
@@ -456,15 +458,40 @@ def my_shelf(request):
         )
     # Фізична наявність: без власних, що вже у позиці
     shelves = [s for s in shelves_all if not s.is_lent_out]
+    from mainApp.book_price import library_price_total_uah
+    from mainApp.models import BookPriceEvaluation
+
+    ctx = {"request": request, "include_price_eval": True}
+    evals = []
+    for s in shelves:
+        ev = getattr(s.book, "price_evaluation", None)
+        if ev and ev.status == BookPriceEvaluation.Status.READY:
+            evals.append(ev)
     return Response(
         {
-            "shelves": ShelfSerializer(shelves, many=True, context={"request": request}).data,
+            "shelves": ShelfSerializer(shelves, many=True, context=ctx).data,
             "pending_returns": ShelfSerializer(
                 pending, many=True, context={"request": request}
             ).data,
             "lent_out_count": lent_out_count,
+            "price_total_uah": str(library_price_total_uah(evals)),
         }
     )
+
+
+@api_view(["POST"])
+def book_price_refresh(request, book_id):
+    """Owner-only: re-run ISBN market price evaluation."""
+    from mainApp.book_price import ensure_pending_and_schedule, serialize_evaluation
+    from mainApp.models import Book
+
+    if not Shelf.objects.filter(user=request.user, book_id=book_id).exists():
+        return _error("Книга не на вашій полиці.", 403)
+    book = Book.objects.filter(pk=book_id).first()
+    if not book:
+        return _error("Книгу не знайдено.", 404)
+    ev = ensure_pending_and_schedule(book, force=True)
+    return Response({"ok": True, "price_eval": serialize_evaluation(ev)})
 
 
 @api_view(["GET"])

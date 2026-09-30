@@ -601,8 +601,10 @@ def my_library(request):
     # Полиця = фізичне місце: власні вільні + позичені вами.
     # Власні примірники, які зараз у когось у позиці, тут НЕ показуємо.
     shelves_all = list(
-        request.user.shelf_entries.select_related("book", "borrowed_from", "copy")
-        .prefetch_related("book__photos")
+        request.user.shelf_entries.select_related(
+            "book", "borrowed_from", "copy", "book__price_evaluation"
+        )
+        .prefetch_related("book__photos", "book__price_evaluation__quotes")
         .all()
     )
     pending_returns_to_confirm = list(
@@ -667,6 +669,28 @@ def my_library(request):
             )
         else:
             s.edit_payload_json = ""
+
+    from .book_price import library_price_total_uah, serialize_evaluation
+    from .models import BookPriceEvaluation
+
+    evals_for_total = []
+    for s in shelves:
+        ev = getattr(s.book, "price_evaluation", None)
+        pe = serialize_evaluation(ev)
+        s.price_eval = pe
+        if pe and pe.get("quotes") is not None:
+            raw_q = json.dumps(pe["quotes"], ensure_ascii=False)
+            s.price_quotes_json = mark_safe(
+                raw_q.replace("<", "\\u003c")
+                .replace(">", "\\u003e")
+                .replace("&", "\\u0026")
+            )
+        else:
+            s.price_quotes_json = mark_safe("[]")
+        if ev and ev.status == BookPriceEvaluation.Status.READY:
+            evals_for_total.append(ev)
+    library_price_total = library_price_total_uah(evals_for_total)
+
     locked_raw = request.session.get("reader_age_locked_shelf_ids", [])
     if not isinstance(locked_raw, list):
         locked_raw = []
@@ -685,8 +709,30 @@ def my_library(request):
             "reader_age_min": READER_AGE_MIN,
             "reader_age_max": READER_AGE_MAX,
             "reader_age_locked_shelf_ids": reader_age_locked_shelf_ids,
+            "library_price_total": library_price_total,
         },
     )
+
+
+@login_required
+@require_POST
+def refresh_book_price_view(request, book_id):
+    """User-requested re-evaluation of ISBN market price (library only)."""
+    from .book_price import ensure_pending_and_schedule, serialize_evaluation
+    from .models import Book, Shelf
+
+    owns = Shelf.objects.filter(user=request.user, book_id=book_id).exists()
+    if not owns:
+        return JsonResponse({"detail": "Книга не на вашій полиці."}, status=403)
+    book = Book.objects.filter(pk=book_id).first()
+    if not book:
+        return JsonResponse({"detail": "Книгу не знайдено."}, status=404)
+    ev = ensure_pending_and_schedule(book, force=True)
+    is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    if is_xhr:
+        return JsonResponse({"ok": True, "price_eval": serialize_evaluation(ev)})
+    messages.info(request, "Оновлення оцінки ціни запущено.")
+    return redirect("my_library")
 
 
 @login_required

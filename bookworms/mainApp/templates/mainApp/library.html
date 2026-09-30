@@ -187,9 +187,16 @@
 </div>
 
 {% if shelves %}
-    <div class="alert alert-info border-0 shadow-sm mb-3" role="status">
-        <strong>Поділіться враженнями:</strong> напишіть пост про прочитану книгу - натисніть
-        <span class="text-nowrap">"Написати пост про книгу"</span> на картці нижче (на головній з’явиться блок книги з обкладинкою).
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div class="alert alert-info border-0 shadow-sm mb-0 flex-grow-1" role="status">
+            <strong>Поділіться враженнями:</strong> напишіть пост про прочитану книгу - натисніть
+            <span class="text-nowrap">"Написати пост про книгу"</span> на картці нижче.
+        </div>
+        <div class="library-price-total border rounded px-3 py-2 bg-body-secondary">
+            <span class="small text-muted d-block">Оцінка вартості полиці</span>
+            <strong class="fs-5">≈ {{ library_price_total }} ₴</strong>
+            <span class="small text-muted d-block">сума оцінок ISBN (де знайдено ≥3 джерела)</span>
+        </div>
     </div>
     <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
         {% for shelf in shelves %}
@@ -224,6 +231,64 @@
                         {% if book.authors %}
                             <p class="card-text small mb-1">{{ book.authors }}</p>
                         {% endif %}
+                        <div class="library-book-price mb-2" data-book-id="{{ book.id }}">
+                            {% if shelf.price_eval %}
+                                {% if shelf.price_eval.status == "ready" and shelf.price_eval.price_avg %}
+                                    <p class="mb-1">
+                                        <span class="fw-semibold">≈ {{ shelf.price_eval.price_avg }} ₴</span>
+                                        <span class="small text-muted">({{ shelf.price_eval.price_min }}–{{ shelf.price_eval.price_max }})</span>
+                                    </p>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-secondary js-price-sources"
+                                                data-book-id="{{ book.id }}"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#priceSourcesModal">
+                                            Price sources ({{ shelf.price_eval.source_count }})
+                                        </button>
+                                        <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline js-price-refresh-form">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-primary">Оновити ціну</button>
+                                        </form>
+                                    </div>
+                                    <script type="application/json" id="price-quotes-{{ book.id }}">{{ shelf.price_quotes_json }}</script>
+                                {% elif shelf.price_eval.status == "pending" %}
+                                    <p class="small text-muted mb-1">Оцінка ціни…</p>
+                                    <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Оновити ціну</button>
+                                    </form>
+                                {% elif shelf.price_eval.status == "missing" %}
+                                    <p class="small text-muted mb-1">Ціну не знайдено</p>
+                                    {% if shelf.price_eval.source_count %}
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-secondary js-price-sources me-1"
+                                            data-book-id="{{ book.id }}"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#priceSourcesModal">
+                                        Price sources ({{ shelf.price_eval.source_count }})
+                                    </button>
+                                    <script type="application/json" id="price-quotes-{{ book.id }}">{{ shelf.price_quotes_json }}</script>
+                                    {% endif %}
+                                    <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Оновити ціну</button>
+                                    </form>
+                                {% else %}
+                                    <p class="small text-muted mb-1">Оцінка недоступна</p>
+                                    <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Оновити ціну</button>
+                                    </form>
+                                {% endif %}
+                            {% else %}
+                                <p class="small text-muted mb-1">Ціна ще не оцінена</p>
+                                <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-primary">Оцінити ціну</button>
+                                </form>
+                            {% endif %}
+                        </div>
                         <form method="post" action="{% url 'update_shelf_book_reader_age' shelf.id %}" class="book-reader-age-form border rounded p-2 mb-2 bg-body-secondary{% if shelf.id in reader_age_locked_shelf_ids %} book-reader-age-form--locked{% endif %}">
                             {% csrf_token %}
                             <p class="small fw-semibold mb-1">Рекомендований вік читача</p>
@@ -421,10 +486,78 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="priceSourcesModal" tabindex="-1" aria-labelledby="priceSourcesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="priceSourcesLabel">Price sources</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="list-group list-group-flush" id="priceSourcesList"></ul>
+                <p class="small text-muted mb-0 mt-2" id="priceSourcesEmpty" hidden>Немає збережених джерел.</p>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 {% load static %}
 <script src="{% url 'isbn_scan_asset' 'isbn_scan.js' %}?v=9"></script>
 <script src="{% url 'isbn_scan_asset' 'manual_book_photos.js' %}?v=17"></script>
+<script>
+(function () {
+  document.querySelectorAll(".js-price-sources").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var id = btn.getAttribute("data-book-id");
+      var el = document.getElementById("price-quotes-" + id);
+      var list = document.getElementById("priceSourcesList");
+      var empty = document.getElementById("priceSourcesEmpty");
+      list.innerHTML = "";
+      var quotes = [];
+      try { quotes = el ? JSON.parse(el.textContent || "[]") : []; } catch (e) { quotes = []; }
+      if (!quotes.length) {
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+      quotes.forEach(function (q) {
+        var li = document.createElement("li");
+        li.className = "list-group-item d-flex justify-content-between align-items-start gap-2";
+        var left = document.createElement("div");
+        if (q.source_url) {
+          var a = document.createElement("a");
+          a.href = q.source_url;
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.textContent = q.source_name || "Source";
+          left.appendChild(a);
+        } else {
+          left.textContent = q.source_name || "Source";
+        }
+        var right = document.createElement("span");
+        right.className = "text-nowrap fw-semibold";
+        right.textContent = q.price_uah + " ₴";
+        if (q.currency && q.currency !== "UAH") {
+          right.textContent += " (" + q.price + " " + q.currency + ")";
+        }
+        li.appendChild(left);
+        li.appendChild(right);
+        list.appendChild(li);
+      });
+    });
+  });
+
+  // Soft reload while any shelf book is still pending price eval
+  var pending = document.querySelectorAll('.library-book-price').length &&
+    Array.prototype.some.call(document.querySelectorAll('.library-book-price'), function (el) {
+      return /Оцінка ціни/.test(el.textContent || "");
+    });
+  if (pending) {
+    setTimeout(function () { location.reload(); }, 8000);
+  }
+})();
+</script>
 {% endblock %}

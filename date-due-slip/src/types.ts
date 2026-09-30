@@ -27,6 +27,26 @@ export type Book = {
   note?: string;
 };
 
+export type BookPriceQuote = {
+  source_name: string;
+  source_url: string;
+  price: string;
+  currency: string;
+  price_uah: string;
+};
+
+export type BookPriceEval = {
+  status: "pending" | "ready" | "missing" | "error" | string;
+  currency: string;
+  price_avg: string | null;
+  price_min: string | null;
+  price_max: string | null;
+  source_count: number;
+  evaluated_at: string | null;
+  last_error?: string;
+  quotes: BookPriceQuote[];
+};
+
 export type Shelf = {
   id: number;
   user: User;
@@ -49,6 +69,8 @@ export type Shelf = {
   request_shelf_id?: number | null;
   /** Sole-owned manual/local book — can PATCH /shelf/{id}/manual/ */
   can_edit_manual?: boolean;
+  /** ISBN market price eval — only on owner's library. */
+  price_eval?: BookPriceEval | null;
   added_at: string;
 };
 

@@ -21,6 +21,7 @@ urlpatterns = [
     path("shelf/manual/", views.shelf_add_manual),
     path("shelf/recognize-cover/", views.shelf_recognize_cover),
     path("shelf/<int:shelf_id>/manual/", views.shelf_update_manual),
+    path("books/<int:book_id>/price/refresh/", views.book_price_refresh),
     path("shelf/<int:shelf_id>/", views.shelf_remove),
     path("shelf/<int:shelf_id>/reader-age/", views.shelf_reader_age),
     path("shelf/<int:shelf_id>/return/", views.shelf_return),

@@ -22,7 +22,7 @@ import { IsbnScanModal, isbnReadyToAdd, normalizeIsbn } from "../../src/IsbnScan
 import { BookCoverCaptureModal } from "../../src/BookCoverCaptureModal";
 import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
-import type { Shelf } from "../../src/types";
+import type { BookPriceEval, BookPriceQuote, Shelf } from "../../src/types";
 
 const MAX_MANUAL_PHOTOS = 8;
 
@@ -33,6 +33,8 @@ export default function ShelfScreen() {
   const [shelves, setShelves] = useState<Shelf[]>([]);
   const [pending, setPending] = useState<Shelf[]>([]);
   const [lentOutCount, setLentOutCount] = useState(0);
+  const [priceTotal, setPriceTotal] = useState("0.00");
+  const [sourcesOpen, setSourcesOpen] = useState<BookPriceQuote[] | null>(null);
   const [isbn, setIsbn] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -64,6 +66,24 @@ export default function ShelfScreen() {
     setShelves(Array.isArray(data?.shelves) ? data.shelves : []);
     setPending(Array.isArray(data?.pending_returns) ? data.pending_returns : []);
     setLentOutCount(Number(data?.lent_out_count) || 0);
+    setPriceTotal(data?.price_total_uah || "0.00");
+  };
+
+  const refreshPrice = async (bookId: number) => {
+    try {
+      const r = await ShelfApi.refreshPrice(bookId);
+      setShelves((prev) =>
+        prev.map((s) =>
+          s.book.id === bookId ? { ...s, price_eval: r.price_eval as BookPriceEval } : s
+        )
+      );
+      Alert.alert("Ціна", "Оновлення оцінки запущено. Оновіть полицю за хвилину.");
+      setTimeout(() => {
+        load().catch(() => undefined);
+      }, 2500);
+    } catch (e) {
+      Alert.alert("Ціна", e instanceof ApiError ? e.message : String(e));
+    }
   };
 
   useFocusEffect(
@@ -332,6 +352,11 @@ export default function ShelfScreen() {
                 ? ` Зараз у позиці з ваших: ${lentOutCount} — див. Date Due Slip.`
                 : ""}
             </Text>
+            <View style={styles.priceTotalBox}>
+              <Text style={styles.priceTotalLabel}>Оцінка вартості полиці</Text>
+              <Text style={styles.priceTotalValue}>≈ {priceTotal} ₴</Text>
+              <Text style={styles.priceTotalHint}>сума оцінок ISBN (≥3 джерела)</Text>
+            </View>
             {lentOutCount > 0 ? (
               <Pressable onPress={() => router.push("/(tabs)/slips")} style={styles.slipsLink}>
                 <Text style={styles.link}>Відкрити Date Due Slip</Text>
@@ -423,6 +448,45 @@ export default function ShelfScreen() {
                     {` · ${item.book.reader_age_summary}`}
                   </Text>
                 </View>
+                {item.price_eval?.status === "ready" && item.price_eval.price_avg ? (
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceAvg}>
+                      ≈ {item.price_eval.price_avg} ₴
+                      <Text style={styles.meta}>
+                        {" "}
+                        ({item.price_eval.price_min}–{item.price_eval.price_max})
+                      </Text>
+                    </Text>
+                    <View style={styles.priceActions}>
+                      <Pressable
+                        onPress={() => setSourcesOpen(item.price_eval?.quotes || [])}
+                        style={styles.priceBtn}
+                      >
+                        <Text style={styles.priceBtnText}>
+                          Price sources ({item.price_eval.source_count})
+                        </Text>
+                      </Pressable>
+                      <Pressable onPress={() => refreshPrice(item.book.id)} style={styles.priceBtn}>
+                        <Text style={styles.priceBtnText}>Оновити</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.priceRow}>
+                    <Text style={styles.meta}>
+                      {item.price_eval?.status === "pending"
+                        ? "Оцінка ціни…"
+                        : item.price_eval?.status === "missing"
+                          ? "Ціну не знайдено"
+                          : "Ціна ще не оцінена"}
+                    </Text>
+                    <Pressable onPress={() => refreshPrice(item.book.id)} style={styles.priceBtn}>
+                      <Text style={styles.priceBtnText}>
+                        {item.price_eval ? "Оновити ціну" : "Оцінити ціну"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
               </View>
             </Pressable>
             <View style={[styles.actions, styles.cardBody]}>
@@ -635,6 +699,36 @@ export default function ShelfScreen() {
           });
         }}
       />
+
+      <Modal
+        visible={sourcesOpen != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSourcesOpen(null)}
+      >
+        <View style={styles.backdrop}>
+          <View style={styles.sheet}>
+            <Text style={styles.modalH}>Price sources</Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {(sourcesOpen || []).map((q, i) => (
+                <View key={`${q.source_name}-${i}`} style={styles.sourceRow}>
+                  <Text style={styles.sourceName}>{q.source_name}</Text>
+                  <Text style={styles.sourcePrice}>
+                    {q.price_uah} ₴
+                    {q.currency !== "UAH" ? ` (${q.price} ${q.currency})` : ""}
+                  </Text>
+                </View>
+              ))}
+              {!sourcesOpen?.length ? (
+                <Text style={styles.meta}>Немає збережених джерел.</Text>
+              ) : null}
+            </ScrollView>
+            <Pressable onPress={() => setSourcesOpen(null)} style={{ marginTop: 12 }}>
+              <Text style={[styles.link, { textAlign: "center" }]}>Закрити</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -650,6 +744,39 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 8,
   },
+  priceTotalBox: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+  },
+  priceTotalLabel: { color: colors.muted, fontSize: 12 },
+  priceTotalValue: { color: colors.ink, fontSize: 20, fontWeight: "800", marginTop: 2 },
+  priceTotalHint: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  priceRow: { marginTop: 8, gap: 6 },
+  priceAvg: { color: colors.ink, fontWeight: "700", fontSize: 15 },
+  priceActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  priceBtn: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: btnRadius,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  priceBtnText: { color: colors.ink, fontWeight: "600", fontSize: 13 },
+  sourceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: colors.line,
+  },
+  sourceName: { color: colors.ink, flex: 1, fontWeight: "600" },
+  sourcePrice: { color: colors.ink, fontWeight: "700" },
   slipsLink: { paddingHorizontal: 16, marginBottom: 10 },
   input: { flex: 1, borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 8 },
   isbnInput: {
