@@ -135,7 +135,7 @@ export default function Register() {
           onChangeText={setPassword}
         />
         <CyrillicTextInput
-          placeholder="Біографія"
+          placeholder="Про себе"
           placeholderTextColor={colors.muted}
           style={styles.input}
           value={biography}

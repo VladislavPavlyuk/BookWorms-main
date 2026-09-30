@@ -6,7 +6,7 @@
 {% block content %}
 
 <p><strong>Ім'я:</strong> {% shelf_user_link user %}</p>
-<p><strong>Біографія:</strong> {{ user.biography }}</p>
+<p><strong>Про себе:</strong> {{ user.biography }}</p>
 <a href="{% url 'profile_app:edit_profile' %}" class="btn btn-primary">Редагувати профіль</a>
 
 {% if user.avatar %}

@@ -1133,6 +1133,25 @@ html {
         width: 54px !important;
         min-width: 54px !important;
         min-height: 54px !important;
+        padding: 0 !important;
+        font-size: 16px !important; /* same eye size as desktop */
+    }
+
+    .password-toggle__btn.btn,
+    .password-toggle__btn.btn-sm {
+        width: 54px !important;
+        min-width: 54px !important;
+        min-height: 54px !important;
+        padding: 0 !important;
+        font-size: 16px !important;
+    }
+
+    .password-toggle__icon {
+        /* match desktop eye weight against enlarged adaptive fields */
+        width: 1.75em !important;
+        height: 1.75em !important;
+        min-width: 1.75em !important;
+        min-height: 1.75em !important;
     }
 
     .home-advanced__panel {
@@ -1311,6 +1330,7 @@ html {
     color: #6b5344;
     background: #fffbf3;
     border-radius: 50% !important;
+    font-size: 16px; /* eye icon uses em against this */
 }
 
 .password-toggle__btn:hover,
@@ -1322,8 +1342,8 @@ html {
 
 .password-toggle__icon {
     display: block;
-    width: 1.35rem;
-    height: 1.35rem;
+    width: 1.35em;
+    height: 1.35em;
     background-color: currentColor;
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;

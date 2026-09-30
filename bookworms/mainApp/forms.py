@@ -52,7 +52,7 @@ class UserRegisterForm(UserCreationForm):
         fields = ("username", "email", "biography", "avatar")
         labels = {
             'username': "Логін",
-            'biography': "Біографія",
+            'biography': "Про себе",
             'avatar': "Аватар",
         }
 
@@ -94,7 +94,7 @@ class UserUpdateForm(forms.ModelForm):
         fields = ['username', 'biography', 'avatar']
         labels = {
             'username': 'Логін',
-            'biography': 'Біографія',
+            'biography': 'Про себе',
             'avatar': 'Аватар'
         }
 

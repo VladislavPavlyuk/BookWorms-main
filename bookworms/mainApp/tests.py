@@ -10,7 +10,7 @@ class BlogModelsTest(TestCase):
         self.user = User.objects.create_user(
             username='alexi_admin',
             password='password123',
-            biography='Тестова біографія користувача'  # ТВОЕ ПОЛЕ
+            biography='Тестова Про себе користувача'  # ТВОЕ ПОЛЕ
         )
 
     def test_post_creation(self):
@@ -24,7 +24,7 @@ class BlogModelsTest(TestCase):
         # Проверки соответствия твоим названиям
         self.assertEqual(post.title, 'Тестовий заголовок')
         self.assertEqual(post.text, 'Текст тестового повідомлення')
-        self.assertEqual(self.user.biography, 'Тестова біографія користувача')
+        self.assertEqual(self.user.biography, 'Тестова Про себе користувача')
 
         print("\nТест создания поста (title/text) и biography пользователя пройден!")
 

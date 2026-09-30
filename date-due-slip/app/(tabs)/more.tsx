@@ -60,7 +60,7 @@ export default function More() {
             keyboardType="default"
             textContentType="username"
           />
-          <Text style={styles.label}>Біографія</Text>
+          <Text style={styles.label}>Про себе</Text>
           <CyrillicTextInput
             style={styles.input}
             value={biography}
