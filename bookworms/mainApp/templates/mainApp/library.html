@@ -305,6 +305,66 @@
                             <button type="submit" class="btn btn-sm btn-outline-primary mt-2 js-reader-age-save-btn">Зберегти діапазон</button>
                             {% endif %}
                         </form>
+                        {% if not shelf.borrowed_from_id and shelf.copy %}
+                        <form method="post"
+                              action="{% url 'update_shelf_copy_listing' shelf.id %}"
+                              class="book-listing-form border rounded p-2 mb-2 js-listing-form">
+                            {% csrf_token %}
+                            <p class="small fw-semibold mb-1">Статуси примірника</p>
+                            <div class="d-flex flex-column gap-1 mb-2">
+                                {% for field, label in listing_checkbox_flags %}
+                                <label class="form-check small mb-0">
+                                    <input type="checkbox"
+                                           class="form-check-input js-listing-flag"
+                                           name="{{ field }}"
+                                           value="1"
+                                           data-flag="{{ field }}"
+                                           {% if field == "is_fee_sharing" and shelf.copy.is_fee_sharing %}checked{% endif %}
+                                           {% if field == "is_hidden" and shelf.copy.is_hidden %}checked{% endif %}
+                                           {% if field == "is_for_rent" and shelf.copy.is_for_rent %}checked{% endif %}
+                                           {% if field == "is_for_exchange" and shelf.copy.is_for_exchange %}checked{% endif %}
+                                           {% if field == "is_free_of_deposit" and shelf.copy.is_free_of_deposit %}checked{% endif %}>
+                                    {{ label }}
+                                </label>
+                                {% endfor %}
+                            </div>
+                            <p class="small fw-semibold mb-1">Продаж / подарунок <span class="text-muted fw-normal">(взаємовиключно)</span></p>
+                            <div class="d-flex flex-wrap gap-3 mb-2">
+                                {% for value, label in sale_gift_radio %}
+                                <label class="form-check small mb-0">
+                                    <input type="radio"
+                                           class="form-check-input js-sale-gift"
+                                           name="sale_gift"
+                                           value="{{ value }}"
+                                           {% if value == "" and not shelf.copy.is_for_sale and not shelf.copy.is_as_gift %}checked{% endif %}
+                                           {% if value == "for_sale" and shelf.copy.is_for_sale %}checked{% endif %}
+                                           {% if value == "as_gift" and shelf.copy.is_as_gift %}checked{% endif %}>
+                                    {{ label }}
+                                </label>
+                                {% endfor %}
+                            </div>
+                            <div class="js-listing-sale mb-2"{% if not shelf.copy.is_for_sale %} hidden{% endif %}>
+                                <label class="form-label small mb-0" for="sale-price-{{ shelf.id }}">Ціна продажу (₴)</label>
+                                <input type="number" step="0.01" min="0.01" name="sale_price" id="sale-price-{{ shelf.id }}"
+                                       class="form-control form-control-sm"
+                                       value="{{ shelf.copy.sale_price|default_if_none:'' }}">
+                            </div>
+                            <div class="js-listing-rent mb-2"{% if not shelf.copy.is_for_rent %} hidden{% endif %}>
+                                <label class="form-label small mb-0" for="rent-price-{{ shelf.id }}">Оренда за день (₴)</label>
+                                <input type="number" step="0.01" min="0.01" name="rent_price_per_day" id="rent-price-{{ shelf.id }}"
+                                       class="form-control form-control-sm"
+                                       value="{{ shelf.copy.rent_price_per_day|default_if_none:'' }}">
+                            </div>
+                            <p class="small text-muted mb-2 js-listing-deposit-hint">
+                                {% if shelf.copy.requires_deposit %}
+                                Позика потребує банківський депозит до повернення.
+                                {% else %}
+                                Депозит не потрібен (For sale / As a gift / Free of deposit).
+                                {% endif %}
+                            </p>
+                            <button type="submit" class="btn btn-sm btn-outline-primary">Зберегти статуси</button>
+                        </form>
+                        {% endif %}
                         {% if book.publisher or book.publish_date %}
                             <p class="card-text small mb-2">{{ book.publisher }}{% if book.publisher and book.publish_date %}, {% endif %}{{ book.publish_date }}</p>
                         {% endif %}
@@ -558,6 +618,33 @@
   if (pending) {
     setTimeout(function () { location.reload(); }, 8000);
   }
+
+  document.querySelectorAll(".js-listing-form").forEach(function (form) {
+    var sale = form.querySelector(".js-listing-sale");
+    var rent = form.querySelector(".js-listing-rent");
+    var hint = form.querySelector(".js-listing-deposit-hint");
+    var rentFlag = form.querySelector('[data-flag="is_for_rent"]');
+    var freeDep = form.querySelector('[data-flag="is_free_of_deposit"]');
+    function saleGift() {
+      var checked = form.querySelector(".js-sale-gift:checked");
+      return checked ? checked.value : "";
+    }
+    function sync() {
+      var sg = saleGift();
+      if (sale) sale.hidden = sg !== "for_sale";
+      if (rent) rent.hidden = !(rentFlag && rentFlag.checked);
+      var noDeposit = sg === "for_sale" || sg === "as_gift" || (freeDep && freeDep.checked);
+      if (hint) {
+        hint.textContent = noDeposit
+          ? "Депозит не потрібен (For sale / As a gift / Free of deposit)."
+          : "Позика потребує банківський депозит до повернення.";
+      }
+    }
+    form.querySelectorAll(".js-sale-gift, .js-listing-flag").forEach(function (el) {
+      el.addEventListener("change", sync);
+    });
+    sync();
+  });
 })();
 </script>
 {% endblock %}

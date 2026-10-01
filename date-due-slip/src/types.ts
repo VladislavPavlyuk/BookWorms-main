@@ -71,8 +71,39 @@ export type Shelf = {
   can_edit_manual?: boolean;
   /** ISBN market price eval — only on owner's library. */
   price_eval?: BookPriceEval | null;
+  /** Owner listing flags on this physical copy (multi-select). */
+  is_fee_sharing?: boolean;
+  is_hidden?: boolean;
+  is_for_sale?: boolean;
+  is_for_rent?: boolean;
+  is_as_gift?: boolean;
+  is_for_exchange?: boolean;
+  is_free_of_deposit?: boolean;
+  listing_labels?: string[];
+  sale_gift?: "" | "for_sale" | "as_gift" | string;
+  sale_price?: string | null;
+  rent_price_per_day?: string | null;
+  requires_deposit?: boolean;
+  is_publicly_listed?: boolean;
+  listing_status_display?: string | null;
   added_at: string;
 };
+
+export type SaleGift = "" | "for_sale" | "as_gift";
+
+export const LISTING_CHECKBOX_OPTIONS: { key: keyof Shelf; label: string }[] = [
+  { key: "is_fee_sharing", label: "Fee sharing" },
+  { key: "is_hidden", label: "Hidden" },
+  { key: "is_for_rent", label: "For rent" },
+  { key: "is_for_exchange", label: "For exchange" },
+  { key: "is_free_of_deposit", label: "Free of deposit" },
+];
+
+export const SALE_GIFT_OPTIONS: { value: SaleGift; label: string }[] = [
+  { value: "", label: "Neither" },
+  { value: "for_sale", label: "For sale" },
+  { value: "as_gift", label: "As a gift" },
+];
 
 export type BookCopyDetail = {
   id: number;

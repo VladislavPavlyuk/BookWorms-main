@@ -75,6 +75,22 @@
                                                     {% else %}
                                                         <br><span class="badge text-bg-success">вільний</span>
                                                     {% endif %}
+                                                    {% if s.copy %}
+                                                        {% for label in s.copy.listing_labels %}
+                                                        <br><span class="badge text-bg-secondary">{{ label }}</span>
+                                                        {% endfor %}
+                                                        {% if s.copy.is_for_sale and s.copy.sale_price %}
+                                                            <br><span class="small">продаж {{ s.copy.sale_price }} ₴</span>
+                                                        {% endif %}
+                                                        {% if s.copy.is_for_rent and s.copy.rent_price_per_day %}
+                                                            <br><span class="small">оренда {{ s.copy.rent_price_per_day }} ₴/день</span>
+                                                        {% endif %}
+                                                        {% if s.copy.requires_deposit %}
+                                                            <br><span class="small text-muted">депозит до повернення</span>
+                                                        {% else %}
+                                                            <br><span class="small text-muted">без депозиту</span>
+                                                        {% endif %}
+                                                    {% endif %}
                                                 </td>
                                                 <td class="small">
                                                     {% if s.borrowed_from_id %}

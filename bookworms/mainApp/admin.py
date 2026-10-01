@@ -68,7 +68,30 @@ class BookAdmin(admin.ModelAdmin):
 
 @admin.register(BookCopy)
 class BookCopyAdmin(admin.ModelAdmin):
-    list_display = ("id", "book", "owner", "created_at")
+    list_display = (
+        "id",
+        "book",
+        "owner",
+        "is_fee_sharing",
+        "is_hidden",
+        "is_for_sale",
+        "is_for_rent",
+        "is_as_gift",
+        "is_for_exchange",
+        "is_free_of_deposit",
+        "sale_price",
+        "rent_price_per_day",
+        "created_at",
+    )
+    list_filter = (
+        "is_fee_sharing",
+        "is_hidden",
+        "is_for_sale",
+        "is_for_rent",
+        "is_as_gift",
+        "is_for_exchange",
+        "is_free_of_deposit",
+    )
     list_filter = ("created_at",)
     search_fields = ("book__title", "book__isbn", "owner__username")
     raw_id_fields = ("book", "owner")

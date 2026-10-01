@@ -22,7 +22,8 @@ import { IsbnScanModal, isbnReadyToAdd, normalizeIsbn } from "../../src/IsbnScan
 import { BookCoverCaptureModal } from "../../src/BookCoverCaptureModal";
 import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
-import type { BookPriceEval, BookPriceQuote, Shelf } from "../../src/types";
+import type { BookPriceEval, BookPriceQuote, SaleGift, Shelf } from "../../src/types";
+import { LISTING_CHECKBOX_OPTIONS, SALE_GIFT_OPTIONS } from "../../src/types";
 
 const MAX_MANUAL_PHOTOS = 8;
 
@@ -47,6 +48,17 @@ export default function ShelfScreen() {
   const [ageShelf, setAgeShelf] = useState<Shelf | null>(null);
   const [ageMin, setAgeMin] = useState("0");
   const [ageMax, setAgeMax] = useState("18");
+  const [listingShelf, setListingShelf] = useState<Shelf | null>(null);
+  const [listingFlags, setListingFlags] = useState({
+    is_fee_sharing: true,
+    is_hidden: false,
+    is_for_rent: false,
+    is_for_exchange: false,
+    is_free_of_deposit: false,
+  });
+  const [saleGift, setSaleGift] = useState<SaleGift>("");
+  const [salePrice, setSalePrice] = useState("");
+  const [rentPrice, setRentPrice] = useState("");
   const [manual, setManual] = useState({
     isbn: "",
     title: "",
@@ -276,6 +288,36 @@ export default function ShelfScreen() {
     }
   };
 
+  const openListing = (s: Shelf) => {
+    setListingFlags({
+      is_fee_sharing: !!s.is_fee_sharing,
+      is_hidden: !!s.is_hidden,
+      is_for_rent: !!s.is_for_rent,
+      is_for_exchange: !!s.is_for_exchange,
+      is_free_of_deposit: !!s.is_free_of_deposit,
+    });
+    setSaleGift((s.sale_gift as SaleGift) || (s.is_for_sale ? "for_sale" : s.is_as_gift ? "as_gift" : ""));
+    setSalePrice(s.sale_price || "");
+    setRentPrice(s.rent_price_per_day || "");
+    setListingShelf(s);
+  };
+
+  const saveListing = async () => {
+    if (!listingShelf) return;
+    try {
+      await ShelfApi.updateListing(listingShelf.id, {
+        ...listingFlags,
+        sale_gift: saleGift,
+        sale_price: saleGift === "for_sale" ? salePrice || null : null,
+        rent_price_per_day: listingFlags.is_for_rent ? rentPrice || null : null,
+      });
+      setListingShelf(null);
+      await load();
+    } catch (e) {
+      Alert.alert("Статус", e instanceof ApiError ? e.message : String(e));
+    }
+  };
+
   const act = async (s: Shelf) => {
     try {
       if (s.borrowed_from) await ShelfApi.returnBook(s.id);
@@ -447,6 +489,17 @@ export default function ShelfScreen() {
                     {item.return_pending ? " · очікує підтвердження" : ""}
                     {` · ${item.book.reader_age_summary}`}
                   </Text>
+                  {!!item.listing_status_display && !item.borrowed_from && (
+                    <Text style={styles.meta}>
+                      {" · "}
+                      {item.listing_status_display}
+                      {item.is_for_sale && item.sale_price ? ` · ${item.sale_price} ₴` : ""}
+                      {item.is_for_rent && item.rent_price_per_day
+                        ? ` · ${item.rent_price_per_day} ₴/день`
+                        : ""}
+                      {item.requires_deposit === false ? " · без депозиту" : " · депозит"}
+                    </Text>
+                  )}
                 </View>
                 {item.price_eval?.status === "ready" && item.price_eval.price_avg ? (
                   <View style={styles.priceRow}>
@@ -515,6 +568,11 @@ export default function ShelfScreen() {
                   }}
                 >
                   <Text style={styles.link}>Вік читача</Text>
+                </Pressable>
+              )}
+              {!item.borrowed_from && (
+                <Pressable onPress={() => openListing(item)}>
+                  <Text style={styles.link}>Статус</Text>
                 </Pressable>
               )}
               <Pressable
@@ -675,6 +733,99 @@ export default function ShelfScreen() {
               <Text style={[styles.link, { marginTop: 12, textAlign: "center" }]}>Скасувати</Text>
             </Pressable>
           </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!listingShelf}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setListingShelf(null)}
+      >
+        <View style={styles.backdrop}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20 }}>
+            <View style={styles.sheet}>
+              <Text style={styles.modalH}>Статуси примірника</Text>
+              <Text style={styles.meta}>{listingShelf?.book.title}</Text>
+              {LISTING_CHECKBOX_OPTIONS.map((opt) => {
+                const key = opt.key as keyof typeof listingFlags;
+                const on = !!listingFlags[key];
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() =>
+                      setListingFlags((prev) => ({ ...prev, [key]: !prev[key] }))
+                    }
+                    style={{
+                      paddingVertical: 8,
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderBottomColor: colors.line,
+                    }}
+                  >
+                    <Text style={{ color: colors.ink, fontWeight: on ? "700" : "400" }}>
+                      {on ? "☑ " : "☐ "}
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              <Text style={[styles.meta, { marginTop: 12, fontWeight: "700" }]}>
+                Продаж / подарунок (взаємовиключно)
+              </Text>
+              {SALE_GIFT_OPTIONS.map((opt) => (
+                <Pressable
+                  key={opt.value || "neither"}
+                  onPress={() => setSaleGift(opt.value)}
+                  style={{
+                    paddingVertical: 8,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: colors.line,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: colors.ink,
+                      fontWeight: saleGift === opt.value ? "700" : "400",
+                    }}
+                  >
+                    {saleGift === opt.value ? "● " : "○ "}
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              ))}
+              {saleGift === "for_sale" && (
+                <TextInput
+                  style={[styles.age, { width: "100%", marginTop: 12 }]}
+                  keyboardType="decimal-pad"
+                  placeholder="Ціна продажу ₴"
+                  value={salePrice}
+                  onChangeText={setSalePrice}
+                />
+              )}
+              {listingFlags.is_for_rent && (
+                <TextInput
+                  style={[styles.age, { width: "100%", marginTop: 12 }]}
+                  keyboardType="decimal-pad"
+                  placeholder="Оренда ₴/день"
+                  value={rentPrice}
+                  onChangeText={setRentPrice}
+                />
+              )}
+              <Text style={[styles.meta, { marginTop: 10 }]}>
+                {saleGift === "for_sale" ||
+                saleGift === "as_gift" ||
+                listingFlags.is_free_of_deposit
+                  ? "Депозит не потрібен"
+                  : "Позика потребує депозит до повернення"}
+              </Text>
+              <Pressable style={styles.btn} onPress={saveListing}>
+                <Text style={styles.addText}>Зберегти</Text>
+              </Pressable>
+              <Pressable onPress={() => setListingShelf(null)}>
+                <Text style={[styles.link, { marginTop: 12, textAlign: "center" }]}>Скасувати</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
         </View>
       </Modal>
 

@@ -148,12 +148,16 @@ class IShelfQueryService(ABC):
 
     @abstractmethod
     def for_user_physical_shelf(
-        self, owner: CustomUser, *, ensure_copies: bool = False
+        self,
+        owner: CustomUser,
+        *,
+        ensure_copies: bool = False,
+        viewer: CustomUser | None = None,
     ) -> list[Shelf]: ...
 
     @abstractmethod
     def for_book_physical_holders(
-        self, book, *, ensure_copies: bool = False
+        self, book, *, ensure_copies: bool = False, viewer: CustomUser | None = None
     ) -> list[Shelf]: ...
 
     @abstractmethod

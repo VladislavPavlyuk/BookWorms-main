@@ -671,6 +671,7 @@ def my_library(request):
             s.edit_payload_json = ""
 
     from .book_price import library_price_total_uah, serialize_evaluation
+    from .copy_listing import LISTING_CHECKBOX_FLAGS, SALE_GIFT_RADIO
     from .models import BookPriceEvaluation
 
     evals_for_total = []
@@ -710,6 +711,8 @@ def my_library(request):
             "reader_age_max": READER_AGE_MAX,
             "reader_age_locked_shelf_ids": reader_age_locked_shelf_ids,
             "library_price_total": library_price_total,
+            "listing_checkbox_flags": LISTING_CHECKBOX_FLAGS,
+            "sale_gift_radio": SALE_GIFT_RADIO,
         },
     )
 
@@ -948,6 +951,50 @@ def update_shelf_book_reader_age(request, shelf_id):
 
 @login_required
 @require_POST
+def update_shelf_copy_listing(request, shelf_id):
+    """Owner sets BookCopy listing status (+ sale/rent price when required)."""
+    from .copy_listing import apply_copy_listing
+
+    shelf = get_object_or_404(
+        Shelf.objects.select_related("copy", "book"),
+        pk=shelf_id,
+        user=request.user,
+    )
+    if shelf.borrowed_from_id:
+        messages.error(request, "Статус можна змінити лише для власного примірника.")
+        return redirect("my_library")
+    if not shelf.copy_id or shelf.copy.owner_id != request.user.pk:
+        messages.error(request, "Це не ваш примірник.")
+        return redirect("my_library")
+    try:
+        apply_copy_listing(
+            shelf.copy,
+            flags={
+                "is_fee_sharing": request.POST.get("is_fee_sharing"),
+                "is_hidden": request.POST.get("is_hidden"),
+                "is_for_rent": request.POST.get("is_for_rent"),
+                "is_for_exchange": request.POST.get("is_for_exchange"),
+                "is_free_of_deposit": request.POST.get("is_free_of_deposit"),
+            },
+            sale_gift=request.POST.get("sale_gift", ""),
+            sale_price=request.POST.get("sale_price"),
+            rent_price_per_day=request.POST.get("rent_price_per_day"),
+        )
+    except DjangoValidationError as exc:
+        msgs = []
+        if hasattr(exc, "message_dict"):
+            for v in exc.message_dict.values():
+                msgs.extend(v if isinstance(v, (list, tuple)) else [v])
+        else:
+            msgs = list(getattr(exc, "messages", [str(exc)]))
+        messages.error(request, "; ".join(str(m) for m in msgs) or "Помилка збереження.")
+        return redirect("my_library")
+    messages.success(request, "Статус примірника збережено.")
+    return redirect("my_library")
+
+
+@login_required
+@require_POST
 def unlock_shelf_reader_age_edit(request, shelf_id):
     """Зняти режим "лише перегляд" повзунків після збереження (для цієї полиці)."""
     get_object_or_404(Shelf, pk=shelf_id, user=request.user)
@@ -1048,7 +1095,9 @@ def user_public_shelf(request, user_id):
     shelf_owner = get_object_or_404(User, pk=user_id)
     if request.user.pk == shelf_owner.pk:
         return redirect("profile_app:profile")
-    shelves = get_shelf_query_service().for_user_physical_shelf(shelf_owner)
+    shelves = get_shelf_query_service().for_user_physical_shelf(
+        shelf_owner, viewer=request.user
+    )
     return render(
         request,
         "mainApp/user_public_shelf.html",
@@ -1069,8 +1118,14 @@ def book_history(request, book_id):
         .select_related("owner", "book")
         .order_by("-created_at")
     )
+    # Hidden copies visible only to their owner.
+    copies = [
+        c
+        for c in copies
+        if not c.is_hidden or c.owner_id == request.user.pk
+    ]
     shelf_entries = list(
-        Shelf.objects.filter(book=book)
+        Shelf.objects.filter(book=book, copy_id__in=[c.pk for c in copies])
         .select_related("user", "borrowed_from", "copy")
         .order_by("added_at")
     )

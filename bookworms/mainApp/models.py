@@ -157,6 +157,9 @@ class BookCopy(models.Model):
     BookCopy = конкретний том у власності user'а.
     Один власник може мати багато примірників з тим самим ISBN;
     різні власники — теж. Позика/обмін йде по конкретному BookCopy.
+
+    Listing flags are multi-select (checkboxes), except For sale ↔ As a gift
+    which are mutually exclusive (radio: neither / sale / gift).
     """
 
     book = models.ForeignKey(
@@ -171,6 +174,50 @@ class BookCopy(models.Model):
         related_name="owned_copies",
         verbose_name="Власник",
     )
+    is_fee_sharing = models.BooleanField(
+        default=True,
+        verbose_name="Fee sharing",
+        help_text="Типовий режим спільного користування.",
+    )
+    is_hidden = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="Hidden",
+        help_text="Не показувати в пошуку/каталозі інших користувачів.",
+    )
+    is_for_sale = models.BooleanField(
+        default=False,
+        verbose_name="For sale",
+        help_text="Взаємовиключно з As a gift.",
+    )
+    is_for_rent = models.BooleanField(default=False, verbose_name="For rent")
+    is_as_gift = models.BooleanField(
+        default=False,
+        verbose_name="As a gift",
+        help_text="Взаємовиключно з For sale.",
+    )
+    is_for_exchange = models.BooleanField(default=False, verbose_name="For exchange")
+    is_free_of_deposit = models.BooleanField(
+        default=False,
+        verbose_name="Free of deposit",
+        help_text="Позика без банківського депозиту.",
+    )
+    sale_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Ціна продажу",
+        help_text="Обов’язково якщо For sale (UAH).",
+    )
+    rent_price_per_day = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Оренда за день",
+        help_text="Обов’язково якщо For rent (UAH/день).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -180,6 +227,54 @@ class BookCopy(models.Model):
 
     def __str__(self):
         return f"#{self.pk} {self.book.title} → {self.owner.username}"
+
+    @property
+    def requires_deposit(self) -> bool:
+        """Депозит не потрібен при For sale / As a gift / Free of deposit."""
+        return not (
+            self.is_for_sale or self.is_as_gift or self.is_free_of_deposit
+        )
+
+    @property
+    def is_publicly_listed(self) -> bool:
+        return not self.is_hidden
+
+    def listing_labels(self) -> list[str]:
+        labels = []
+        if self.is_fee_sharing:
+            labels.append("Fee sharing")
+        if self.is_hidden:
+            labels.append("Hidden")
+        if self.is_for_sale:
+            labels.append("For sale")
+        if self.is_for_rent:
+            labels.append("For rent")
+        if self.is_as_gift:
+            labels.append("As a gift")
+        if self.is_for_exchange:
+            labels.append("For exchange")
+        if self.is_free_of_deposit:
+            labels.append("Free of deposit")
+        return labels or ["Fee sharing"]
+
+    def clean(self):
+        super().clean()
+        if self.is_for_sale and self.is_as_gift:
+            raise ValidationError(
+                "For sale і As a gift несумісні — оберіть лише один."
+            )
+        if self.is_for_sale and (self.sale_price is None or self.sale_price <= 0):
+            raise ValidationError(
+                {"sale_price": "Для For sale вкажіть ціну продажу (> 0)."}
+            )
+        if self.is_for_rent and (
+            self.rent_price_per_day is None or self.rent_price_per_day <= 0
+        ):
+            raise ValidationError(
+                {
+                    "rent_price_per_day": "Для For rent вкажіть ціну оренди за день (> 0)."
+                }
+            )
 
 
 class CopyEvent(models.Model):

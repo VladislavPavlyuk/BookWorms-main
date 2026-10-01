@@ -185,6 +185,20 @@ class ShelfSerializer(serializers.ModelSerializer):
     request_shelf_id = serializers.SerializerMethodField()
     can_edit_manual = serializers.SerializerMethodField()
     price_eval = serializers.SerializerMethodField()
+    is_fee_sharing = serializers.SerializerMethodField()
+    is_hidden = serializers.SerializerMethodField()
+    is_for_sale = serializers.SerializerMethodField()
+    is_for_rent = serializers.SerializerMethodField()
+    is_as_gift = serializers.SerializerMethodField()
+    is_for_exchange = serializers.SerializerMethodField()
+    is_free_of_deposit = serializers.SerializerMethodField()
+    listing_labels = serializers.SerializerMethodField()
+    sale_gift = serializers.SerializerMethodField()
+    sale_price = serializers.SerializerMethodField()
+    rent_price_per_day = serializers.SerializerMethodField()
+    requires_deposit = serializers.SerializerMethodField()
+    is_publicly_listed = serializers.SerializerMethodField()
+    listing_status_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Shelf
@@ -205,8 +219,91 @@ class ShelfSerializer(serializers.ModelSerializer):
             "request_shelf_id",
             "can_edit_manual",
             "price_eval",
+            "is_fee_sharing",
+            "is_hidden",
+            "is_for_sale",
+            "is_for_rent",
+            "is_as_gift",
+            "is_for_exchange",
+            "is_free_of_deposit",
+            "listing_labels",
+            "sale_gift",
+            "sale_price",
+            "rent_price_per_day",
+            "requires_deposit",
+            "is_publicly_listed",
+            "listing_status_display",
             "added_at",
         )
+
+    def _copy(self, obj):
+        return getattr(obj, "copy", None)
+
+    def get_is_fee_sharing(self, obj):
+        c = self._copy(obj)
+        return bool(c.is_fee_sharing) if c else True
+
+    def get_is_hidden(self, obj):
+        c = self._copy(obj)
+        return bool(c.is_hidden) if c else False
+
+    def get_is_for_sale(self, obj):
+        c = self._copy(obj)
+        return bool(c.is_for_sale) if c else False
+
+    def get_is_for_rent(self, obj):
+        c = self._copy(obj)
+        return bool(c.is_for_rent) if c else False
+
+    def get_is_as_gift(self, obj):
+        c = self._copy(obj)
+        return bool(c.is_as_gift) if c else False
+
+    def get_is_for_exchange(self, obj):
+        c = self._copy(obj)
+        return bool(c.is_for_exchange) if c else False
+
+    def get_is_free_of_deposit(self, obj):
+        c = self._copy(obj)
+        return bool(c.is_free_of_deposit) if c else False
+
+    def get_listing_labels(self, obj):
+        c = self._copy(obj)
+        return c.listing_labels() if c else []
+
+    def get_sale_gift(self, obj):
+        c = self._copy(obj)
+        if not c:
+            return ""
+        if c.is_for_sale:
+            return "for_sale"
+        if c.is_as_gift:
+            return "as_gift"
+        return ""
+
+    def get_sale_price(self, obj):
+        c = self._copy(obj)
+        if not c or c.sale_price is None:
+            return None
+        return str(c.sale_price)
+
+    def get_rent_price_per_day(self, obj):
+        c = self._copy(obj)
+        if not c or c.rent_price_per_day is None:
+            return None
+        return str(c.rent_price_per_day)
+
+    def get_requires_deposit(self, obj):
+        c = self._copy(obj)
+        return bool(c.requires_deposit) if c else True
+
+    def get_is_publicly_listed(self, obj):
+        c = self._copy(obj)
+        return bool(c.is_publicly_listed) if c else True
+
+    def get_listing_status_display(self, obj):
+        c = self._copy(obj)
+        return ", ".join(c.listing_labels()) if c else ""
 
     def get_price_eval(self, obj):
         # Only expose on the owner's library endpoint (my_shelf / refresh).
@@ -323,10 +420,47 @@ class CopyEventSerializer(serializers.ModelSerializer):
 class BookCopySerializer(serializers.ModelSerializer):
     book = BookSerializer(read_only=True)
     owner = UserPublicSerializer(read_only=True)
+    listing_labels = serializers.SerializerMethodField()
+    sale_gift = serializers.SerializerMethodField()
+    requires_deposit = serializers.BooleanField(read_only=True)
+    is_publicly_listed = serializers.BooleanField(read_only=True)
+    listing_status_display = serializers.SerializerMethodField()
 
     class Meta:
         model = BookCopy
-        fields = ("id", "book", "owner", "created_at")
+        fields = (
+            "id",
+            "book",
+            "owner",
+            "is_fee_sharing",
+            "is_hidden",
+            "is_for_sale",
+            "is_for_rent",
+            "is_as_gift",
+            "is_for_exchange",
+            "is_free_of_deposit",
+            "listing_labels",
+            "sale_gift",
+            "sale_price",
+            "rent_price_per_day",
+            "requires_deposit",
+            "is_publicly_listed",
+            "listing_status_display",
+            "created_at",
+        )
+
+    def get_listing_labels(self, obj):
+        return obj.listing_labels()
+
+    def get_sale_gift(self, obj):
+        if obj.is_for_sale:
+            return "for_sale"
+        if obj.is_as_gift:
+            return "as_gift"
+        return ""
+
+    def get_listing_status_display(self, obj):
+        return ", ".join(obj.listing_labels())
 
 
 class AddIsbnSerializer(serializers.Serializer):
@@ -366,6 +500,27 @@ class ReaderAgeSerializer(serializers.Serializer):
         if mn > mx:
             attrs["min_readers_age"], attrs["max_readers_age"] = mx, mn
         return attrs
+
+
+class CopyListingSerializer(serializers.Serializer):
+    is_fee_sharing = serializers.BooleanField(required=False)
+    is_hidden = serializers.BooleanField(required=False)
+    is_for_rent = serializers.BooleanField(required=False)
+    is_for_exchange = serializers.BooleanField(required=False)
+    is_free_of_deposit = serializers.BooleanField(required=False)
+    sale_gift = serializers.ChoiceField(
+        choices=[("", "Neither"), ("for_sale", "For sale"), ("as_gift", "As a gift")],
+        required=False,
+        allow_blank=True,
+    )
+    sale_price = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
+    rent_price_per_day = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
+    # legacy single-status clients
+    listing_status = serializers.CharField(required=False, allow_blank=True)
 
 
 class ExchangeRequestSerializer(serializers.ModelSerializer):

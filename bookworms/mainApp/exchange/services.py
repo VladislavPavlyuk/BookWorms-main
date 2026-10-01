@@ -221,18 +221,26 @@ class ShelfQueryService(IShelfQueryService):
         return m.load_browse_catalog(viewer, ensure_copies=ensure_copies)
 
     def for_user_physical_shelf(
-        self, owner: CustomUser, *, ensure_copies: bool = False
+        self,
+        owner: CustomUser,
+        *,
+        ensure_copies: bool = False,
+        viewer: CustomUser | None = None,
     ) -> list[Shelf]:
         from . import shelves as m
 
-        return m.for_user_physical_shelf(owner, ensure_copies=ensure_copies)
+        return m.for_user_physical_shelf(
+            owner, ensure_copies=ensure_copies, viewer=viewer
+        )
 
     def for_book_physical_holders(
-        self, book, *, ensure_copies: bool = False
+        self, book, *, ensure_copies: bool = False, viewer: CustomUser | None = None
     ) -> list[Shelf]:
         from . import shelves as m
 
-        return m.for_book_physical_holders(book, ensure_copies=ensure_copies)
+        return m.for_book_physical_holders(
+            book, ensure_copies=ensure_copies, viewer=viewer
+        )
 
     def for_copy_physical_holders(
         self, copy, *, ensure_copies: bool = False

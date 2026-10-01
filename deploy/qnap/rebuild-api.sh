@@ -12,8 +12,12 @@ test -f bookworms/mainApp/migrations/0022_loan_handoff.py
 test -f bookworms/mainApp/migrations/0023_bookphoto.py
 test -f bookworms/mainApp/migrations/0024_book_cover_text.py
 test -f bookworms/mainApp/migrations/0025_book_price_evaluation.py
+test -f bookworms/mainApp/migrations/0026_bookcopy_listing_status.py
+test -f bookworms/mainApp/migrations/0027_bookcopy_listing_flags.py
 test -f bookworms/mainApp/book_price.py
+test -f bookworms/mainApp/copy_listing.py
 grep -q 'class BookPriceEvaluation' bookworms/mainApp/models.py
+grep -q 'is_fee_sharing' bookworms/mainApp/models.py
 test -f bookworms/mainApp/static/js/isbn_scan.js
 test -f bookworms/mainApp/static/js/isbn_scan_worker.js
 test -f bookworms/mainApp/static/js/zxing-0.21.3.min.js

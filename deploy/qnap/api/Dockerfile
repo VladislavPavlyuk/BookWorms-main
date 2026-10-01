@@ -32,8 +32,12 @@ RUN chmod +x /entrypoint.sh \
     && test -f /app/mainApp/migrations/0023_bookphoto.py \
     && test -f /app/mainApp/migrations/0024_book_cover_text.py \
     && test -f /app/mainApp/migrations/0025_book_price_evaluation.py \
+    && test -f /app/mainApp/migrations/0026_bookcopy_listing_status.py \
+    && test -f /app/mainApp/migrations/0027_bookcopy_listing_flags.py \
     && test -f /app/mainApp/book_price.py \
+    && test -f /app/mainApp/copy_listing.py \
     && grep -q 'class BookPriceEvaluation' /app/mainApp/models.py \
+    && grep -q 'is_fee_sharing' /app/mainApp/models.py \
     && grep -q 'class LoanHandoff' /app/mainApp/models.py \
     && grep -q 'last_watched_post' /app/mainApp/models.py \
     && grep -q 'code_rev' /app/api/views.py \

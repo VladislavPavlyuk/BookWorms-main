@@ -25,6 +25,7 @@ from .views import (
     update_shelf_book_reader_age,
     unlock_shelf_reader_age_edit,
     update_manual_shelf_book,
+    update_shelf_copy_listing,
     remove_shelf_entry,
     refresh_book_price_view,
     return_borrowed_shelf_book,
@@ -72,6 +73,11 @@ urlpatterns = [
         'library/shelf/<int:shelf_id>/reader-age/unlock/',
         unlock_shelf_reader_age_edit,
         name='unlock_shelf_reader_age_edit',
+    ),
+    path(
+        'library/shelf/<int:shelf_id>/listing/',
+        update_shelf_copy_listing,
+        name='update_shelf_copy_listing',
     ),
     path(
         'library/shelf/<int:shelf_id>/edit/',

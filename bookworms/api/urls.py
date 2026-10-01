@@ -24,6 +24,7 @@ urlpatterns = [
     path("books/<int:book_id>/price/refresh/", views.book_price_refresh),
     path("shelf/<int:shelf_id>/", views.shelf_remove),
     path("shelf/<int:shelf_id>/reader-age/", views.shelf_reader_age),
+    path("shelf/<int:shelf_id>/listing/", views.shelf_listing),
     path("shelf/<int:shelf_id>/return/", views.shelf_return),
     path("shelf/<int:shelf_id>/confirm-return/", views.shelf_confirm_return),
     path("slips/", views.due_slips),

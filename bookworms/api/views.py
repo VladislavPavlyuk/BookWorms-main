@@ -73,6 +73,7 @@ from .serializers import (
     BookSerializer,
     CommentSerializer,
     CopyEventSerializer,
+    CopyListingSerializer,
     CreateExchangeSerializer,
     ExchangeRequestSerializer,
     LoanHandoffSerializer,
@@ -704,6 +705,52 @@ def shelf_reader_age(request, shelf_id):
 
 
 @api_view(["POST"])
+def shelf_listing(request, shelf_id):
+    """Owner updates BookCopy listing status / sale / rent price."""
+    from mainApp.copy_listing import apply_copy_listing
+
+    shelf = (
+        Shelf.objects.select_related("copy", "book")
+        .filter(pk=shelf_id, user=request.user)
+        .first()
+    )
+    if not shelf:
+        return _error("Запис не знайдено.", 404)
+    if shelf.borrowed_from_id:
+        return _error("Статус можна змінити лише для власного примірника.")
+    if not shelf.copy_id or shelf.copy.owner_id != request.user.pk:
+        return _error("Це не ваш примірник.")
+    ser = CopyListingSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+    vd = ser.validated_data
+    try:
+        apply_copy_listing(
+            shelf.copy,
+            flags={
+                k: vd.get(k)
+                for k in (
+                    "is_fee_sharing",
+                    "is_hidden",
+                    "is_for_rent",
+                    "is_for_exchange",
+                    "is_free_of_deposit",
+                )
+                if k in vd
+            }
+            or None,
+            sale_gift=vd.get("sale_gift") if "sale_gift" in vd else None,
+            sale_price=vd.get("sale_price"),
+            rent_price_per_day=vd.get("rent_price_per_day"),
+            listing_status=vd.get("listing_status") or None,
+        )
+    except DjangoValidationError as exc:
+        return _error(str(exc))
+    shelf.refresh_from_db()
+    shelf.copy.refresh_from_db()
+    return Response(ShelfSerializer(shelf, context={"request": request}).data)
+
+
+@api_view(["POST"])
 def shelf_return(request, shelf_id):
     request_borrow_return(shelf_id, request.user)
     return Response({"ok": True})
@@ -742,7 +789,7 @@ def user_shelf(request, user_id):
     if not owner:
         return _error("Користувача не знайдено.", 404)
     shelves = get_shelf_query_service().for_user_physical_shelf(
-        owner, ensure_copies=True
+        owner, ensure_copies=True, viewer=request.user
     )
     ctx = {"request": request}
     return Response(
@@ -762,7 +809,7 @@ def book_detail(request, book_id):
     if not book:
         return _error("Книгу не знайдено.", 404)
     holders = get_shelf_query_service().for_book_physical_holders(
-        book, ensure_copies=True
+        book, ensure_copies=True, viewer=request.user
     )
     owners = []
     seen = set()

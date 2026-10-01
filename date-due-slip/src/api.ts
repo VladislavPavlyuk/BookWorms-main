@@ -340,6 +340,19 @@ export const ShelfApi = {
   confirmReturn: (id: number) => api(`/api/shelf/${id}/confirm-return/`, { method: "POST" }),
   readerAge: (id: number, min_readers_age: number, max_readers_age: number) =>
     api<Book>(`/api/shelf/${id}/reader-age/`, { method: "POST", body: { min_readers_age, max_readers_age } }),
+  updateListing: (
+    id: number,
+    body: {
+      is_fee_sharing?: boolean;
+      is_hidden?: boolean;
+      is_for_rent?: boolean;
+      is_for_exchange?: boolean;
+      is_free_of_deposit?: boolean;
+      sale_gift?: string;
+      sale_price?: string | number | null;
+      rent_price_per_day?: string | number | null;
+    }
+  ) => api<Shelf>(`/api/shelf/${id}/listing/`, { method: "POST", body }),
 };
 
 export const SlipApi = {

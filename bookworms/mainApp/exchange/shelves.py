@@ -134,6 +134,7 @@ def for_browse_as_viewer(
     """Physical-presence catalog excluding viewer's own rows, with request targets."""
     qs = (
         physical_presence_shelves_qs(exclude_user_id=viewer.id)
+        .exclude(copy__is_hidden=True)
         .select_related(*_SHELF_RELATED)
         .order_by("-added_at")
     )
@@ -167,26 +168,39 @@ def get_available_owned_offer(
 
 
 def for_user_physical_shelf(
-    owner: CustomUser, *, ensure_copies: bool = False
+    owner: CustomUser,
+    *,
+    ensure_copies: bool = False,
+    viewer: CustomUser | None = None,
 ) -> list[Shelf]:
     """Rows physically at ``owner`` (free owned + borrowed-in)."""
     qs = owner.shelf_entries.select_related(*_SHELF_RELATED).order_by("-added_at")
+    # Other users never see Hidden instances on this shelf.
+    if viewer is not None and viewer.pk != owner.pk:
+        qs = qs.exclude(copy__is_hidden=True)
     return attach_request_targets(
         filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
     )
 
 
 def for_book_physical_holders(
-    book: Book, *, ensure_copies: bool = False
+    book: Book, *, ensure_copies: bool = False, viewer: CustomUser | None = None
 ) -> list[Shelf]:
     qs = (
         Shelf.objects.filter(book=book)
         .select_related(*_SHELF_RELATED)
         .order_by("added_at")
     )
-    return attach_request_targets(
+    rows = attach_request_targets(
         filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
     )
+    if viewer is None:
+        return [s for s in rows if not s.copy or not s.copy.is_hidden]
+    return [
+        s
+        for s in rows
+        if not s.copy or not s.copy.is_hidden or s.copy.owner_id == viewer.pk
+    ]
 
 
 def for_copy_physical_holders(
