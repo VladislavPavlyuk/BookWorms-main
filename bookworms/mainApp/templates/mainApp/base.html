@@ -60,20 +60,30 @@
       }
     </style>
     <style id="mobile-ui-scale">
-      /* Inline so deploy/cache can't serve a stale style.css without +50% mobile UI */
+      /* Inline so deploy/cache can't serve a stale style.css without adaptive UI scale */
       @media (max-width: 991.98px), (max-width: 1200px) and (hover: none) and (pointer: coarse) {
         .site-navbar {
           --nav-logo: 61px !important;
           --nav-ctrl: 40px !important;
         }
-        html { font-size: 24px !important; }
-        body.site-body { font-size: 24px !important; }
+        /* page body: −25% vs prior adaptive 24px */
+        html { font-size: 18px !important; }
+        body.site-body { font-size: 18px !important; }
+        /* chrome row stays compact */
         .site-navbar .nav-link,
         .site-navbar .btn.nav-link {
           min-height: 27px !important;
           font-size: 12px !important;
           padding-top: 0.28rem !important;
           padding-bottom: 0.28rem !important;
+        }
+        /* burger dropdown: +50% vs chrome links (12→18) */
+        .site-navbar .navbar-collapse .nav-link,
+        .site-navbar .navbar-collapse .btn.nav-link {
+          min-height: 2.5rem !important;
+          font-size: 18px !important;
+          padding-top: 0.45rem !important;
+          padding-bottom: 0.45rem !important;
         }
         .site-navbar .navbar-toggler {
           width: var(--nav-ctrl) !important;
@@ -146,16 +156,16 @@
         .create-post-fab__plus {
           font-size: 1.85rem !important;
         }
-        .site-content { font-size: 24px !important; }
+        .site-content { font-size: 18px !important; }
         .btn, .site-content .btn {
-          min-height: 54px !important;
-          font-size: 22px !important;
-          padding: 0.55rem 1rem !important;
+          min-height: 41px !important;
+          font-size: 17px !important;
+          padding: 0.4rem 0.85rem !important;
         }
         .btn-sm, .site-content .btn-sm {
-          min-height: 48px !important;
-          font-size: 20px !important;
-          padding: 0.45rem 0.85rem !important;
+          min-height: 36px !important;
+          font-size: 15px !important;
+          padding: 0.35rem 0.7rem !important;
         }
         /* Keep nav filter / search chrome from global .btn/.form-control blow-up */
         .site-navbar-search__btn.btn,
@@ -187,33 +197,32 @@
         .form-control, .form-select,
         .site-content .form-control, .site-content .form-select,
         input.form-control, textarea.form-control, select.form-select {
-          font-size: 24px !important;
-          min-height: 54px !important;
-          padding: 0.55rem 0.75rem !important;
+          font-size: 18px !important;
+          min-height: 41px !important;
+          padding: 0.4rem 0.65rem !important;
         }
-        textarea.form-control, .site-content textarea { min-height: 9rem !important; }
+        textarea.form-control, .site-content textarea { min-height: 7rem !important; }
         .form-label, label, .site-content .form-label, .site-content label {
-          font-size: 20px !important;
+          font-size: 15px !important;
         }
-        .site-content p, .site-content li { font-size: 22px !important; }
-        .site-content .small, .site-content small, .small { font-size: 18px !important; }
+        .site-content p, .site-content li { font-size: 17px !important; }
+        .site-content .small, .site-content small, .small { font-size: 14px !important; }
         .password-toggle__btn {
-          width: 54px !important;
-          min-width: 54px !important;
-          min-height: 54px !important;
+          width: 41px !important;
+          min-width: 41px !important;
+          min-height: 41px !important;
           padding: 0 !important;
           font-size: 16px !important;
         }
         .password-toggle__btn.btn,
         .password-toggle__btn.btn-sm {
-          width: 54px !important;
-          min-width: 54px !important;
-          min-height: 54px !important;
+          width: 41px !important;
+          min-width: 41px !important;
+          min-height: 41px !important;
           padding: 0 !important;
           font-size: 16px !important;
         }
         .password-toggle__icon {
-          /* ~same visual weight as desktop eye vs field (scaled to 54px controls) */
           width: 1.75em !important;
           height: 1.75em !important;
           min-width: 1.75em !important;
