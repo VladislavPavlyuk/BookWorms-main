@@ -1,4 +1,4 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../src/auth";
@@ -104,6 +104,20 @@ export default function More() {
       </Pressable>
       <Pressable style={styles.row} onPress={() => router.push("/exchanges")}>
         <Text style={styles.rowText}>Обміни / позики / чати</Text>
+      </Pressable>
+      <Pressable
+        style={styles.row}
+        onPress={async () => {
+          const base = (api || (await getApiBase()) || "").replace(/\/$/, "");
+          const url = `${base}/contact/`;
+          try {
+            await Linking.openURL(url);
+          } catch (e) {
+            Alert.alert("Контакт", `Не вдалося відкрити:\n${url}`);
+          }
+        }}
+      >
+        <Text style={styles.rowText}>Контакт з розробниками</Text>
       </Pressable>
       <Pressable
         style={styles.row}

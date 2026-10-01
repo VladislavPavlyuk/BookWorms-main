@@ -234,3 +234,89 @@ class SendExchangePartnerMessageForm(forms.Form):
         label="Текст повідомлення",
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 4}),
     )
+
+
+CONTACT_TOPIC_CHOICES = (
+    ("bug", "Bug / Помилка"),
+    ("feature", "Feature / Ідея"),
+    ("account", "Account / Акаунт"),
+    ("books", "Books / Полиця / ISBN"),
+    ("other", "Other / Інше"),
+)
+
+CONTACT_MAX_SCREENSHOTS = 10
+CONTACT_MAX_FILE_BYTES = 2 * 1024 * 1024  # 2 MB
+CONTACT_MESSAGE_MAX = 500
+
+
+class ContactDevelopersForm(forms.Form):
+    name = forms.CharField(
+        label="Ім’я",
+        max_length=120,
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "autocomplete": "name", "required": True}
+        ),
+    )
+    email = forms.EmailField(
+        label="Email",
+        required=False,
+        widget=forms.EmailInput(
+            attrs={
+                "class": "form-control",
+                "autocomplete": "email",
+                "placeholder": "you@example.com",
+            }
+        ),
+    )
+    topic = forms.ChoiceField(
+        label="Тема",
+        choices=CONTACT_TOPIC_CHOICES,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    message = forms.CharField(
+        label="Повідомлення",
+        max_length=CONTACT_MESSAGE_MAX,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 6,
+                "maxlength": str(CONTACT_MESSAGE_MAX),
+                "placeholder": f"До {CONTACT_MESSAGE_MAX} символів",
+            }
+        ),
+    )
+    # Screenshots are handled by a raw <input multiple> in the template +
+    # browser → Web3Forms FormData (Django FileInput forbids multiple=True).
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._user = user
+        if user is not None and getattr(user, "is_authenticated", False):
+            if not self.is_bound:
+                self.fields["name"].initial = (
+                    (getattr(user, "get_full_name", lambda: "")() or "")
+                    or user.username
+                )
+                self.fields["email"].initial = user.email or ""
+            self.fields["email"].required = False
+            self.fields["email"].help_text = "Заповнено з акаунта; можна змінити."
+        else:
+            self.fields["email"].required = True
+            self.fields["email"].help_text = "Обов’язково для незареєстрованих."
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip()
+        if self._user is not None and getattr(self._user, "is_authenticated", False):
+            if not email:
+                email = (self._user.email or "").strip()
+        if not email:
+            raise ValidationError("Вкажіть email для відповіді.")
+        return email
+
+    def clean_message(self):
+        msg = (self.cleaned_data.get("message") or "").strip()
+        if not msg:
+            raise ValidationError("Напишіть повідомлення.")
+        if len(msg) > CONTACT_MESSAGE_MAX:
+            raise ValidationError(f"Максимум {CONTACT_MESSAGE_MAX} символів.")
+        return msg

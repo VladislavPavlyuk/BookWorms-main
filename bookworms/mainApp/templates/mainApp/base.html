@@ -391,6 +391,11 @@
                 </li>
 
                 <li class="nav-item">
+                    <a class="nav-link{% if un == 'contact_developers' %} active{% endif %}"
+                       href="{% url 'contact_developers' %}">Контакт</a>
+                </li>
+
+                <li class="nav-item">
                     <form action="{% url 'logout' %}" method="post" class="d-flex align-items-center m-0">
                         {% csrf_token %}
                         <button type="submit"
@@ -401,6 +406,10 @@
                 </li>
 
                 {% else %}
+                <li class="nav-item">
+                    <a class="nav-link{% if un == 'contact_developers' %} active{% endif %}"
+                       href="{% url 'contact_developers' %}">Контакт</a>
+                </li>
                 <li class="nav-item">
                     <a class="nav-link{% if un == 'login' %} active{% endif %}"
                        href="{% url 'login' %}">Вхід</a>

@@ -1,0 +1,225 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Контакт з розробниками{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 640px;">
+    <h1 class="h3 mb-2">Контакт з розробниками</h1>
+    <p class="text-muted small mb-4">
+        Повідомлення йде через Web3Forms на
+        <strong>vladpavliuk@gmail.com</strong>.
+        Скріншоти — до {{ max_screenshots }} шт., кожен &lt; {{ max_file_mb }}&nbsp;МБ.
+        Текст — до {{ message_max }} символів.
+    </p>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-{% if 'error' in message.tags %}danger{% elif 'success' in message.tags %}success{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    <div id="contactStatus" class="alert d-none" role="status"></div>
+
+    <form id="contactDevelopersForm"
+          method="post"
+          enctype="multipart/form-data"
+          class="card card-body shadow-sm"
+          novalidate
+          data-web3forms-url="https://api.web3forms.com/submit"
+          data-access-key="{{ web3forms_access_key }}"
+          data-max-files="{{ max_screenshots }}"
+          data-max-bytes="{{ max_file_bytes }}"
+          data-message-max="{{ message_max }}"
+          {% if contact_username %}data-username="{{ contact_username }}"{% endif %}>
+        {% csrf_token %}
+
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+            {{ form.name }}
+            {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+            {{ form.email }}
+            {% if form.email.help_text %}<div class="form-text">{{ form.email.help_text }}</div>{% endif %}
+            {% if form.email.errors %}<div class="text-danger small">{{ form.email.errors }}</div>{% endif %}
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.topic.id_for_label }}">{{ form.topic.label }}</label>
+            {{ form.topic }}
+            {% if form.topic.errors %}<div class="text-danger small">{{ form.topic.errors }}</div>{% endif %}
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.message.id_for_label }}">{{ form.message.label }}</label>
+            {{ form.message }}
+            <div class="form-text"><span id="contactMsgCount">0</span> / {{ message_max }}</div>
+            {% if form.message.errors %}<div class="text-danger small">{{ form.message.errors }}</div>{% endif %}
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="contactScreenshots">Скріншоти (необов’язково)</label>
+            <input type="file"
+                   name="screenshots"
+                   id="contactScreenshots"
+                   class="form-control"
+                   accept="image/*"
+                   multiple>
+            <div class="form-text">До {{ max_screenshots }} зображень, кожне до {{ max_file_mb }} МБ.</div>
+            <ul id="contactFileList" class="small text-muted mt-2 mb-0"></ul>
+            <div id="contactFileError" class="text-danger small mt-1" hidden></div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="contactSubmitBtn">Надіслати</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.getElementById("contactDevelopersForm");
+  if (!form) return;
+  var statusEl = document.getElementById("contactStatus");
+  var msg = form.querySelector('[name="message"]');
+  var countEl = document.getElementById("contactMsgCount");
+  var fileInput = document.getElementById("contactScreenshots");
+  var fileList = document.getElementById("contactFileList");
+  var fileErr = document.getElementById("contactFileError");
+  var btn = document.getElementById("contactSubmitBtn");
+  var maxFiles = parseInt(form.getAttribute("data-max-files") || "10", 10);
+  var maxBytes = parseInt(form.getAttribute("data-max-bytes") || String(2 * 1024 * 1024), 10);
+  var messageMax = parseInt(form.getAttribute("data-message-max") || "500", 10);
+  var endpoint = form.getAttribute("data-web3forms-url");
+  var accessKey = form.getAttribute("data-access-key") || "";
+
+  function setStatus(text, kind) {
+    if (!statusEl) return;
+    statusEl.className = "alert alert-" + (kind || "info");
+    statusEl.textContent = text || "";
+    statusEl.classList.toggle("d-none", !text);
+  }
+
+  function syncCount() {
+    if (!msg || !countEl) return;
+    var n = Array.from(msg.value || "").length;
+    countEl.textContent = String(n);
+    if (n > messageMax) countEl.classList.add("text-danger");
+    else countEl.classList.remove("text-danger");
+  }
+
+  function validateFiles() {
+    fileErr.hidden = true;
+    fileErr.textContent = "";
+    fileList.innerHTML = "";
+    var files = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
+    if (files.length > maxFiles) {
+      fileErr.textContent = "Максимум " + maxFiles + " файлів.";
+      fileErr.hidden = false;
+      return false;
+    }
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      var li = document.createElement("li");
+      li.textContent = f.name + " (" + Math.round(f.size / 1024) + " КБ)";
+      fileList.appendChild(li);
+      if (!/^image\//i.test(f.type || "")) {
+        fileErr.textContent = "Лише зображення: " + f.name;
+        fileErr.hidden = false;
+        return false;
+      }
+      if (f.size > maxBytes) {
+        fileErr.textContent = f.name + " більший за " + Math.round(maxBytes / (1024 * 1024)) + " МБ.";
+        fileErr.hidden = false;
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (msg) {
+    msg.addEventListener("input", syncCount);
+    syncCount();
+  }
+  if (fileInput) fileInput.addEventListener("change", validateFiles);
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    setStatus("", "info");
+    if (!accessKey) {
+      setStatus("WEB3FORMS_ACCESS_KEY не налаштовано на сервері.", "danger");
+      return;
+    }
+    var name = (form.querySelector('[name="name"]') || {}).value || "";
+    var email = (form.querySelector('[name="email"]') || {}).value || "";
+    var topicSel = form.querySelector('[name="topic"]');
+    var topicVal = topicSel ? topicSel.value : "";
+    var topicLabel = topicSel && topicSel.options[topicSel.selectedIndex]
+      ? topicSel.options[topicSel.selectedIndex].text
+      : topicVal;
+    var message = (msg && msg.value) || "";
+    name = name.trim();
+    email = email.trim();
+    message = message.trim();
+    if (!name) { setStatus("Вкажіть ім’я.", "danger"); return; }
+    if (!email) { setStatus("Вкажіть email.", "danger"); return; }
+    if (!message) { setStatus("Напишіть повідомлення.", "danger"); return; }
+    if (Array.from(message).length > messageMax) {
+      setStatus("Повідомлення довше за " + messageMax + " символів.", "danger");
+      return;
+    }
+    if (!validateFiles()) return;
+
+    var files = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
+    var fd = new FormData();
+    fd.append("access_key", accessKey);
+    fd.append("subject", "Реченець — контакт: " + topicLabel);
+    fd.append("from_name", name);
+    fd.append("name", name);
+    fd.append("email", email);
+    fd.append("message",
+      "Тема: " + topicLabel + "\n" +
+      "Від: " + name + " <" + email + ">\n" +
+      (form.getAttribute("data-username") ? ("Логін: " + form.getAttribute("data-username") + "\n") : "") +
+      "\n" + message
+    );
+    files.forEach(function (f) {
+      fd.append("attachment", f, f.name);
+    });
+
+    btn.disabled = true;
+    setStatus("Надсилаємо через Web3Forms…", "info");
+    fetch(endpoint, { method: "POST", body: fd })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          var j = null;
+          try { j = t ? JSON.parse(t) : null; } catch (err) { j = { raw: t }; }
+          return { ok: r.ok, status: r.status, j: j };
+        });
+      })
+      .then(function (res) {
+        if (res.ok && res.j && res.j.success !== false) {
+          setStatus("Надіслано. Відповімо на " + email + ".", "success");
+          form.reset();
+          syncCount();
+          fileList.innerHTML = "";
+        } else {
+          var detail = (res.j && (res.j.message || JSON.stringify(res.j))) || ("HTTP " + res.status);
+          setStatus("Web3Forms помилка: " + detail, "danger");
+        }
+      })
+      .catch(function (err) {
+        setStatus("Мережева помилка: " + err, "danger");
+      })
+      .finally(function () {
+        btn.disabled = false;
+      });
+  });
+})();
+</script>
+{% endblock %}

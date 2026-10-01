@@ -25,6 +25,10 @@ from django.contrib.auth.views import LoginView
 from .forms import (
     AddBookManualForm,
     AddIsbnForm,
+    ContactDevelopersForm,
+    CONTACT_MAX_FILE_BYTES,
+    CONTACT_MAX_SCREENSHOTS,
+    CONTACT_MESSAGE_MAX,
     EditBookManualForm,
     SendExchangePartnerMessageForm,
     UserLoginForm,
@@ -288,6 +292,25 @@ def confirm_email_view(request):
             "server_error": server_error,
             "activation_url": activation_url,
             "activation_timeout_minutes": _activation_minutes(),
+        },
+    )
+
+
+def contact_developers_view(request):
+    """Форма зв’язку з розробниками → Web3Forms (browser FormData + attachments)."""
+    user = request.user if request.user.is_authenticated else None
+    form = ContactDevelopersForm(user=user)
+    return render(
+        request,
+        "mainApp/contact.html",
+        {
+            "form": form,
+            "web3forms_access_key": (settings.WEB3FORMS_ACCESS_KEY or "").strip(),
+            "max_screenshots": CONTACT_MAX_SCREENSHOTS,
+            "max_file_bytes": CONTACT_MAX_FILE_BYTES,
+            "max_file_mb": CONTACT_MAX_FILE_BYTES // (1024 * 1024),
+            "message_max": CONTACT_MESSAGE_MAX,
+            "contact_username": user.username if user else "",
         },
     )
 
