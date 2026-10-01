@@ -115,6 +115,7 @@ class Book(models.Model):
                 }
             )
 
+    @property
     def reader_age_summary(self) -> str:
         """Короткий текст для списків (максимум 18 = 18+)."""
         lo, hi = self.min_readers_age, self.max_readers_age
@@ -176,7 +177,7 @@ class BookCopy(models.Model):
     )
     is_fee_sharing = models.BooleanField(
         default=True,
-        verbose_name="Fee sharing",
+        verbose_name="Free sharing ",
         help_text="Типовий режим спільного користування.",
     )
     is_hidden = models.BooleanField(
@@ -242,7 +243,7 @@ class BookCopy(models.Model):
     def listing_labels(self) -> list[str]:
         labels = []
         if self.is_fee_sharing:
-            labels.append("Fee sharing")
+            labels.append("Free sharing ")
         if self.is_hidden:
             labels.append("Hidden")
         if self.is_for_sale:
@@ -255,7 +256,7 @@ class BookCopy(models.Model):
             labels.append("For exchange")
         if self.is_free_of_deposit:
             labels.append("Free of deposit")
-        return labels or ["Fee sharing"]
+        return labels or ["Free sharing "]
 
     def clean(self):
         super().clean()

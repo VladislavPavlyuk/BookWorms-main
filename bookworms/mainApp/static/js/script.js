@@ -76,6 +76,24 @@
 
             var ageMax = parseInt(minI.getAttribute("max"), 10);
             if (Number.isNaN(ageMax) || ageMax < 1) ageMax = 18;
+            var statusEl = form.querySelector(".js-reader-age-status");
+            var saveTimer = null;
+            var lastSaved = minI.value + ":" + maxI.value;
+            var autosave = form.getAttribute("data-autosave") === "1";
+
+            function csrfToken() {
+                var inp = form.querySelector('input[name="csrfmiddlewaretoken"]');
+                if (inp && inp.value) return inp.value;
+                var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+                return m ? decodeURIComponent(m[1]) : "";
+            }
+
+            function setStatus(text, isErr) {
+                if (!statusEl) return;
+                statusEl.textContent = text || "";
+                statusEl.classList.toggle("text-danger", !!isErr);
+                statusEl.classList.toggle("text-muted", !isErr);
+            }
 
             function sync(e) {
                 var source = resolveSource(minI, maxI, e);
@@ -102,10 +120,104 @@
                 updateReaderAgeTrackBackground(dualEl, a, b, ageMax);
             }
 
-            minI.addEventListener("input", sync);
-            maxI.addEventListener("input", sync);
-            minI.addEventListener("change", sync);
-            maxI.addEventListener("change", sync);
+            function saveNow() {
+                if (!autosave) return;
+                var key = minI.value + ":" + maxI.value;
+                if (key === lastSaved) return;
+                var url = form.getAttribute("action");
+                if (!url) return;
+                setStatus("Збереження…", false);
+                var body = new FormData(form);
+                body.set("ajax", "1");
+                fetch(url, {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "X-CSRFToken": csrfToken(),
+                        Accept: "application/json",
+                    },
+                    body: body,
+                    redirect: "follow",
+                })
+                    .then(function (r) {
+                        return r.text().then(function (text) {
+                            var data = null;
+                            var trimmed = (text || "").replace(/^\uFEFF/, "").trim();
+                            if (trimmed) {
+                                try {
+                                    data = JSON.parse(trimmed);
+                                } catch (e) {
+                                    var look = trimmed.slice(0, 80).replace(/\s+/g, " ");
+                                    throw new Error(
+                                        r.ok
+                                            ? "Сервер повернув не JSON (" + look + "…)"
+                                            : "HTTP " + r.status + " — оновіть сторінку / перезберіть api"
+                                    );
+                                }
+                            }
+                            return { ok: r.ok, status: r.status, data: data };
+                        });
+                    })
+                    .then(function (res) {
+                        if (!res.ok || !res.data || !res.data.ok) {
+                            throw new Error(
+                                (res.data && res.data.detail) ||
+                                    "Помилка збереження (HTTP " + res.status + ")"
+                            );
+                        }
+                        if (res.data.min_readers_age != null) {
+                            minI.value = String(res.data.min_readers_age);
+                        }
+                        if (res.data.max_readers_age != null) {
+                            maxI.value = String(res.data.max_readers_age);
+                        }
+                        lastSaved = minI.value + ":" + maxI.value;
+                        updateReaderAgeTrackBackground(
+                            dualEl,
+                            clampAge(minI.value, ageMax),
+                            clampAge(maxI.value, ageMax),
+                            ageMax
+                        );
+                        setStatus("Збережено", false);
+                        clearTimeout(form._statusClear);
+                        form._statusClear = setTimeout(function () {
+                            setStatus("", false);
+                        }, 1500);
+                    })
+                    .catch(function (err) {
+                        setStatus(err.message || "Помилка", true);
+                    });
+            }
+
+            function scheduleSave() {
+                if (!autosave) return;
+                clearTimeout(saveTimer);
+                saveTimer = setTimeout(saveNow, 350);
+            }
+
+            minI.addEventListener("input", function (e) {
+                sync(e);
+                scheduleSave();
+            });
+            maxI.addEventListener("input", function (e) {
+                sync(e);
+                scheduleSave();
+            });
+            minI.addEventListener("change", function (e) {
+                sync(e);
+                saveNow();
+            });
+            maxI.addEventListener("change", function (e) {
+                sync(e);
+                saveNow();
+            });
+            form.addEventListener("submit", function (e) {
+                if (autosave) {
+                    e.preventDefault();
+                    saveNow();
+                }
+            });
             sync();
             if (typeof ResizeObserver !== "undefined") {
                 var ro = new ResizeObserver(function () {

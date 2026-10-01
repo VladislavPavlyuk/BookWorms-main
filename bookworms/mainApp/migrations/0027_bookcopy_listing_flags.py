@@ -100,7 +100,7 @@ class Migration(migrations.Migration):
             field=models.BooleanField(
                 default=True,
                 help_text="Типовий режим спільного користування.",
-                verbose_name="Fee sharing",
+                verbose_name="Free sharing ",
             ),
         ),
         migrations.AddField(

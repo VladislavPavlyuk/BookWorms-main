@@ -92,7 +92,7 @@ export type Shelf = {
 export type SaleGift = "" | "for_sale" | "as_gift";
 
 export const LISTING_CHECKBOX_OPTIONS: { key: keyof Shelf; label: string }[] = [
-  { key: "is_fee_sharing", label: "Fee sharing" },
+  { key: "is_fee_sharing", label: "Free sharing " },
   { key: "is_hidden", label: "Hidden" },
   { key: "is_for_rent", label: "For rent" },
   { key: "is_for_exchange", label: "For exchange" },

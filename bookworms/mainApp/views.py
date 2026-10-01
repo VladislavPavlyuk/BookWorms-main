@@ -695,7 +695,10 @@ def my_library(request):
     locked_raw = request.session.get("reader_age_locked_shelf_ids", [])
     if not isinstance(locked_raw, list):
         locked_raw = []
-    reader_age_locked_shelf_ids = set(locked_raw)
+    # Legacy session key no longer used for lock UI; keep cleared.
+    if locked_raw:
+        request.session["reader_age_locked_shelf_ids"] = []
+        request.session.modified = True
 
     return render(
         request,
@@ -709,7 +712,6 @@ def my_library(request):
             "pending_returns_to_confirm": pending_returns_to_confirm,
             "reader_age_min": READER_AGE_MIN,
             "reader_age_max": READER_AGE_MAX,
-            "reader_age_locked_shelf_ids": reader_age_locked_shelf_ids,
             "library_price_total": library_price_total,
             "listing_checkbox_flags": LISTING_CHECKBOX_FLAGS,
             "sale_gift_radio": SALE_GIFT_RADIO,
@@ -906,25 +908,35 @@ def due_slips(request):
 
 
 @login_required
+@require_POST
 def update_shelf_book_reader_age(request, shelf_id):
-    """Оновлення min/max рекомендованого віку в спільному Book для рядка полиці."""
-    if request.method != "POST":
-        return redirect("my_library")
+    """Оновлення min/max рекомендованого віку (autosave з полиці)."""
     shelf = get_object_or_404(
         Shelf.objects.select_related("book"),
         pk=shelf_id,
         user=request.user,
     )
     book = shelf.book
+    accept = (request.headers.get("Accept") or "").lower()
+    wants_json = (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in accept
+        or request.POST.get("ajax") == "1"
+    )
+
+    def _json(payload, status=200):
+        return JsonResponse(payload, status=status)
+
     try:
         mn = int(request.POST.get("min_readers_age", READER_AGE_MIN))
         mx = int(request.POST.get("max_readers_age", READER_AGE_MAX))
     except (TypeError, ValueError):
+        if wants_json:
+            return _json({"ok": False, "detail": "Некоректні значення віку."}, 400)
         messages.error(request, "Некоректні значення віку.")
         return redirect("my_library")
     mn = max(READER_AGE_MIN, min(READER_AGE_MAX, mn))
     mx = max(READER_AGE_MIN, min(READER_AGE_MAX, mx))
-    # Якщо мін. > макс. у формі - міняємо значення місцями (у БД лишається коректна пара).
     if mn > mx:
         mn, mx = mx, mn
     book.min_readers_age = mn
@@ -932,20 +944,29 @@ def update_shelf_book_reader_age(request, shelf_id):
     try:
         book.full_clean()
     except DjangoValidationError as exc:
-        messages.error(request, str(exc))
+        detail = "; ".join(
+            str(m)
+            for msgs in (
+                exc.message_dict.values()
+                if hasattr(exc, "message_dict")
+                else [getattr(exc, "messages", [str(exc)])]
+            )
+            for m in (msgs if isinstance(msgs, (list, tuple)) else [msgs])
+        ) or str(exc)
+        if wants_json:
+            return _json({"ok": False, "detail": detail}, 400)
+        messages.error(request, detail)
         return redirect("my_library")
     book.save(update_fields=["min_readers_age", "max_readers_age"])
-
-    key = "reader_age_locked_shelf_ids"
-    locked = request.session.get(key, [])
-    if not isinstance(locked, list):
-        locked = []
-    if shelf_id not in locked:
-        locked.append(shelf_id)
-    request.session[key] = locked
-    request.session.modified = True
-
-    messages.success(request, "Діапазон рекомендованого віку збережено.")
+    if wants_json:
+        return _json(
+            {
+                "ok": True,
+                "min_readers_age": book.min_readers_age,
+                "max_readers_age": book.max_readers_age,
+                "reader_age_summary": book.reader_age_summary,
+            }
+        )
     return redirect("my_library")
 
 

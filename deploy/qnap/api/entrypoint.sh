@@ -34,6 +34,10 @@ rm -f \
   /app/staticfiles/js/isbn_scan_worker.js.gz \
   /app/staticfiles/js/zxing-0.21.3.min.js \
   /app/staticfiles/js/zxing-0.21.3.min.js.gz \
+  /app/staticfiles/js/script.js \
+  /app/staticfiles/js/script.js.gz \
+  /app/staticfiles/js/manual_book_photos.js \
+  /app/staticfiles/js/manual_book_photos.js.gz \
   2>/dev/null || true
 python manage.py collectstatic --noinput
 

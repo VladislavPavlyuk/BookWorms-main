@@ -18,7 +18,7 @@ LISTING_FLAG_FIELDS = (
 )
 
 LISTING_CHECKBOX_FLAGS = (
-    ("is_fee_sharing", "Fee sharing"),
+    ("is_fee_sharing", "Free sharing "),
     ("is_hidden", "Hidden"),
     ("is_for_rent", "For rent"),
     ("is_for_exchange", "For exchange"),

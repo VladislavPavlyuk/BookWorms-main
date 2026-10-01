@@ -277,16 +277,33 @@ export default function ShelfScreen() {
     setCoverCamOpen(true);
   };
 
-  const saveAge = async () => {
+  const saveAge = async (mn: number, mx: number) => {
     if (!ageShelf) return;
     try {
-      await ShelfApi.readerAge(ageShelf.id, Number(ageMin), Number(ageMax));
-      setAgeShelf(null);
+      await ShelfApi.readerAge(ageShelf.id, mn, mx);
       await load();
     } catch (e) {
       Alert.alert("Вік", e instanceof ApiError ? e.message : String(e));
     }
   };
+
+  const ageSavedKeyRef = useRef("");
+  useEffect(() => {
+    if (!ageShelf) return;
+    const mn = Number(ageMin);
+    const mx = Number(ageMax);
+    if (Number.isNaN(mn) || Number.isNaN(mx)) return;
+    const key = `${ageShelf.id}:${mn}:${mx}`;
+    if (key === ageSavedKeyRef.current) return;
+    const t = setTimeout(() => {
+      ageSavedKeyRef.current = key;
+      saveAge(mn, mx).catch(() => {
+        ageSavedKeyRef.current = "";
+      });
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ageMin, ageMax, ageShelf?.id]);
 
   const openListing = (s: Shelf) => {
     setListingFlags({
@@ -562,8 +579,11 @@ export default function ShelfScreen() {
               {!item.borrowed_from && (
                 <Pressable
                   onPress={() => {
-                    setAgeMin(String(item.book.min_readers_age));
-                    setAgeMax(String(item.book.max_readers_age));
+                    const mn = String(item.book.min_readers_age);
+                    const mx = String(item.book.max_readers_age);
+                    ageSavedKeyRef.current = `${item.id}:${mn}:${mx}`;
+                    setAgeMin(mn);
+                    setAgeMax(mx);
                     setAgeShelf(item);
                   }}
                 >
@@ -725,12 +745,9 @@ export default function ShelfScreen() {
               <Text style={{ color: colors.ink, alignSelf: "center" }}>–</Text>
               <TextInput style={styles.age} keyboardType="number-pad" value={ageMax} onChangeText={setAgeMax} />
             </View>
-            <Text style={styles.meta}>0–18 (18 = 18+)</Text>
-            <Pressable style={styles.btn} onPress={saveAge}>
-              <Text style={styles.addText}>Зберегти</Text>
-            </Pressable>
+            <Text style={styles.meta}>0–18 (18 = 18+) · зберігається автоматично</Text>
             <Pressable onPress={() => setAgeShelf(null)}>
-              <Text style={[styles.link, { marginTop: 12, textAlign: "center" }]}>Скасувати</Text>
+              <Text style={[styles.link, { marginTop: 12, textAlign: "center" }]}>Закрити</Text>
             </Pressable>
           </View>
         </View>

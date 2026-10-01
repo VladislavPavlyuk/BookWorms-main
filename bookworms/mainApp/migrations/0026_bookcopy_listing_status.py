@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
             name="listing_status",
             field=models.CharField(
                 choices=[
-                    ("fee_sharing", "Fee sharing"),
+                    ("fee_sharing", "Free sharing "),
                     ("hidden", "Hidden"),
                     ("for_sale", "For sale"),
                     ("for_rent", "For rent"),
