@@ -161,6 +161,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'mainApp.context_processors.notifications',
+                'mainApp.context_processors.reader_age_scale',
             ],
         },
     },

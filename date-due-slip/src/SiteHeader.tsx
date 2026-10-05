@@ -7,6 +7,7 @@ import { HeaderActions } from "./BurgerMenu";
 import { EMPTY_FEED_SEARCH, useFeedSearch } from "./feedSearch";
 import { FilterGlyph } from "./HeaderGlyphs";
 import { CyrillicTextInput } from "./CyrillicTextInput";
+import { AgeRangeDual, ageFilterParams, parseAgeParam } from "./AgeRangeDual";
 import { colors, fs, s, btnRadius } from "./theme";
 
 const CHROME_IDLE_MS = 2000;
@@ -186,7 +187,11 @@ export function SiteHeader() {
 
   const applySearch = useCallback(
     (next: FeedSearch) => {
-      setSearch(next);
+      const ages = ageFilterParams(
+        parseAgeParam(next.age_min, 0),
+        parseAgeParam(next.age_max, 18)
+      );
+      setSearch({ ...next, ...ages });
       if (!inTabs) router.push("/(tabs)" as never);
     },
     [inTabs, router, setSearch]
@@ -307,19 +312,41 @@ export function SiteHeader() {
               ["isbn", "ISBN"],
               ["authors", "Автори"],
               ["publisher", "Видавець"],
-              ["publish_date", "Дата видання"],
-              ["age_min", "Вік від (0–18)"],
-              ["age_max", "Вік до (0–18)"],
             ] as const
           ).map(([key, label]) => (
             <AdvField
               key={key}
               label={label}
               initial={adv[key] || ""}
-              keyboardType={key.startsWith("age_") ? "number-pad" : "default"}
+              keyboardType="default"
               onChange={(t) => setAdvField(key, t)}
             />
           ))}
+          <View style={styles.advRow}>
+            <View style={styles.advRowField}>
+              <AdvField
+                label="Дата видання"
+                initial={adv.publish_date || ""}
+                keyboardType="default"
+                onChange={(t) => setAdvField("publish_date", t)}
+              />
+            </View>
+            <View style={styles.advAgeWrap}>
+              <AgeRangeDual
+                compact
+                minAge={parseAgeParam(adv.age_min, 0)}
+                maxAge={parseAgeParam(adv.age_max, 18)}
+                onChange={(mn, mx) => {
+                  advDraft.current = {
+                    ...advDraft.current,
+                    age_min: String(mn),
+                    age_max: String(mx),
+                  };
+                  setAdv(advDraft.current);
+                }}
+              />
+            </View>
+          </View>
           <View style={styles.advActions}>
             <Pressable style={styles.searchBtnWide} onPress={applyAdvanced}>
               <Text style={styles.searchBtnText}>Застосувати</Text>
@@ -348,7 +375,7 @@ const AdvField = memo(function AdvField({
 }: {
   label: string;
   initial: string;
-  keyboardType: "default" | "number-pad";
+  keyboardType: "default";
   onChange: (t: string) => void;
 }) {
   return (
@@ -467,4 +494,12 @@ const styles = StyleSheet.create({
     paddingBottom: s(4),
   },
   clear: { color: colors.stamp, fontWeight: "700", fontSize: fs(15) },
+  advRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: s(10),
+    marginBottom: s(4),
+  },
+  advRowField: { flex: 1, minWidth: 0 },
+  advAgeWrap: { width: s(148), flexShrink: 0 },
 });

@@ -497,13 +497,34 @@
                         <label class="form-label small mb-0" for="adv-publish-date">Дата видання</label>
                         <input id="adv-publish-date" class="form-control" name="publish_date" value="{{ request.GET.publish_date|default:'' }}" placeholder="1980">
                     </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label small mb-0" for="adv-age-min">Вік від</label>
-                        <input id="adv-age-min" class="form-control" type="number" min="0" max="18" name="age_min" value="{{ request.GET.age_min|default:'' }}">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label small mb-0" for="adv-age-max">Вік до</label>
-                        <input id="adv-age-max" class="form-control" type="number" min="0" max="18" name="age_max" value="{{ request.GET.age_max|default:'' }}">
+                    <div class="col-md-4 col-lg-3">
+                        <div class="search-reader-age-form search-reader-age-form--compact">
+                            <label class="form-label small mb-0" for="adv-age-min">Вік (0–18+)</label>
+                            <div class="reader-age-ticks small text-muted user-select-none">
+                                <span>0</span><span>3</span><span>5</span><span>7</span><span>10</span><span>12</span><span>15</span><span>18+</span>
+                            </div>
+                            <div class="reader-age-dual">
+                                <div class="reader-age-track" aria-hidden="true"><div class="reader-age-fill"></div></div>
+                                <input id="adv-age-min"
+                                       type="range"
+                                       name="age_min"
+                                       min="{{ reader_age_min }}"
+                                       max="{{ reader_age_max }}"
+                                       step="1"
+                                       value="{% if 'age_min' in request.GET %}{{ request.GET.age_min }}{% else %}{{ reader_age_min }}{% endif %}"
+                                       class="reader-age-input reader-age-min"
+                                       aria-label="Мінімальний вік">
+                                <input id="adv-age-max"
+                                       type="range"
+                                       name="age_max"
+                                       min="{{ reader_age_min }}"
+                                       max="{{ reader_age_max }}"
+                                       step="1"
+                                       value="{% if 'age_max' in request.GET %}{{ request.GET.age_max }}{% else %}{{ reader_age_max }}{% endif %}"
+                                       class="reader-age-input reader-age-max"
+                                       aria-label="Максимальний вік">
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2 mt-3">

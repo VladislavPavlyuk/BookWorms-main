@@ -9,54 +9,29 @@
 
     /** Має збігатися з шириною thumb у style.css (18px → радіус 9). */
     var THUMB_RADIUS_PX = 9;
-    /** Висота смуги треку - як у .reader-age-dual / ::-webkit-slider-runnable-track. */
-    var TRACK_HEIGHT_PX = 10;
 
-    /** Сірий зліва/справа, зелений лише між внутрішніми краями повзунків; по вертикалі - тільки TRACK_HEIGHT_PX. */
+    /** Green fill between Min and Max via .reader-age-fill (not parent background). */
     function updateReaderAgeTrackBackground(dualEl, minVal, maxVal, ageMax) {
         if (!dualEl || ageMax <= 0) return;
-        var W = dualEl.getBoundingClientRect().width;
-        if (W < 1) return;
-
+        var fill = dualEl.querySelector(".reader-age-fill");
+        if (!fill) {
+            var track = dualEl.querySelector(".reader-age-track");
+            if (!track) {
+                track = document.createElement("div");
+                track.className = "reader-age-track";
+                track.setAttribute("aria-hidden", "true");
+                dualEl.insertBefore(track, dualEl.firstChild);
+            }
+            fill = document.createElement("div");
+            fill.className = "reader-age-fill";
+            track.appendChild(fill);
+        }
         var lo = Math.min(minVal, maxVal);
         var hi = Math.max(minVal, maxVal);
-        var r = THUMB_RADIUS_PX;
-        var t = Math.max(0, W - 2 * r);
-
-        function cx(v) {
-            return r + (v / ageMax) * t;
-        }
-
-        var cxLo = cx(lo);
-        var cxHi = cx(hi);
-        var gs = Math.round(Math.min(W, Math.max(0, cxLo + r)));
-        var ge = Math.round(Math.min(W, Math.max(0, cxHi - r)));
-
-        var img;
-        if (ge <= gs) {
-            img =
-                "linear-gradient(to right, #dee2e6 0px, #dee2e6 " +
-                W +
-                "px)";
-        } else {
-            img =
-                "linear-gradient(to right, #dee2e6 0px, #dee2e6 " +
-                gs +
-                "px, #198754 " +
-                gs +
-                "px, #198754 " +
-                ge +
-                "px, #dee2e6 " +
-                ge +
-                "px, #dee2e6 " +
-                W +
-                "px)";
-        }
-
-        dualEl.style.backgroundImage = img;
-        dualEl.style.backgroundSize = W + "px " + TRACK_HEIGHT_PX + "px";
-        dualEl.style.backgroundRepeat = "no-repeat";
-        dualEl.style.backgroundPosition = "left center";
+        var leftPct = (lo / ageMax) * 100;
+        var widthPct = ((hi - lo) / ageMax) * 100;
+        fill.style.left = leftPct + "%";
+        fill.style.width = Math.max(0, widthPct) + "%";
     }
 
     function resolveSource(minI, maxI, e) {
@@ -68,7 +43,7 @@
     }
 
     function initReaderAgeForms() {
-        document.querySelectorAll(".book-reader-age-form").forEach(function (form) {
+        document.querySelectorAll(".book-reader-age-form, .search-reader-age-form").forEach(function (form) {
             var minI = form.querySelector(".reader-age-min");
             var maxI = form.querySelector(".reader-age-max");
             var dualEl = form.querySelector(".reader-age-dual");
@@ -484,6 +459,21 @@
             adv.addEventListener("show.bs.collapse", function () {
                 setToggleOpen(true);
             });
+            adv.addEventListener("shown.bs.collapse", function () {
+                // Width was 0 while collapsed — paint green Min–Max fill.
+                adv.querySelectorAll(".search-reader-age-form .reader-age-dual").forEach(function (dualEl) {
+                    var form = dualEl.closest(".search-reader-age-form");
+                    var minI = form && form.querySelector(".reader-age-min");
+                    var maxI = form && form.querySelector(".reader-age-max");
+                    if (!minI || !maxI) return;
+                    var ageMax = parseInt(minI.getAttribute("max"), 10) || 18;
+                    var a = parseInt(minI.value, 10);
+                    var b = parseInt(maxI.value, 10);
+                    if (Number.isNaN(a)) a = 0;
+                    if (Number.isNaN(b)) b = ageMax;
+                    updateReaderAgeTrackBackground(dualEl, a, b, ageMax);
+                });
+            });
             adv.addEventListener("hide.bs.collapse", function () {
                 setToggleOpen(false);
             });
@@ -494,6 +484,17 @@
         if (form && navQ && mirror) {
             form.addEventListener("submit", function () {
                 mirror.value = navQ.value || "";
+                // Full 0–18+ = no age filter (omit params so panel/URL stay clean).
+                var minI = form.querySelector(".search-reader-age-form .reader-age-min");
+                var maxI = form.querySelector(".search-reader-age-form .reader-age-max");
+                if (minI && maxI) {
+                    var ageMax = parseInt(minI.getAttribute("max"), 10);
+                    if (Number.isNaN(ageMax)) ageMax = 18;
+                    if (String(minI.value) === "0" && String(maxI.value) === String(ageMax)) {
+                        minI.disabled = true;
+                        maxI.disabled = true;
+                    }
+                }
             });
         }
 

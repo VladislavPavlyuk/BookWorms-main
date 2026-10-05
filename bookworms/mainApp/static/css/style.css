@@ -114,17 +114,38 @@ input[type="button"].btn {
 }
 
 /*
- * Фон батька під input; background-size висотою 10px - зелений/сірий лише в смузі треку,
- * не вище/нижче повзунків. Координати зупинок задає JS у px (між внутрішніми краями thumb).
+ * Dual age slider: grey track + green fill div (not input background —
+ * WebKit paints opaque tracks over parent background-image).
  */
 .reader-age-dual {
     position: relative;
     height: 36px;
     margin: 4px 0 6px;
-    background-repeat: no-repeat;
-    background-position: left center;
-    background-image: linear-gradient(to right, #dee2e6 0px, #dee2e6 100%);
-    background-size: 100% 10px;
+}
+
+.reader-age-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 10px;
+    margin-top: -5px;
+    border-radius: 5px;
+    background: #dee2e6;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+
+.reader-age-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    background: #198754;
+    border-radius: 5px;
+    pointer-events: none;
 }
 
 .reader-age-input {
@@ -139,10 +160,11 @@ input[type="button"].btn {
     appearance: none;
     pointer-events: none;
     top: 0;
+    z-index: 1;
 }
 
 .reader-age-input::-webkit-slider-container {
-    background-color: transparent;
+    background-color: transparent !important;
 }
 
 .reader-age-min {
@@ -156,6 +178,7 @@ input[type="button"].btn {
 .reader-age-input::-webkit-slider-thumb {
     pointer-events: auto;
     -webkit-appearance: none;
+    appearance: none;
     width: 18px;
     height: 18px;
     border-radius: 50%;
@@ -163,13 +186,17 @@ input[type="button"].btn {
     border: 2px solid #fff;
     box-shadow: 0 0 0 1px rgba(25, 135, 84, 0.45);
     cursor: pointer;
+    margin-top: 0;
+    position: relative;
+    z-index: 4;
 }
 
 .reader-age-input::-webkit-slider-runnable-track {
     height: 10px;
-    background: transparent;
+    background: transparent !important;
     border: none;
     border-radius: 5px;
+    color: transparent;
 }
 
 .reader-age-input::-moz-range-thumb {
@@ -185,19 +212,53 @@ input[type="button"].btn {
 
 .reader-age-input::-moz-range-track {
     height: 10px;
-    background: transparent;
+    background: transparent !important;
     border: none;
     border-radius: 5px;
 }
 
-/* Інакше Firefox малює непрозору заливку поверх фону контейнера */
 .reader-age-input::-moz-range-progress {
-    background: transparent;
+    background: transparent !important;
 }
 
 .book-reader-age-form--locked .reader-age-input:disabled {
     opacity: 0.85;
     cursor: not-allowed;
+}
+
+/* Advanced Search: compact dual next to «Дата видання» */
+.search-reader-age-form--compact {
+    max-width: 14rem;
+    width: 100%;
+}
+.search-reader-age-form--compact .reader-age-ticks {
+    font-size: 0.65rem;
+    margin-bottom: 0;
+}
+.search-reader-age-form--compact .reader-age-dual {
+    height: 28px;
+    margin: 2px 0 0;
+}
+.search-reader-age-form--compact .reader-age-track {
+    height: 8px;
+    margin-top: -4px;
+}
+.search-reader-age-form--compact .reader-age-input {
+    height: 28px;
+}
+.search-reader-age-form--compact .reader-age-input::-webkit-slider-thumb {
+    width: 14px;
+    height: 14px;
+}
+.search-reader-age-form--compact .reader-age-input::-webkit-slider-runnable-track {
+    height: 8px;
+}
+.search-reader-age-form--compact .reader-age-input::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+}
+.search-reader-age-form--compact .reader-age-input::-moz-range-track {
+    height: 8px;
 }
 
 .post-book-card__cover {
