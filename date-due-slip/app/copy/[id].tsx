@@ -70,7 +70,7 @@ export default function CopyHistoryScreen() {
   const rotateQr = () => {
     Alert.alert(
       "Оновити QR-код?",
-      "Стара наклейка перестане діяти. Роздрукуйте нову й прив’яжіть сканом.",
+      "Стара наклейка перестане діяти. Роздрукуйте нову й прив’яжіть «Скан QR» на полиці.",
       [
         { text: "Скасувати", style: "cancel" },
         {
@@ -81,11 +81,8 @@ export default function CopyHistoryScreen() {
             try {
               await CopyApi.rotateQr(copy.id);
               await load();
-              Alert.alert("QR", "Новий код готовий — роздрукуйте й «Скан QR» у вікні опцій на полиці.", [
-                {
-                  text: "Друк",
-                  onPress: () => router.push(`/qr-print?copy_id=${copy.id}`),
-                },
+              Alert.alert("QR", "Відв’язано. Роздрукуйте наклейки й відскануйте.", [
+                { text: "Друк", onPress: () => router.push("/qr-print") },
                 { text: "OK" },
               ]);
             } catch (e) {
@@ -115,33 +112,24 @@ export default function CopyHistoryScreen() {
         </View>
         {lent ? <Text style={styles.lent}>Зараз у позиці</Text> : null}
         <Text style={styles.meta}>
-          QR:{" "}
-          {copy.qr_attached
-            ? "приклеєно"
-            : copy.has_qr
-              ? "згенеровано, очікує наклейки"
-              : "ще немає"}
+          QR: {copy.qr_attached ? "приклеєно / прив’язано" : "ще не прив’язано"}
         </Text>
 
         {isOwner ? (
           <>
-            <Text style={styles.h}>QR-наклейка (2×2 см)</Text>
+            <Text style={styles.h}>QR-наклейка</Text>
             <Text style={styles.meta}>
-              «Скан QR» — у вікні опцій примірника на полиці (обкладинка → деталі).
-              {!copy.has_qr ? " Друк створить код для наклейки." : ""}
-              {copy.has_qr && !copy.qr_attached ? " Після друку прив’яжіть сканом." : ""}
+              Пізня прив’язка: друк не прив’язує код до книги. Наклейте наклейку → «Скан QR» у
+              вікні опцій на полиці.
             </Text>
             <View style={styles.qActions}>
-              {copy.has_qr ? (
+              {copy.qr_attached ? (
                 <Pressable style={styles.btn} onPress={rotateQr} disabled={busy}>
                   <Text style={styles.btnText}>Оновити QR-код</Text>
                 </Pressable>
               ) : null}
-              <Pressable
-                style={styles.btnGhost}
-                onPress={() => router.push(`/qr-print?copy_id=${copy.id}`)}
-              >
-                <Text style={styles.btnGhostText}>Друк наклейки A4</Text>
+              <Pressable style={styles.btnGhost} onPress={() => router.push("/qr-print")}>
+                <Text style={styles.btnGhostText}>Друк наклейок A4</Text>
               </Pressable>
             </View>
           </>

@@ -8,34 +8,31 @@ import {
   Text,
   View,
 } from "react-native";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, CopyApi } from "../src/api";
 import { colors, btnRadius } from "../src/theme";
 
 type Label = {
-  copy_id: number;
+  copy_id: number | null;
   title: string;
   payload: string;
   data_uri: string;
   attached: boolean;
 };
 
-/** Client preview of 2cm QR labels (print via web A4 sheet for exact size). */
+/** Client preview of unbound A4 QR labels (bind later via Скан QR). */
 export default function QrPrintScreen() {
   const router = useRouter();
-  const { copy_id } = useLocalSearchParams<{ copy_id?: string }>();
   const [page, setPage] = useState<(Label | null)[]>([]);
   const [pageCount, setPageCount] = useState(0);
-  const [cols, setCols] = useState(10);
+  const [cols, setCols] = useState(6);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      CopyApi.printLabels(
-        copy_id && /^\d+$/.test(copy_id) ? { copyId: Number(copy_id) } : undefined
-      )
+      CopyApi.printLabels()
         .then((r) => {
           setCols(r.cols);
           setPageCount(r.pages?.length ?? 0);
@@ -43,7 +40,7 @@ export default function QrPrintScreen() {
         })
         .catch((e) => setErr(e instanceof ApiError ? e.message : String(e)))
         .finally(() => setLoading(false));
-    }, [copy_id])
+    }, [])
   );
 
   return (
@@ -51,15 +48,15 @@ export default function QrPrintScreen() {
       <Text style={styles.h}>Друкувати QR коди</Text>
       <Text style={styles.brand}>www.datedueslip.com</Text>
       <Text style={styles.meta}>
-        Прев’ю 1-го аркуша A4: 6×6 = 36 наклейок (QR ≈ 28 мм + www.datedueslip.com). Друк — веб →
-        Налаштування → Друкувати QR коди. «Скан QR» — у вікні опцій примірника.
+        36 унікальних QR без прив’язки до книг. Наклейте → «Скан QR» у опціях примірника на
+        полиці. Друк — також веб → Налаштування.
         {pageCount > 1 ? ` Сторінок: ${pageCount}.` : ""}
       </Text>
       {loading ? <ActivityIndicator color={colors.stamp} /> : null}
       {err ? <Text style={styles.err}>{err}</Text> : null}
       <View style={[styles.grid, { width: cols * 52 }]}>
         {page.map((lab, i) => (
-          <View key={lab ? lab.copy_id : `e-${i}`} style={[styles.cell, !lab && styles.cellEmpty]}>
+          <View key={lab ? lab.payload : `e-${i}`} style={[styles.cell, !lab && styles.cellEmpty]}>
             {lab ? (
               <>
                 <Text style={styles.cellBrand}>www.datedueslip.com</Text>
@@ -70,7 +67,7 @@ export default function QrPrintScreen() {
         ))}
       </View>
       {!loading && page.length === 0 && !err ? (
-        <Text style={styles.meta}>Немає примірників для друку.</Text>
+        <Text style={styles.meta}>Немає наклейок для прев’ю.</Text>
       ) : null}
       <Pressable style={styles.btn} onPress={() => router.back()}>
         <Text style={styles.btnText}>← Назад</Text>

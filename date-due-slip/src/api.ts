@@ -514,10 +514,9 @@ export const CopyApi = {
         ...(opts?.action ? { action: opts.action } : {}),
       },
     }),
-  printLabels: (opts?: { copyId?: number; ids?: number[] }) => {
+  printLabels: (opts?: { pages?: number }) => {
     const q: string[] = [];
-    if (opts?.copyId) q.push(`copy_id=${opts.copyId}`);
-    if (opts?.ids?.length) q.push(`ids=${opts.ids.join(",")}`);
+    if (opts?.pages && opts.pages > 1) q.push(`pages=${opts.pages}`);
     const qs = q.length ? `?${q.join("&")}` : "";
     return api<{
       qr_mm: number;
@@ -527,14 +526,14 @@ export const CopyApi = {
       rows: number;
       slots_per_page: number;
       pages: ({
-        copy_id: number;
+        copy_id: number | null;
         title: string;
         payload: string;
         data_uri: string;
         attached: boolean;
       } | null)[][];
       labels: {
-        copy_id: number;
+        copy_id: number | null;
         title: string;
         payload: string;
         data_uri: string;

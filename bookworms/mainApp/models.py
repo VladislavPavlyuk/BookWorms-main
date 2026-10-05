@@ -313,8 +313,8 @@ class BookCopy(models.Model):
 
 class PreprintedQrToken(models.Model):
     """
-    Spare unique QR stickers printed on A4 sheets (fill to 36 / page).
-    Claimed onto a BookCopy when the owner scans «Скан QR» on that instance.
+    Unbound unique QR stickers (A4 pool, 36/page). Never assigned at print time.
+    Claimed onto a BookCopy only when the owner glues the label and scans «Скан QR».
     """
 
     token = models.CharField(

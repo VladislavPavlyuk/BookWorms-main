@@ -1396,18 +1396,19 @@ def handoff_confirm_receive(request, handoff_id):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def copy_qr_ensure_api(request, copy_id):
-    from mainApp.copy_qr import ensure_copy_qr, serialize_copy_qr
-
+    """Late binding: no token on copy until scan. Point client to print."""
     copy = BookCopy.objects.filter(pk=copy_id).select_related("book", "owner").first()
     if not copy:
         return _error("Примірник не знайдено.", 404)
-    try:
-        ensure_copy_qr(copy, request.user)
-    except ExchangeError as exc:
-        return _error(exc.message, exc.http_status)
-    copy.refresh_from_db()
+    if copy.owner_id != request.user.id:
+        return _error("QR може друкувати лише власник.", 403)
+    from mainApp.copy_qr import serialize_copy_qr
+
     return Response(
         {
+            "ok": True,
+            "late_binding": True,
+            "detail": "Роздрукуйте наклейки, наклейте, потім Скан QR.",
             "copy": BookCopySerializer(copy, context={"request": request}).data,
             "qr": serialize_copy_qr(copy),
         }
@@ -1510,8 +1511,13 @@ def copy_qr_print_labels_api(request):
     single = request.query_params.get("copy_id")
     if single and str(single).isdigit():
         copy_ids = [int(single)]
+    pages_raw = request.query_params.get("pages") or "1"
+    try:
+        page_count = max(1, min(20, int(pages_raw)))
+    except ValueError:
+        page_count = 1
     pages = build_full_a4_print_pages(
-        request.user, copy_ids=copy_ids or None
+        request.user, copy_ids=copy_ids or None, page_count=page_count
     )
 
     def lab_json(lab):

@@ -1582,39 +1582,38 @@ def copy_history(request, copy_id):
 @login_required
 @require_POST
 def copy_qr_ensure(request, copy_id):
-    """Згенерувати унікальний QR-токен для примірника (власник)."""
-    from .copy_qr import ensure_copy_qr
-
+    """Late binding: do not assign token here — send owner to print sheet."""
     copy = get_object_or_404(BookCopy, pk=copy_id)
-    try:
-        ensure_copy_qr(copy, request.user)
-        messages.success(request, "QR-код примірника готовий до друку.")
-    except ExchangeError as exc:
-        messages.error(request, exc.message)
-    next_url = request.POST.get("next")
-    if next_url:
-        return redirect(next_url)
-    return redirect("copy_history", copy_id=copy_id)
+    if copy.owner_id != request.user.id:
+        messages.error(request, "QR може друкувати лише власник.")
+        return redirect("copy_history", copy_id=copy_id)
+    messages.info(
+        request,
+        "Роздрукуйте наклейки, наклейте на книгу, потім «Скан QR» на примірнику.",
+    )
+    from django.urls import reverse
+
+    return redirect(f"{reverse('copy_qr_print')}?from=settings")
 
 
 @login_required
 @require_POST
 def copy_qr_rotate(request, copy_id):
-    """Новий QR замість втраченої / нечитабельної наклейки."""
+    """Відв’язати втрачену наклейку; новий код — лише після друку + скану."""
     from .copy_qr import rotate_copy_qr
 
     try:
         rotate_copy_qr(copy_id, request.user)
         messages.success(
             request,
-            "Новий QR згенеровано. Роздрукуйте наклейку й прив’яжіть сканом.",
+            "Старий QR скасовано. Роздрукуйте нові наклейки й прив’яжіть «Скан QR».",
         )
     except ExchangeError as exc:
         messages.error(request, exc.message)
         return redirect("copy_history", copy_id=copy_id)
     from django.urls import reverse
 
-    return redirect(f"{reverse('copy_qr_print')}?copy_id={copy_id}")
+    return redirect(f"{reverse('copy_qr_print')}?from=settings")
 
 
 @login_required
@@ -1649,21 +1648,11 @@ def copy_qr_print(request):
         build_full_a4_print_pages,
     )
 
-    raw_ids = request.GET.get("ids") or request.POST.get("ids") or ""
-    copy_ids = []
-    for part in raw_ids.replace(" ", "").split(","):
-        if part.isdigit():
-            copy_ids.append(int(part))
-    single = request.GET.get("copy_id") or request.POST.get("copy_id")
-    if single and str(single).isdigit():
-        copy_ids = [int(single)]
+    pages = build_full_a4_print_pages(request.user)
+    labels = [lab for page in pages for lab in page]
     back = (request.GET.get("from") or "").strip()
     if back not in ("settings", "my_library"):
-        back = "settings" if not copy_ids else "my_library"
-    pages = build_full_a4_print_pages(
-        request.user, copy_ids=copy_ids or None
-    )
-    labels = [lab for page in pages for lab in page]
+        back = "settings"
     # Locale can render floats as "33,33" → invalid CSS → grid collapses to 1 column.
     return render(
         request,

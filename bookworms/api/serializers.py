@@ -481,18 +481,24 @@ class BookCopySerializer(serializers.ModelSerializer):
         )
 
     def get_has_qr(self, obj):
-        return bool(obj.qr_token)
+        # Late binding: "has QR" only after glue+scan attach.
+        return bool(obj.qr_token and obj.qr_attached_at)
 
     def get_qr_attached(self, obj):
-        return bool(obj.qr_attached_at)
+        return bool(obj.qr_token and obj.qr_attached_at)
 
     def get_requires_qr_scan(self, obj):
-        return bool(obj.qr_attached_at)
+        return bool(obj.qr_token and obj.qr_attached_at)
 
     def get_qr_payload(self, obj):
         request = self.context.get("request")
         user = getattr(request, "user", None) if request else None
-        if not obj.qr_token or not user or not user.is_authenticated:
+        if (
+            not obj.qr_token
+            or not obj.qr_attached_at
+            or not user
+            or not user.is_authenticated
+        ):
             return None
         if user.id != obj.owner_id:
             return None
@@ -887,7 +893,8 @@ class LoanHandoffSerializer(serializers.ModelSerializer):
         )
 
     def get_requires_qr_scan(self, obj):
-        return bool(getattr(obj.copy, "qr_attached_at", None))
+        c = getattr(obj, "copy", None)
+        return bool(c and c.qr_token and c.qr_attached_at)
 
     def _req_user(self):
         req = self.context.get("request")

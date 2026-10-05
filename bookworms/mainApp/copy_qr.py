@@ -1,10 +1,13 @@
-"""Unique QR labels for BookCopy instances (generate / print / attach / resolve)."""
+"""Unique QR labels for BookCopy — late binding (print unbound, bind on scan)."""
 from __future__ import annotations
 
 import base64
 import io
+import logging
+import re
 import secrets
 from dataclasses import dataclass
+from urllib.parse import unquote
 
 from django.db import transaction
 from django.utils import timezone
@@ -13,9 +16,10 @@ from .copy_events import log_copy_event
 from .exceptions import ExchangeForbidden, ExchangeInvalidState, ExchangeNotFound
 from .models import BookCopy, CopyEvent, CustomUser, LoanHandoff, PreprintedQrToken
 
+logger = logging.getLogger(__name__)
+
 QR_PREFIX = "BW1."
-# A4 is 210×297 mm — a literal 200×200 mm QR cannot fit 36 labels on one page.
-# Sheet: 6×6 = 36 unique labels; each cell holds brand title + max square QR.
+# A4 sheet: 6×6 = 36 unbound unique labels; bind only when owner scans after gluing.
 A4_COLS = 6
 A4_ROWS = 6
 SLOTS_PER_A4_PAGE = A4_COLS * A4_ROWS  # 36
@@ -23,10 +27,11 @@ A4_PAGE_MARGIN_MM = 5
 A4_WIDTH_MM = 210
 A4_HEIGHT_MM = 297
 LABEL_W_MM = (A4_WIDTH_MM - 2 * A4_PAGE_MARGIN_MM) / A4_COLS  # ≈ 33.33 mm
-LABEL_H_MM = (A4_HEIGHT_MM - 3 * A4_PAGE_MARGIN_MM) / A4_ROWS  # ≈ 47.83 mm
-# Title + padding leave ~28 mm for the QR square inside the label.
-QR_PRINT_MM = 28
+LABEL_H_MM = (A4_HEIGHT_MM - 2 * A4_PAGE_MARGIN_MM) / A4_ROWS  # ≈ 47.83 mm
+QR_PRINT_MM = 30
 QR_BRAND_TITLE = "www.datedueslip.com"
+# token_urlsafe alphabet (+ legacy early-bind leftovers).
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 
 def make_qr_token() -> str:
@@ -38,18 +43,28 @@ def qr_payload_for_token(token: str) -> str:
 
 
 def parse_qr_payload(raw: str | None) -> str:
-    """Extract token from scanned payload (BW1.<token> or bare token)."""
-    text = (raw or "").strip()
+    """Extract token from scanned payload (BW1.<token>, URL, or bare token)."""
+    text = unquote((raw or "").strip()).strip().strip("\"'")
     if not text:
         raise ExchangeInvalidState("Порожній QR-код.")
+    # Drop accidental camera / keyboard noise around the payload.
+    if "BW1." in text.upper() or "bw1." in text:
+        # Prefer the BW1. segment even if wrapped in a URL or extra text.
+        for part in re.split(r"[\s<>\"']+", text):
+            if part.upper().startswith(QR_PREFIX.upper()):
+                text = part
+                break
     if "qr=" in text:
         text = text.split("qr=", 1)[1].split("&", 1)[0]
+        text = unquote(text)
     if "/q/" in text:
         text = text.rsplit("/q/", 1)[-1].split("?", 1)[0].strip("/")
+        text = unquote(text)
     if text.upper().startswith(QR_PREFIX.upper()):
         text = text[len(QR_PREFIX) :]
     token = text.strip()
-    if len(token) < 8 or len(token) > 64:
+    if not _TOKEN_RE.match(token):
+        logger.warning("copy_qr parse reject raw=%r token=%r", raw, token)
         raise ExchangeInvalidState("Невідомий формат QR примірника.")
     return token
 
@@ -69,58 +84,9 @@ def _mint_unique_token() -> str:
     raise ExchangeInvalidState("Не вдалося згенерувати унікальний QR.")
 
 
-def _assign_new_token(copy: BookCopy) -> BookCopy:
-    copy.qr_token = _mint_unique_token()
-    copy.qr_attached_at = None
-    copy.save(update_fields=["qr_token", "qr_attached_at"])
-    return copy
-
-
-def ensure_copy_qr(copy: BookCopy, acting_user: CustomUser) -> BookCopy:
-    if copy.owner_id != acting_user.id:
-        raise ExchangeForbidden("QR може згенерувати лише власник примірника.")
-    if copy.qr_token:
-        return copy
-    return _assign_new_token(copy)
-
-
-@transaction.atomic
-def rotate_copy_qr(copy_id: int, acting_user: CustomUser) -> BookCopy:
-    """Replace QR token (lost / unreadable label). Old sticker stops working."""
-    try:
-        copy = (
-            BookCopy.objects.select_for_update(of=("self",))
-            .select_related("book", "owner")
-            .get(pk=copy_id)
-        )
-    except BookCopy.DoesNotExist as exc:
-        raise ExchangeNotFound("Примірник не знайдено.") from exc
-    if copy.owner_id != acting_user.id:
-        raise ExchangeForbidden("Оновити QR може лише власник.")
-    if not copy.qr_token:
-        raise ExchangeInvalidState("Спочатку створіть QR (Скан QR).")
-    return _assign_new_token(copy)
-
-
-@transaction.atomic
-def ensure_owner_qr_tokens(owner: CustomUser, *, copy_ids: list[int] | None = None) -> list[BookCopy]:
-    qs = BookCopy.objects.select_for_update(of=("self",)).filter(owner=owner)
-    if copy_ids:
-        qs = qs.filter(pk__in=copy_ids)
-    copies = list(qs.select_related("book").order_by("id"))
-    for c in copies:
-        if not c.qr_token:
-            ensure_copy_qr(c, owner)
-    return list(
-        BookCopy.objects.filter(pk__in=[c.pk for c in copies])
-        .select_related("book")
-        .order_by("id")
-    )
-
-
 @transaction.atomic
 def ensure_spare_qr_tokens(owner: CustomUser, count: int) -> list[PreprintedQrToken]:
-    """Create `count` unassigned preprint tokens for this owner (may reuse free ones)."""
+    """Create/reuse `count` unassigned preprint tokens (never bound to a copy)."""
     if count <= 0:
         return []
     free = list(
@@ -137,17 +103,44 @@ def ensure_spare_qr_tokens(owner: CustomUser, count: int) -> list[PreprintedQrTo
     return free + created
 
 
-def _recycle_token_to_pool(owner: CustomUser, token: str | None) -> None:
+def _burn_token(token: str | None) -> None:
+    """Invalidate a sticker so it can no longer be claimed or resolved."""
     if not token:
         return
-    if PreprintedQrToken.objects.filter(token=token).exists():
-        return
-    PreprintedQrToken.objects.create(token=token, owner=owner)
+    PreprintedQrToken.objects.filter(token=token).delete()
+
+
+@transaction.atomic
+def rotate_copy_qr(copy_id: int, acting_user: CustomUser) -> BookCopy:
+    """
+    Unbind lost/unreadable label (late binding).
+    Does NOT assign a new token to the copy — print a new sheet, then Скан QR.
+    """
+    try:
+        copy = (
+            BookCopy.objects.select_for_update(of=("self",))
+            .select_related("book", "owner")
+            .get(pk=copy_id)
+        )
+    except BookCopy.DoesNotExist as exc:
+        raise ExchangeNotFound("Примірник не знайдено.") from exc
+    if copy.owner_id != acting_user.id:
+        raise ExchangeForbidden("Оновити QR може лише власник.")
+    if not copy.qr_token and not copy.qr_attached_at:
+        raise ExchangeInvalidState("QR ще не прив’язано — спочатку Скан QR.")
+    old = copy.qr_token
+    copy.qr_token = None
+    copy.qr_attached_at = None
+    copy.save(update_fields=["qr_token", "qr_attached_at"])
+    _burn_token(old)
+    return copy
 
 
 @transaction.atomic
 def attach_copy_qr(copy_id: int, acting_user: CustomUser, payload: str) -> BookCopy:
-    """Owner scans printed label to bind it to this instance (copy token or preprint pool)."""
+    """
+    Late bind: owner scans a printed unbound label after gluing it on this copy.
+    """
     try:
         copy = (
             BookCopy.objects.select_for_update(of=("self",))
@@ -161,47 +154,101 @@ def attach_copy_qr(copy_id: int, acting_user: CustomUser, payload: str) -> BookC
 
     token = parse_qr_payload(payload)
 
+    # Already bound to this copy — idempotent confirm.
     if copy.qr_token and token == copy.qr_token:
-        pass
-    else:
-        pool = (
+        if not copy.qr_attached_at:
+            copy.qr_attached_at = timezone.now()
+            copy.save(update_fields=["qr_attached_at"])
+            log_copy_event(
+                copy.id,
+                CopyEvent.Code.QR_ATTACHED,
+                actor=acting_user,
+                holder=acting_user,
+                legal_owner=acting_user,
+            )
+        return copy
+
+    if copy.qr_attached_at and copy.qr_token and copy.qr_token != token:
+        raise ExchangeInvalidState(
+            "У примірника вже є приклеєний QR. Спочатку «Оновити QR-код»."
+        )
+
+    pool = (
+        PreprintedQrToken.objects.select_for_update(of=("self",))
+        .filter(token=token, copy__isnull=True)
+        .first()
+    )
+    if pool and pool.owner_id != acting_user.id:
+        logger.warning(
+            "copy_qr attach foreign pool token=%s copy=%s user=%s owner=%s",
+            token,
+            copy_id,
+            acting_user.id,
+            pool.owner_id,
+        )
+        raise ExchangeInvalidState(
+            "Цей QR з друку іншого користувача."
+        )
+
+    if not pool:
+        other = BookCopy.objects.filter(qr_token=token).exclude(pk=copy.pk).first()
+        if other:
+            raise ExchangeInvalidState(
+                "Цей QR уже прив’язаний до іншого примірника."
+            )
+        claimed = (
             PreprintedQrToken.objects.select_for_update(of=("self",))
-            .filter(token=token, owner=acting_user, copy__isnull=True)
+            .filter(token=token, copy__isnull=False)
             .first()
         )
-        if not pool:
-            other = BookCopy.objects.filter(qr_token=token).exclude(pk=copy.pk).first()
-            if other:
-                raise ExchangeInvalidState(
-                    "Цей QR уже прив’язаний до іншого примірника."
-                )
+        if claimed:
             raise ExchangeInvalidState(
-                "Цей QR не з вашого друку. Роздрукуйте аркуш у Налаштуваннях "
-                "або скануйте наклейку цього примірника."
+                "Цей QR уже прив’язаний до іншого примірника."
             )
-        if copy.qr_attached_at and copy.qr_token and copy.qr_token != token:
-            raise ExchangeInvalidState(
-                "У примірника вже є приклеєний QR. Спочатку «Оновити QR-код»."
-            )
-        if copy.qr_token and copy.qr_token != token and not copy.qr_attached_at:
-            _recycle_token_to_pool(acting_user, copy.qr_token)
-        copy.qr_token = token
-        pool.copy = copy
-        pool.claimed_at = timezone.now()
-        pool.save(update_fields=["copy", "claimed_at"])
-
-    if not copy.qr_attached_at:
-        copy.qr_attached_at = timezone.now()
-        copy.save(update_fields=["qr_token", "qr_attached_at"])
-        log_copy_event(
-            copy.id,
-            CopyEvent.Code.QR_ATTACHED,
-            actor=acting_user,
-            holder=acting_user,
-            legal_owner=acting_user,
+        # Recovery: early-bind stickers / wiped BookCopy tokens left orphans not in
+        # PreprintedQrToken. Owner scanning an unused BW1 token enrolls it into pool.
+        foreign = (
+            PreprintedQrToken.objects.select_for_update(of=("self",))
+            .filter(token=token)
+            .first()
         )
-    elif copy.qr_token != token:
-        copy.save(update_fields=["qr_token", "qr_attached_at"])
+        if foreign:
+            logger.warning(
+                "copy_qr attach unexpected pool state token=%s copy=%s user=%s",
+                token,
+                copy_id,
+                acting_user.id,
+            )
+            raise ExchangeInvalidState(
+                "Цей QR не з вашого друку. Роздрукуйте аркуш у Налаштуваннях, "
+                "наклейте й відскануйте."
+            )
+        logger.info(
+            "copy_qr attach enroll orphan token=%s copy=%s user=%s raw=%r",
+            token,
+            copy_id,
+            acting_user.id,
+            payload[:80],
+        )
+        pool = PreprintedQrToken.objects.create(token=token, owner=acting_user)
+
+    # Drop any legacy early-bound unattached token without reclaiming it as printable.
+    if copy.qr_token and copy.qr_token != token and not copy.qr_attached_at:
+        _burn_token(copy.qr_token)
+
+    copy.qr_token = token
+    copy.qr_attached_at = timezone.now()
+    copy.save(update_fields=["qr_token", "qr_attached_at"])
+    pool.copy = copy
+    pool.claimed_at = timezone.now()
+    pool.save(update_fields=["copy", "claimed_at"])
+    log_copy_event(
+        copy.id,
+        CopyEvent.Code.QR_ATTACHED,
+        actor=acting_user,
+        holder=acting_user,
+        legal_owner=acting_user,
+    )
     return copy
 
 
@@ -278,24 +325,6 @@ class QrLabel:
     attached: bool
 
 
-def build_print_labels(copies: list[BookCopy]) -> list[QrLabel]:
-    labels: list[QrLabel] = []
-    for c in copies:
-        if not c.qr_token:
-            continue
-        payload = qr_payload_for_token(c.qr_token)
-        labels.append(
-            QrLabel(
-                copy_id=c.id,
-                title=(c.book.title or "")[:40],
-                payload=payload,
-                data_uri=qr_png_data_uri(payload),
-                attached=bool(c.qr_attached_at),
-            )
-        )
-    return labels
-
-
 def _labels_from_pool(tokens: list[PreprintedQrToken]) -> list[QrLabel]:
     out: list[QrLabel] = []
     for t in tokens:
@@ -314,39 +343,62 @@ def _labels_from_pool(tokens: list[PreprintedQrToken]) -> list[QrLabel]:
 
 @transaction.atomic
 def build_full_a4_print_pages(
-    owner: CustomUser, *, copy_ids: list[int] | None = None
+    owner: CustomUser,
+    *,
+    copy_ids: list[int] | None = None,
+    page_count: int = 1,
 ) -> list[list[QrLabel]]:
     """
-    Full A4 pages of exactly 36 unique QR labels each.
-    Owner copies first; remaining cells filled from preprint pool (created as needed).
-    Always returns at least one full page.
+    Full A4 page(s) of exactly 36 unique *unbound* QR labels.
+    Never writes BookCopy.qr_token — binding happens only on Скан QR (attach).
     """
-    copies = ensure_owner_qr_tokens(owner, copy_ids=copy_ids)
-    labels = build_print_labels(copies)
+    del copy_ids  # late binding: print is never per-copy
+    pages_n = max(1, int(page_count or 1))
     slots = SLOTS_PER_A4_PAGE
-    if not labels:
-        need = slots
-    else:
-        rem = len(labels) % slots
-        need = 0 if rem == 0 else slots - rem
-    if need:
-        labels.extend(_labels_from_pool(ensure_spare_qr_tokens(owner, need)))
-    pages: list[list[QrLabel]] = []
-    for start in range(0, len(labels), slots):
-        chunk = labels[start : start + slots]
-        # Safety: never leave holes on a page.
-        if len(chunk) < slots:
-            chunk = chunk + _labels_from_pool(
-                ensure_spare_qr_tokens(owner, slots - len(chunk))
-            )
-        pages.append(chunk)
-    return pages
+    tokens = ensure_spare_qr_tokens(owner, slots * pages_n)
+    labels = _labels_from_pool(tokens)
+    return [labels[i : i + slots] for i in range(0, len(labels), slots)]
+
+
+def serialize_copy_qr(copy: BookCopy) -> dict:
+    """Public QR state: bound only after late-bind scan."""
+    attached = bool(copy.qr_attached_at and copy.qr_token)
+    return {
+        "has_qr": attached,
+        "qr_attached": attached,
+        "qr_attached_at": (
+            copy.qr_attached_at.isoformat() if attached and copy.qr_attached_at else None
+        ),
+        # Payload only after bind (and only to owner via serializer gate).
+        "qr_payload": (
+            qr_payload_for_token(copy.qr_token) if attached and copy.qr_token else None
+        ),
+        "requires_qr_scan": attached,
+    }
+
+
+# --- Compat aliases (old call sites) -----------------------------------------
+
+def ensure_copy_qr(copy: BookCopy, acting_user: CustomUser) -> BookCopy:
+    """No early bind. Kept for API compat — returns copy unchanged if owner."""
+    if copy.owner_id != acting_user.id:
+        raise ExchangeForbidden("QR може згенерувати лише власник примірника.")
+    return copy
+
+
+def ensure_owner_qr_tokens(
+    owner: CustomUser, *, copy_ids: list[int] | None = None
+) -> list[BookCopy]:
+    """No early bind — list owner's copies without assigning tokens."""
+    qs = BookCopy.objects.filter(owner=owner)
+    if copy_ids:
+        qs = qs.filter(pk__in=copy_ids)
+    return list(qs.select_related("book").order_by("id"))
 
 
 def paginate_labels_full_a4(
     labels: list[QrLabel], *, pad_partial_page: bool = True
 ) -> list[list[QrLabel | None]]:
-    """Legacy helper — prefer build_full_a4_print_pages for print."""
     slots = SLOTS_PER_A4_PAGE
     if not labels:
         return []
@@ -358,17 +410,3 @@ def paginate_labels_full_a4(
                 chunk.append(None)
         pages.append(chunk)
     return pages
-
-
-def serialize_copy_qr(copy: BookCopy) -> dict:
-    return {
-        "has_qr": bool(copy.qr_token),
-        "qr_attached": bool(copy.qr_attached_at),
-        "qr_attached_at": (
-            copy.qr_attached_at.isoformat() if copy.qr_attached_at else None
-        ),
-        "qr_payload": (
-            qr_payload_for_token(copy.qr_token) if copy.qr_token else None
-        ),
-        "requires_qr_scan": bool(copy.qr_attached_at),
-    }

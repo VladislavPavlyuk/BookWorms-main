@@ -25,11 +25,9 @@
         <p class="small mt-2 mb-0">
             QR:
             {% if qr_meta.qr_attached %}
-                <span class="text-success fw-semibold">приклеєно</span>
-            {% elif qr_meta.has_qr %}
-                <span class="text-warning fw-semibold">згенеровано, очікує наклейки</span>
+                <span class="text-success fw-semibold">приклеєно / прив’язано</span>
             {% else %}
-                <span class="text-muted">ще немає</span>
+                <span class="text-muted">ще не прив’язано</span>
             {% endif %}
         </p>
         {% endif %}
@@ -39,22 +37,22 @@
 {% if user.is_authenticated and user.id == copy.owner_id %}
 <div class="card border-secondary mb-4">
     <div class="card-body">
-        <h3 class="h6 mb-2">QR-наклейка примірника (2×2&nbsp;см)</h3>
-        {% if not qr_meta.has_qr %}
+        <h3 class="h6 mb-2">QR-наклейка примірника</h3>
+        {% if not qr_meta.qr_attached %}
         <p class="small text-muted mb-3">
-            Унікального QR ще немає. Натисніть «Скан QR» — код буде створено, відскануйте
-            надруковану наклейку після наклеювання (або спочатку роздрукуйте A4).
+            Пізня прив’язка: спочатку роздрукуйте унікальні наклейки (Налаштування),
+            наклейте на книгу, потім «Скан QR» у вікні опцій примірника на полиці.
+            Код не прив’язується до книги під час друку.
         </p>
         <div class="d-flex flex-wrap gap-2">
             <a class="btn btn-sm btn-outline-dark"
-               href="{% url 'copy_qr_print' %}?copy_id={{ copy.id }}&amp;from=my_library">Друк наклейки A4</a>
-            <span class="small text-muted align-self-center">«Скан QR» — у вікні опцій примірника на полиці.</span>
+               href="{% url 'copy_qr_print' %}?from=settings">Друк наклейок A4</a>
+            <span class="small text-muted align-self-center">«Скан QR» — у вікні опцій на полиці.</span>
         </div>
         {% else %}
         <p class="small text-muted mb-3">
-            QR уже є
-            {% if qr_meta.qr_attached %}і приклеєно{% else %}(очікує наклейки){% endif %}.
-            Якщо наклейку втрачено або вона нечитабельна — «Оновити QR-код» (старий код перестане діяти).
+            QR приклеєно й прив’язано. Якщо наклейку втрачено — «Оновити QR-код»
+            (старий код скасовується; надрукуйте нову й відскануйте).
         </p>
         <div class="d-flex flex-wrap gap-2">
             <form method="post" action="{% url 'copy_qr_rotate' copy.id %}">
@@ -62,7 +60,7 @@
                 <button type="submit" class="btn btn-sm btn-warning">Оновити QR-код</button>
             </form>
             <a class="btn btn-sm btn-outline-dark"
-               href="{% url 'copy_qr_print' %}?copy_id={{ copy.id }}&amp;from=my_library">Друк наклейки A4</a>
+               href="{% url 'copy_qr_print' %}?from=settings">Друк наклейок A4</a>
         </div>
         {% endif %}
     </div>
