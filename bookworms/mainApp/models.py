@@ -350,6 +350,45 @@ class PreprintedQrToken(models.Model):
         return f"preprint#{self.pk} {state}"
 
 
+class UserClientProfile(models.Model):
+    """Latest client fingerprint per user (device / OS / geo / language)."""
+
+    user = models.OneToOneField(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="client_profile",
+        verbose_name="Користувач",
+    )
+    last_ip = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    country = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    country_code = models.CharField(max_length=8, blank=True, default="")
+    region = models.CharField(max_length=64, blank=True, default="")
+    city = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    device_type = models.CharField(
+        max_length=16, blank=True, default="unknown", db_index=True
+    )
+    device_brand = models.CharField(max_length=64, blank=True, default="")
+    os_family = models.CharField(max_length=32, blank=True, default="", db_index=True)
+    os_version = models.CharField(max_length=32, blank=True, default="")
+    browser_family = models.CharField(max_length=32, blank=True, default="")
+    language_code = models.CharField(
+        max_length=16, blank=True, default="", db_index=True
+    )
+    accept_language = models.CharField(max_length=255, blank=True, default="")
+    user_agent = models.CharField(max_length=512, blank=True, default="")
+    hit_count = models.PositiveIntegerField(default=0)
+    first_seen_at = models.DateTimeField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        verbose_name = "клієнтський профіль"
+        verbose_name_plural = "аналітика клієнтів"
+        ordering = ["-last_seen_at"]
+
+    def __str__(self):
+        return f"{self.user_id} {self.os_family}/{self.device_type} {self.country}"
+
+
 class Library(models.Model):
     """
     Спільна / особиста бібліотека. Кілька користувачів (сім'я, партнери, друзі)

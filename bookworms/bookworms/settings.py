@@ -145,6 +145,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'mainApp.middleware.PurgeUnactivatedMiddleware',
+    'mainApp.middleware.ClientAnalyticsMiddleware',
 ]
 
 ROOT_URLCONF = 'bookworms.urls'

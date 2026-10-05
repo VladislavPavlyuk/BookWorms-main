@@ -1,0 +1,13 @@
+{% if rows %}
+  {% for r in rows %}
+  <div class="an-bar">
+    <span class="lbl" title="{{ r.label }}">{{ r.label }}</span>
+    <span class="track">
+      <span class="fill" style="width:{% if total %}{% widthratio r.n total 100 %}{% else %}0{% endif %}%"></span>
+    </span>
+    <span class="n">{{ r.n }}</span>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="an-muted">Немає даних</p>
+{% endif %}

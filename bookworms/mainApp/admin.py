@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.template.response import TemplateResponse
+from django.urls import path
 from .models import (
     AvatarCollection,
     Book,
@@ -19,11 +21,41 @@ from .models import (
     PreprintedQrToken,
     PrivateMessage,
     Shelf,
+    UserClientProfile,
 )
 
 admin.site.site_header = "Реченець"
 admin.site.site_title = "Реченець"
 admin.site.index_title = "Адміністрування"
+
+
+def analytics_dashboard(request):
+    from .analytics import analytics_summary
+
+    context = {
+        **admin.site.each_context(request),
+        "title": "Analytics",
+        "summary": analytics_summary(),
+    }
+    return TemplateResponse(request, "admin/analytics.html", context)
+
+
+_original_get_urls = admin.site.get_urls
+
+
+def _get_urls():
+    return [
+        path(
+            "analytics/",
+            admin.site.admin_view(analytics_dashboard),
+            name="analytics_dashboard",
+        ),
+        *_original_get_urls(),
+    ]
+
+
+admin.site.get_urls = _get_urls
+
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
@@ -50,6 +82,65 @@ class CustomUserAdmin(UserAdmin):
 
 
 admin.site.register(CustomUser, CustomUserAdmin)
+
+
+@admin.register(UserClientProfile)
+class UserClientProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "device_type",
+        "os_family",
+        "os_version",
+        "browser_family",
+        "language_code",
+        "country",
+        "city",
+        "last_ip",
+        "hit_count",
+        "last_seen_at",
+    )
+    list_filter = (
+        "device_type",
+        "os_family",
+        "browser_family",
+        "language_code",
+        "country",
+        "last_seen_at",
+    )
+    search_fields = (
+        "user__username",
+        "user__email",
+        "last_ip",
+        "city",
+        "country",
+        "user_agent",
+    )
+    raw_id_fields = ("user",)
+    readonly_fields = (
+        "user",
+        "last_ip",
+        "country",
+        "country_code",
+        "region",
+        "city",
+        "device_type",
+        "device_brand",
+        "os_family",
+        "os_version",
+        "browser_family",
+        "language_code",
+        "accept_language",
+        "user_agent",
+        "hit_count",
+        "first_seen_at",
+        "last_seen_at",
+    )
+    ordering = ("-last_seen_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
     list_display = ("title", "author", "book", "created_ad")

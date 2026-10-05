@@ -1,0 +1,104 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Analytics | {{ site_title }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; Analytics
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+  .an-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1.25rem; margin:1rem 0 2rem; }
+  .an-card { background:var(--body-bg,#fff); border:1px solid var(--border,#ddd); border-radius:8px; padding:1rem 1.1rem; }
+  .an-card h2 { margin:0 0 .75rem; font-size:1rem; }
+  .an-stat { font-size:1.75rem; font-weight:700; margin:0; }
+  .an-bar { display:flex; align-items:center; gap:.5rem; margin:.35rem 0; font-size:.9rem; }
+  .an-bar .lbl { min-width:7rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .an-bar .track { flex:1; background:#eee; border-radius:4px; height:10px; overflow:hidden; }
+  .an-bar .fill { height:100%; background:#417690; border-radius:4px; }
+  .an-bar .n { min-width:2rem; text-align:right; color:#666; }
+  .an-table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  .an-table th, .an-table td { border-bottom:1px solid #e5e5e5; padding:.4rem .5rem; text-align:left; }
+  .an-table th { background:#f8f8f8; }
+  .an-muted { color:#888; font-size:.85rem; }
+</style>
+
+<h1>Analytics</h1>
+<p class="an-muted">
+  Унікальні користувачі за останнім відомим клієнтом (User-Agent, Accept-Language, IP → країна/місто).
+  Оновлення з веб-сесії та JWT (мобільний додаток), не частіше ніж раз на 5 хв на користувача.
+</p>
+
+<div class="an-grid">
+  <div class="an-card">
+    <h2>Профілів зібрано</h2>
+    <p class="an-stat">{{ summary.total_users }}</p>
+    <p class="an-muted"><a href="{% url 'admin:mainApp_userclientprofile_changelist' %}">Усі записи →</a></p>
+  </div>
+</div>
+
+<div class="an-grid">
+  <div class="an-card">
+    <h2>Devices</h2>
+    {% include "admin/analytics_bars.html" with rows=summary.devices total=summary.total_users %}
+  </div>
+  <div class="an-card">
+    <h2>Operating systems</h2>
+    {% include "admin/analytics_bars.html" with rows=summary.os total=summary.total_users %}
+  </div>
+  <div class="an-card">
+    <h2>Browsers / app</h2>
+    {% include "admin/analytics_bars.html" with rows=summary.browsers total=summary.total_users %}
+  </div>
+  <div class="an-card">
+    <h2>OS languages (Accept-Language)</h2>
+    {% include "admin/analytics_bars.html" with rows=summary.languages total=summary.total_users %}
+  </div>
+  <div class="an-card">
+    <h2>Countries (by IP)</h2>
+    {% include "admin/analytics_bars.html" with rows=summary.countries total=summary.total_users %}
+  </div>
+  <div class="an-card">
+    <h2>Cities (by IP)</h2>
+    {% include "admin/analytics_bars.html" with rows=summary.cities total=summary.total_users %}
+  </div>
+</div>
+
+<div class="an-card">
+  <h2>Останні активні</h2>
+  <table class="an-table">
+    <thead>
+      <tr>
+        <th>User</th>
+        <th>Device</th>
+        <th>OS</th>
+        <th>Geo</th>
+        <th>Lang</th>
+        <th>IP</th>
+        <th>Hits</th>
+        <th>Last seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in summary.recent %}
+      <tr>
+        <td>{{ r.user__username }}</td>
+        <td>{{ r.device_type }}</td>
+        <td>{{ r.os_family }}</td>
+        <td>{% if r.city %}{{ r.city }}, {% endif %}{{ r.country|default:"—" }}</td>
+        <td>{{ r.language_code|default:"—" }}</td>
+        <td>{{ r.last_ip|default:"—" }}</td>
+        <td>{{ r.hit_count }}</td>
+        <td>{{ r.last_seen_at }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8">Ще немає даних — потрібні залогінені запити після деплою.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

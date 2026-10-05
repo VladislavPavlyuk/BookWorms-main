@@ -1,0 +1,13 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+<div style="margin:0 0 1.25rem;padding:1rem 1.1rem;border:1px solid var(--hairline-color,#ddd);border-radius:8px;background:var(--darkened-bg,#f8f8f8)">
+  <strong style="font-size:1.05rem">Analytics</strong>
+  <p style="margin:.4rem 0 .75rem;color:#666;font-size:.9rem">
+    Devices, OS, geography (IP), default OS languages.
+  </p>
+  <a class="button" href="{% url 'admin:analytics_dashboard' %}" style="padding:.4rem .9rem">Open dashboard</a>
+  <a href="{% url 'admin:mainApp_userclientprofile_changelist' %}" style="margin-left:.75rem">Raw profiles →</a>
+</div>
+{{ block.super }}
+{% endblock %}
