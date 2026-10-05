@@ -869,6 +869,17 @@ export default function ShelfScreen() {
             )}
             <View style={[styles.actions, { marginTop: 16 }]}>
               <HistoryLink copyId={detailShelf.copy_id} style={styles.link} />
+              {!detailShelf.borrowed_from && detailShelf.copy_id ? (
+                <Pressable
+                  onPress={() => {
+                    const cid = detailShelf.copy_id!;
+                    setDetailShelf(null);
+                    router.push(`/qr-scan?attach_copy_id=${cid}`);
+                  }}
+                >
+                  <Text style={styles.link}>Скан QR</Text>
+                </Pressable>
+              ) : null}
               {detailShelf.borrowed_from ? (
                 <Pressable onPress={() => router.push(`/chat/${detailShelf.borrowed_from!.id}`)}>
                   <Text style={styles.link}>Чат з власником</Text>

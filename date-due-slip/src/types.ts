@@ -112,6 +112,12 @@ export type BookCopyDetail = {
   book: Book;
   owner: User;
   created_at: string;
+  has_qr?: boolean;
+  qr_attached?: boolean;
+  qr_attached_at?: string | null;
+  requires_qr_scan?: boolean;
+  /** Owner-only: BW1.<token> for display/print. */
+  qr_payload?: string | null;
 };
 
 export type CopyEvent = {
@@ -190,6 +196,7 @@ export type LoanHandoff = {
   id: number;
   copy_id: number;
   book_title: string;
+  requires_qr_scan?: boolean;
   owner: User;
   from_user: User;
   to_user: User;

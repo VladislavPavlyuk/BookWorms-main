@@ -1,0 +1,24 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Налаштування{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Налаштування</h1>
+<p class="text-muted small mb-4">
+    Сервіси облікового запису Date Due Slip.
+</p>
+
+<div class="list-group shadow-sm" style="max-width: 36rem;">
+    <a href="{% url 'copy_qr_print' %}?from=settings"
+       class="list-group-item list-group-item-action d-flex justify-content-between align-items-start gap-3">
+        <div>
+            <div class="fw-semibold">Друкувати QR коди</div>
+            <div class="small text-muted mt-1">
+                Повний аркуш A4: 6×6 = <strong>36 унікальних</strong> QR-наклейок
+                (ваші примірники + запасні коди з пулу). Скан QR на примірнику прив’язує наклейку.
+            </div>
+        </div>
+        <span class="badge text-bg-dark align-self-center">A4</span>
+    </a>
+</div>
+{% endblock %}

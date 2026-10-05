@@ -484,6 +484,64 @@ export const CopyApi = {
     api<{ ok: boolean; queue: QueueEntry[] }>(`/api/copies/${copyId}/queue/leave/`, {
       method: "POST",
     }),
+  ensureQr: (copyId: number) =>
+    api<{ copy: BookCopyDetail; qr: Record<string, unknown> }>(
+      `/api/copies/${copyId}/qr/ensure/`,
+      { method: "POST", body: {} }
+    ),
+  attachQr: (copyId: number, qr_payload: string) =>
+    api<{ ok: boolean; copy: BookCopyDetail }>(`/api/copies/${copyId}/qr/attach/`, {
+      method: "POST",
+      body: { qr_payload },
+    }),
+  rotateQr: (copyId: number) =>
+    api<{ ok: boolean; copy: BookCopyDetail }>(`/api/copies/${copyId}/qr/rotate/`, {
+      method: "POST",
+      body: {},
+    }),
+  resolveQr: (qr_payload: string, opts?: { handoff_id?: number; action?: "give" | "receive" }) =>
+    api<{
+      ok?: boolean;
+      action?: string;
+      handoff_id?: number;
+      copy?: BookCopyDetail;
+      active_handoff?: LoanHandoff | null;
+    }>("/api/copies/qr/resolve/", {
+      method: "POST",
+      body: {
+        qr_payload,
+        ...(opts?.handoff_id ? { handoff_id: opts.handoff_id } : {}),
+        ...(opts?.action ? { action: opts.action } : {}),
+      },
+    }),
+  printLabels: (opts?: { copyId?: number; ids?: number[] }) => {
+    const q: string[] = [];
+    if (opts?.copyId) q.push(`copy_id=${opts.copyId}`);
+    if (opts?.ids?.length) q.push(`ids=${opts.ids.join(",")}`);
+    const qs = q.length ? `?${q.join("&")}` : "";
+    return api<{
+      qr_mm: number;
+      label_w_mm?: number;
+      label_h_mm?: number;
+      cols: number;
+      rows: number;
+      slots_per_page: number;
+      pages: ({
+        copy_id: number;
+        title: string;
+        payload: string;
+        data_uri: string;
+        attached: boolean;
+      } | null)[][];
+      labels: {
+        copy_id: number;
+        title: string;
+        payload: string;
+        data_uri: string;
+        attached: boolean;
+      }[];
+    }>(`/api/copies/qr/print-labels/${qs}`);
+  },
 };
 
 export const QueueApi = {
@@ -602,8 +660,16 @@ export const ExchangeApi = {
 };
 
 export const HandoffApi = {
-  confirmGive: (id: number) => api(`/api/handoffs/${id}/give/`, { method: "POST" }),
-  confirmReceive: (id: number) => api(`/api/handoffs/${id}/receive/`, { method: "POST" }),
+  confirmGive: (id: number, qr_payload?: string | null) =>
+    api(`/api/handoffs/${id}/give/`, {
+      method: "POST",
+      body: qr_payload ? { qr_payload } : {},
+    }),
+  confirmReceive: (id: number, qr_payload?: string | null) =>
+    api(`/api/handoffs/${id}/receive/`, {
+      method: "POST",
+      body: qr_payload ? { qr_payload } : {},
+    }),
   cancel: (id: number) => api(`/api/handoffs/${id}/cancel/`, { method: "POST" }),
 };
 

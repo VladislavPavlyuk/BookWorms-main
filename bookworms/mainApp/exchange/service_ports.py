@@ -71,10 +71,22 @@ class IHandoffService(ABC):
     ) -> LoanHandoff: ...
 
     @abstractmethod
-    def confirm_give(self, handoff_id: int, acting_user: CustomUser) -> None: ...
+    def confirm_give(
+        self,
+        handoff_id: int,
+        acting_user: CustomUser,
+        *,
+        qr_payload: str | None = None,
+    ) -> None: ...
 
     @abstractmethod
-    def confirm_receive(self, handoff_id: int, acting_user: CustomUser) -> None: ...
+    def confirm_receive(
+        self,
+        handoff_id: int,
+        acting_user: CustomUser,
+        *,
+        qr_payload: str | None = None,
+    ) -> None: ...
 
     @abstractmethod
     def cancel(self, handoff_id: int, acting_user: CustomUser) -> None: ...

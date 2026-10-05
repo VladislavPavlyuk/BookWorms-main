@@ -105,15 +105,29 @@ class HandoffService(IHandoffService):
 
         return m.approve_loan_handoff(req, owner, owner_shelf, requester)
 
-    def confirm_give(self, handoff_id: int, acting_user: CustomUser) -> None:
+    def confirm_give(
+        self,
+        handoff_id: int,
+        acting_user: CustomUser,
+        *,
+        qr_payload: str | None = None,
+    ) -> None:
         from . import handoff as m
 
-        return m.confirm_handoff_give(handoff_id, acting_user)
+        return m.confirm_handoff_give(handoff_id, acting_user, qr_payload=qr_payload)
 
-    def confirm_receive(self, handoff_id: int, acting_user: CustomUser) -> None:
+    def confirm_receive(
+        self,
+        handoff_id: int,
+        acting_user: CustomUser,
+        *,
+        qr_payload: str | None = None,
+    ) -> None:
         from . import handoff as m
 
-        return m.confirm_handoff_receive(handoff_id, acting_user)
+        return m.confirm_handoff_receive(
+            handoff_id, acting_user, qr_payload=qr_payload
+        )
 
     def cancel(self, handoff_id: int, acting_user: CustomUser) -> None:
         from . import handoff as m

@@ -311,8 +311,12 @@ def _assert_can_receive(handoff: LoanHandoff, acting_user: CustomUser, cid: str)
 
 @domain_guard("handoff.give")
 @transaction.atomic
-def confirm_handoff_give(handoff_id: int, acting_user: CustomUser) -> None:
+def confirm_handoff_give(
+    handoff_id: int, acting_user: CustomUser, *, qr_payload: str | None = None
+) -> None:
     """Поточний позичальник підтверджує, що фізично віддав книгу наступному."""
+    from ..copy_qr import require_qr_for_handoff
+
     cid = ops_log.new_cid()
     ops_log.info(
         "handoff.give.start",
@@ -328,6 +332,7 @@ def confirm_handoff_give(handoff_id: int, acting_user: CustomUser) -> None:
 
     ops_log.info("handoff.give.locked", cid=cid, **ops_log.handoff_snapshot(handoff))
     _assert_can_give(handoff, acting_user, cid)
+    require_qr_for_handoff(handoff, qr_payload)
 
     handoff.status = LoanHandoff.Status.AWAITING_RECEIVE
     handoff.giver_confirmed_at = timezone.now()
@@ -348,8 +353,12 @@ def confirm_handoff_give(handoff_id: int, acting_user: CustomUser) -> None:
 
 @domain_guard("handoff.receive")
 @transaction.atomic
-def confirm_handoff_receive(handoff_id: int, acting_user: CustomUser) -> None:
+def confirm_handoff_receive(
+    handoff_id: int, acting_user: CustomUser, *, qr_payload: str | None = None
+) -> None:
     """Наступний позичальник підтверджує отримання — полиця переїздить."""
+    from ..copy_qr import require_qr_for_handoff
+
     cid = ops_log.new_cid()
     ops_log.info(
         "handoff.receive.start",
@@ -364,6 +373,7 @@ def confirm_handoff_receive(handoff_id: int, acting_user: CustomUser) -> None:
         raise ExchangeNotFound("Передачу не знайдено.") from exc
 
     _assert_can_receive(handoff, acting_user, cid)
+    require_qr_for_handoff(handoff, qr_payload)
     handoff.receiver_confirmed_at = timezone.now()
     handoff.save(update_fields=["receiver_confirmed_at"])
     try:

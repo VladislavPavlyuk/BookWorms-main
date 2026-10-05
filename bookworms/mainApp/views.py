@@ -1541,6 +1541,8 @@ def book_history(request, book_id):
 @login_required
 def copy_history(request, copy_id):
     """Історія подій одного фізичного примірника (BookCopy)."""
+    from .copy_qr import serialize_copy_qr
+
     copy = get_object_or_404(
         BookCopy.objects.select_related("book", "owner"),
         pk=copy_id,
@@ -1572,6 +1574,195 @@ def copy_history(request, copy_id):
             "copy": copy,
             "shelf_entries": shelf_entries,
             "shelf_events": shelf_events,
+            "qr_meta": serialize_copy_qr(copy),
+        },
+    )
+
+
+@login_required
+@require_POST
+def copy_qr_ensure(request, copy_id):
+    """Згенерувати унікальний QR-токен для примірника (власник)."""
+    from .copy_qr import ensure_copy_qr
+
+    copy = get_object_or_404(BookCopy, pk=copy_id)
+    try:
+        ensure_copy_qr(copy, request.user)
+        messages.success(request, "QR-код примірника готовий до друку.")
+    except ExchangeError as exc:
+        messages.error(request, exc.message)
+    next_url = request.POST.get("next")
+    if next_url:
+        return redirect(next_url)
+    return redirect("copy_history", copy_id=copy_id)
+
+
+@login_required
+@require_POST
+def copy_qr_rotate(request, copy_id):
+    """Новий QR замість втраченої / нечитабельної наклейки."""
+    from .copy_qr import rotate_copy_qr
+
+    try:
+        rotate_copy_qr(copy_id, request.user)
+        messages.success(
+            request,
+            "Новий QR згенеровано. Роздрукуйте наклейку й прив’яжіть сканом.",
+        )
+    except ExchangeError as exc:
+        messages.error(request, exc.message)
+        return redirect("copy_history", copy_id=copy_id)
+    from django.urls import reverse
+
+    return redirect(f"{reverse('copy_qr_print')}?copy_id={copy_id}")
+
+
+@login_required
+@require_POST
+def copy_qr_attach(request, copy_id):
+    """Прив’язати наклеєний QR сканом (власник)."""
+    from .copy_qr import attach_copy_qr
+
+    payload = request.POST.get("qr_payload") or request.POST.get("qr") or ""
+    try:
+        attach_copy_qr(copy_id, request.user, payload)
+        messages.success(request, "QR-наклейку прив’язано до цього примірника.")
+    except ExchangeError as exc:
+        messages.error(request, exc.message)
+    next_url = request.POST.get("next")
+    if next_url:
+        return redirect(next_url)
+    return redirect("copy_history", copy_id=copy_id)
+
+
+@login_required
+def copy_qr_print(request):
+    """A4 sheet: 6×6 = 36 unique QR labels (title + QR), dotted cut grid."""
+    from .copy_qr import (
+        A4_COLS,
+        A4_ROWS,
+        LABEL_H_MM,
+        LABEL_W_MM,
+        QR_BRAND_TITLE,
+        QR_PRINT_MM,
+        SLOTS_PER_A4_PAGE,
+        build_full_a4_print_pages,
+    )
+
+    raw_ids = request.GET.get("ids") or request.POST.get("ids") or ""
+    copy_ids = []
+    for part in raw_ids.replace(" ", "").split(","):
+        if part.isdigit():
+            copy_ids.append(int(part))
+    single = request.GET.get("copy_id") or request.POST.get("copy_id")
+    if single and str(single).isdigit():
+        copy_ids = [int(single)]
+    back = (request.GET.get("from") or "").strip()
+    if back not in ("settings", "my_library"):
+        back = "settings" if not copy_ids else "my_library"
+    pages = build_full_a4_print_pages(
+        request.user, copy_ids=copy_ids or None
+    )
+    labels = [lab for page in pages for lab in page]
+    # Locale can render floats as "33,33" → invalid CSS → grid collapses to 1 column.
+    return render(
+        request,
+        "mainApp/copy_qr_print.html",
+        {
+            "pages": pages,
+            "labels": labels,
+            "cols": A4_COLS,
+            "rows": A4_ROWS,
+            "qr_mm": f"{QR_PRINT_MM:g}",
+            "label_w_mm": f"{LABEL_W_MM:.4f}",
+            "label_h_mm": f"{LABEL_H_MM:.4f}",
+            "sheet_w_mm": f"{LABEL_W_MM * A4_COLS:.4f}",
+            "sheet_h_mm": f"{LABEL_H_MM * A4_ROWS:.4f}",
+            "slots_per_page": SLOTS_PER_A4_PAGE,
+            "brand_title": QR_BRAND_TITLE,
+            "back_url_name": back,
+        },
+    )
+
+
+@login_required
+def settings_view(request):
+    """Налаштування акаунта / сервіси (друк QR тощо)."""
+    return render(request, "mainApp/settings.html", {})
+
+
+@login_required
+def copy_qr_scan(request):
+    """Сканер QR: ідентифікація примірника або підтвердження передачі."""
+    from .copy_qr import resolve_copy_by_qr
+    from .exchange.handoff import handoffs_involving
+
+    handoff_id = request.GET.get("handoff_id") or request.POST.get("handoff_id")
+    action = (request.GET.get("action") or request.POST.get("action") or "").strip()
+    attach_copy_id = request.GET.get("attach_copy_id") or request.POST.get(
+        "attach_copy_id"
+    )
+    resolved = None
+    if request.method == "POST":
+        payload = request.POST.get("qr_payload") or request.POST.get("qr") or ""
+        if attach_copy_id and str(attach_copy_id).isdigit():
+            from .copy_qr import attach_copy_qr
+
+            try:
+                copy = attach_copy_qr(int(attach_copy_id), request.user, payload)
+                messages.success(
+                    request, f"QR прив’язано до примірника #{copy.id}."
+                )
+                return redirect("copy_history", copy_id=copy.id)
+            except ExchangeError as exc:
+                messages.error(request, exc.message)
+        elif handoff_id and str(handoff_id).isdigit() and action in (
+            "give",
+            "receive",
+        ):
+            try:
+                if action == "give":
+                    confirm_handoff_give(
+                        int(handoff_id), request.user, qr_payload=payload
+                    )
+                    messages.success(
+                        request,
+                        "Віддачу підтверджено сканом QR.",
+                    )
+                else:
+                    confirm_handoff_receive(
+                        int(handoff_id), request.user, qr_payload=payload
+                    )
+                    messages.success(
+                        request,
+                        "Отримання підтверджено сканом QR.",
+                    )
+                partner_id = request.POST.get("partner_id")
+                if partner_id:
+                    return redirect("message_thread", partner_id=int(partner_id))
+                return redirect("exchange_requests")
+            except ExchangeError as exc:
+                messages.error(request, exc.message)
+        else:
+            try:
+                copy = resolve_copy_by_qr(payload)
+                return redirect("copy_history", copy_id=copy.id)
+            except ExchangeError as exc:
+                messages.error(request, exc.message)
+
+    active_handoffs = handoffs_involving(request.user.id)
+    return render(
+        request,
+        "mainApp/copy_qr_scan.html",
+        {
+            "handoff_id": handoff_id or "",
+            "action": action,
+            "attach_copy_id": attach_copy_id or "",
+            "partner_id": request.GET.get("partner_id")
+            or request.POST.get("partner_id")
+            or "",
+            "active_handoffs": active_handoffs,
+            "resolved": resolved,
         },
     )
 
@@ -2037,13 +2228,15 @@ def message_thread(request, partner_id: int):
 @login_required
 @require_POST
 def handoff_confirm_give_view(request, handoff_id):
-    web_exchange(
-        request,
-        confirm_handoff_give,
-        handoff_id,
-        request.user,
-        success="Віддачу підтверджено — очікуємо підтвердження отримання.",
-    )
+    qr = request.POST.get("qr_payload") or request.POST.get("qr")
+    try:
+        confirm_handoff_give(handoff_id, request.user, qr_payload=qr)
+        messages.success(
+            request,
+            "Віддачу підтверджено — очікуємо підтвердження отримання.",
+        )
+    except ExchangeError as exc:
+        messages.error(request, exc.message)
     partner_id = request.POST.get("partner_id")
     if partner_id:
         return redirect("message_thread", partner_id=int(partner_id))
@@ -2053,16 +2246,16 @@ def handoff_confirm_give_view(request, handoff_id):
 @login_required
 @require_POST
 def handoff_confirm_receive_view(request, handoff_id):
-    web_exchange(
-        request,
-        confirm_handoff_receive,
-        handoff_id,
-        request.user,
-        success=(
+    qr = request.POST.get("qr_payload") or request.POST.get("qr")
+    try:
+        confirm_handoff_receive(handoff_id, request.user, qr_payload=qr)
+        messages.success(
+            request,
             "Отримання підтверджено — книга на вашій полиці; "
-            "попередній позичальник вийшов з чату."
-        ),
-    )
+            "попередній позичальник вийшов з чату.",
+        )
+    except ExchangeError as exc:
+        messages.error(request, exc.message)
     partner_id = request.POST.get("partner_id")
     if partner_id:
         try:

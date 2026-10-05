@@ -423,6 +423,11 @@
                 </li>
 
                 <li class="nav-item">
+                    <a class="nav-link{% if un == 'settings' %} active{% endif %}"
+                       href="{% url 'settings' %}">Налаштування</a>
+                </li>
+
+                <li class="nav-item">
                     <a class="nav-link{% if un == 'contact_developers' %} active{% endif %}"
                        href="{% url 'contact_developers' %}">Контакт</a>
                 </li>

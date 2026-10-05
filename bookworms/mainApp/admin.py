@@ -16,6 +16,7 @@ from .models import (
     LibraryMembership,
     LoanHandoff,
     Post,
+    PreprintedQrToken,
     PrivateMessage,
     Shelf,
 )
@@ -89,6 +90,8 @@ class BookCopyAdmin(admin.ModelAdmin):
         "is_free_of_deposit",
         "sale_price",
         "rent_price_per_day",
+        "qr_token",
+        "qr_attached_at",
         "created_at",
     )
     list_filter = (
@@ -103,6 +106,14 @@ class BookCopyAdmin(admin.ModelAdmin):
     )
     search_fields = ("book__title", "book__isbn", "owner__username")
     raw_id_fields = ("book", "owner", "library", "added_by")
+
+
+@admin.register(PreprintedQrToken)
+class PreprintedQrTokenAdmin(admin.ModelAdmin):
+    list_display = ("id", "owner", "token", "copy", "created_at", "claimed_at")
+    list_filter = ("claimed_at", "created_at")
+    search_fields = ("token", "owner__username")
+    raw_id_fields = ("owner", "copy")
 
 
 @admin.register(CopyEvent)

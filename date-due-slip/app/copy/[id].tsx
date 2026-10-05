@@ -19,7 +19,6 @@ export default function CopyHistoryScreen() {
   const [myPos, setMyPos] = useState<number | null>(null);
   const [lent, setLent] = useState(false);
   const [busy, setBusy] = useState(false);
-
   const load = useCallback(async () => {
     const d = await CopyApi.history(Number(id));
     setCopy(d.copy);
@@ -68,6 +67,38 @@ export default function CopyHistoryScreen() {
     }
   };
 
+  const rotateQr = () => {
+    Alert.alert(
+      "Оновити QR-код?",
+      "Стара наклейка перестане діяти. Роздрукуйте нову й прив’яжіть сканом.",
+      [
+        { text: "Скасувати", style: "cancel" },
+        {
+          text: "Оновити",
+          style: "destructive",
+          onPress: async () => {
+            setBusy(true);
+            try {
+              await CopyApi.rotateQr(copy.id);
+              await load();
+              Alert.alert("QR", "Новий код готовий — роздрукуйте й «Скан QR» у вікні опцій на полиці.", [
+                {
+                  text: "Друк",
+                  onPress: () => router.push(`/qr-print?copy_id=${copy.id}`),
+                },
+                { text: "OK" },
+              ]);
+            } catch (e) {
+              Alert.alert("QR", e instanceof ApiError ? e.message : String(e));
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ paddingBottom: 32 }}>
       <BookCover uri={book.cover_url} size="full" bleed={0} />
@@ -83,6 +114,38 @@ export default function CopyHistoryScreen() {
           <UserNameLink user={copy.owner} style={styles.link} />
         </View>
         {lent ? <Text style={styles.lent}>Зараз у позиці</Text> : null}
+        <Text style={styles.meta}>
+          QR:{" "}
+          {copy.qr_attached
+            ? "приклеєно"
+            : copy.has_qr
+              ? "згенеровано, очікує наклейки"
+              : "ще немає"}
+        </Text>
+
+        {isOwner ? (
+          <>
+            <Text style={styles.h}>QR-наклейка (2×2 см)</Text>
+            <Text style={styles.meta}>
+              «Скан QR» — у вікні опцій примірника на полиці (обкладинка → деталі).
+              {!copy.has_qr ? " Друк створить код для наклейки." : ""}
+              {copy.has_qr && !copy.qr_attached ? " Після друку прив’яжіть сканом." : ""}
+            </Text>
+            <View style={styles.qActions}>
+              {copy.has_qr ? (
+                <Pressable style={styles.btn} onPress={rotateQr} disabled={busy}>
+                  <Text style={styles.btnText}>Оновити QR-код</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                style={styles.btnGhost}
+                onPress={() => router.push(`/qr-print?copy_id=${copy.id}`)}
+              >
+                <Text style={styles.btnGhostText}>Друк наклейки A4</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
 
         <Text style={styles.h}>Черга інтересу</Text>
         <Text style={styles.meta}>

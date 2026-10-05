@@ -51,18 +51,30 @@
             </p>
             <div class="d-flex flex-wrap gap-2">
                 {% if h.from_user_id == user.id and h.status == "awaiting_give" %}
+                <a class="btn btn-sm btn-warning"
+                   href="{% url 'copy_qr_scan' %}?handoff_id={{ h.id }}&action=give&partner_id={{ partner.id }}">
+                    Скан QR → віддав
+                </a>
+                {% if not h.copy.qr_attached_at %}
                 <form method="post" action="{% url 'handoff_confirm_give' h.id %}" class="m-0">
                     {% csrf_token %}
                     <input type="hidden" name="partner_id" value="{{ partner.id }}">
-                    <button type="submit" class="btn btn-sm btn-warning">Я віддав книгу</button>
+                    <button type="submit" class="btn btn-sm btn-outline-warning">Без QR</button>
                 </form>
                 {% endif %}
+                {% endif %}
                 {% if h.to_user_id == user.id and h.status == "awaiting_receive" %}
+                <a class="btn btn-sm btn-success"
+                   href="{% url 'copy_qr_scan' %}?handoff_id={{ h.id }}&action=receive&partner_id={{ partner.id }}">
+                    Скан QR → отримав
+                </a>
+                {% if not h.copy.qr_attached_at %}
                 <form method="post" action="{% url 'handoff_confirm_receive' h.id %}" class="m-0">
                     {% csrf_token %}
                     <input type="hidden" name="partner_id" value="{{ partner.id }}">
-                    <button type="submit" class="btn btn-sm btn-success">Я отримав книгу</button>
+                    <button type="submit" class="btn btn-sm btn-outline-success">Без QR</button>
                 </form>
+                {% endif %}
                 {% endif %}
                 {% if h.owner_id == user.id %}
                 <form method="post" action="{% url 'handoff_cancel' h.id %}" class="m-0">

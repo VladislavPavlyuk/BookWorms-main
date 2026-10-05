@@ -446,6 +446,11 @@ class BookCopySerializer(serializers.ModelSerializer):
     requires_deposit = serializers.BooleanField(read_only=True)
     is_publicly_listed = serializers.BooleanField(read_only=True)
     listing_status_display = serializers.SerializerMethodField()
+    has_qr = serializers.SerializerMethodField()
+    qr_attached = serializers.SerializerMethodField()
+    qr_attached_at = serializers.DateTimeField(read_only=True)
+    requires_qr_scan = serializers.SerializerMethodField()
+    qr_payload = serializers.SerializerMethodField()
 
     class Meta:
         model = BookCopy
@@ -467,8 +472,33 @@ class BookCopySerializer(serializers.ModelSerializer):
             "requires_deposit",
             "is_publicly_listed",
             "listing_status_display",
+            "has_qr",
+            "qr_attached",
+            "qr_attached_at",
+            "requires_qr_scan",
+            "qr_payload",
             "created_at",
         )
+
+    def get_has_qr(self, obj):
+        return bool(obj.qr_token)
+
+    def get_qr_attached(self, obj):
+        return bool(obj.qr_attached_at)
+
+    def get_requires_qr_scan(self, obj):
+        return bool(obj.qr_attached_at)
+
+    def get_qr_payload(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if not obj.qr_token or not user or not user.is_authenticated:
+            return None
+        if user.id != obj.owner_id:
+            return None
+        from mainApp.copy_qr import qr_payload_for_token
+
+        return qr_payload_for_token(obj.qr_token)
 
     def get_listing_labels(self, obj):
         return obj.listing_labels()
@@ -827,6 +857,7 @@ class LoanHandoffSerializer(serializers.ModelSerializer):
     to_user = UserPublicSerializer(read_only=True)
     book_title = serializers.CharField(source="copy.book.title", read_only=True)
     copy_id = serializers.IntegerField(read_only=True)
+    requires_qr_scan = serializers.SerializerMethodField()
     my_role = serializers.SerializerMethodField()
     can_confirm_give = serializers.SerializerMethodField()
     can_confirm_receive = serializers.SerializerMethodField()
@@ -839,6 +870,7 @@ class LoanHandoffSerializer(serializers.ModelSerializer):
             "id",
             "copy_id",
             "book_title",
+            "requires_qr_scan",
             "owner",
             "from_user",
             "to_user",
@@ -853,6 +885,9 @@ class LoanHandoffSerializer(serializers.ModelSerializer):
             "can_cancel",
             "participants",
         )
+
+    def get_requires_qr_scan(self, obj):
+        return bool(getattr(obj.copy, "qr_attached_at", None))
 
     def _req_user(self):
         req = self.context.get("request")

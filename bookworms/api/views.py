@@ -1371,14 +1371,170 @@ def message_thread(request, partner_id):
 
 @api_view(["POST"])
 def handoff_confirm_give(request, handoff_id):
-    confirm_handoff_give(handoff_id, request.user)
+    qr = None
+    if hasattr(request, "data"):
+        qr = request.data.get("qr_payload") or request.data.get("qr")
+    try:
+        confirm_handoff_give(handoff_id, request.user, qr_payload=qr)
+    except ExchangeError as exc:
+        return _error(exc.message, exc.http_status)
     return Response({"ok": True})
 
 
 @api_view(["POST"])
 def handoff_confirm_receive(request, handoff_id):
-    confirm_handoff_receive(handoff_id, request.user)
+    qr = None
+    if hasattr(request, "data"):
+        qr = request.data.get("qr_payload") or request.data.get("qr")
+    try:
+        confirm_handoff_receive(handoff_id, request.user, qr_payload=qr)
+    except ExchangeError as exc:
+        return _error(exc.message, exc.http_status)
     return Response({"ok": True})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def copy_qr_ensure_api(request, copy_id):
+    from mainApp.copy_qr import ensure_copy_qr, serialize_copy_qr
+
+    copy = BookCopy.objects.filter(pk=copy_id).select_related("book", "owner").first()
+    if not copy:
+        return _error("Примірник не знайдено.", 404)
+    try:
+        ensure_copy_qr(copy, request.user)
+    except ExchangeError as exc:
+        return _error(exc.message, exc.http_status)
+    copy.refresh_from_db()
+    return Response(
+        {
+            "copy": BookCopySerializer(copy, context={"request": request}).data,
+            "qr": serialize_copy_qr(copy),
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def copy_qr_attach_api(request, copy_id):
+    from mainApp.copy_qr import attach_copy_qr, serialize_copy_qr
+
+    payload = request.data.get("qr_payload") or request.data.get("qr") or ""
+    try:
+        copy = attach_copy_qr(copy_id, request.user, payload)
+    except ExchangeError as exc:
+        return _error(exc.message, exc.http_status)
+    return Response(
+        {
+            "ok": True,
+            "copy": BookCopySerializer(copy, context={"request": request}).data,
+            "qr": serialize_copy_qr(copy),
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def copy_qr_rotate_api(request, copy_id):
+    from mainApp.copy_qr import rotate_copy_qr, serialize_copy_qr
+
+    try:
+        copy = rotate_copy_qr(copy_id, request.user)
+    except ExchangeError as exc:
+        return _error(exc.message, exc.http_status)
+    return Response(
+        {
+            "ok": True,
+            "copy": BookCopySerializer(copy, context={"request": request}).data,
+            "qr": serialize_copy_qr(copy),
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def copy_qr_resolve_api(request):
+    """Identify a book instance by scanned QR; optional handoff confirm."""
+    from mainApp.copy_qr import resolve_copy_by_qr, serialize_copy_qr
+    from mainApp.exchange.handoff import active_handoff_for_copy
+
+    payload = request.data.get("qr_payload") or request.data.get("qr") or ""
+    action = (request.data.get("action") or "").strip()
+    handoff_id = request.data.get("handoff_id")
+    try:
+        if handoff_id and action in ("give", "receive"):
+            if action == "give":
+                confirm_handoff_give(
+                    int(handoff_id), request.user, qr_payload=payload
+                )
+            else:
+                confirm_handoff_receive(
+                    int(handoff_id), request.user, qr_payload=payload
+                )
+            return Response({"ok": True, "action": action, "handoff_id": int(handoff_id)})
+        copy = resolve_copy_by_qr(payload)
+    except ExchangeError as exc:
+        return _error(exc.message, exc.http_status)
+    except (TypeError, ValueError):
+        return _error("Некоректний handoff_id.", 400)
+    handoff = active_handoff_for_copy(copy.id)
+    return Response(
+        {
+            "copy": BookCopySerializer(copy, context={"request": request}).data,
+            "qr": serialize_copy_qr(copy),
+            "active_handoff": (
+                LoanHandoffSerializer(handoff, context={"request": request}).data
+                if handoff
+                else None
+            ),
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def copy_qr_print_labels_api(request):
+    """JSON labels (data-URI PNGs) for A4 print / client rendering."""
+    from mainApp.copy_qr import (
+        A4_COLS,
+        A4_ROWS,
+        LABEL_H_MM,
+        LABEL_W_MM,
+        QR_PRINT_MM,
+        SLOTS_PER_A4_PAGE,
+        build_full_a4_print_pages,
+    )
+
+    raw = request.query_params.get("ids") or ""
+    copy_ids = [int(x) for x in raw.split(",") if x.strip().isdigit()]
+    single = request.query_params.get("copy_id")
+    if single and str(single).isdigit():
+        copy_ids = [int(single)]
+    pages = build_full_a4_print_pages(
+        request.user, copy_ids=copy_ids or None
+    )
+
+    def lab_json(lab):
+        return {
+            "copy_id": lab.copy_id,
+            "title": lab.title,
+            "payload": lab.payload,
+            "data_uri": lab.data_uri,
+            "attached": lab.attached,
+        }
+
+    return Response(
+        {
+            "qr_mm": float(f"{QR_PRINT_MM:g}"),
+            "label_w_mm": float(f"{LABEL_W_MM:.4f}"),
+            "label_h_mm": float(f"{LABEL_H_MM:.4f}"),
+            "cols": A4_COLS,
+            "rows": A4_ROWS,
+            "slots_per_page": SLOTS_PER_A4_PAGE,
+            "pages": [[lab_json(lab) for lab in page] for page in pages],
+            "labels": [lab_json(lab) for page in pages for lab in page],
+        }
+    )
 
 
 @api_view(["POST"])

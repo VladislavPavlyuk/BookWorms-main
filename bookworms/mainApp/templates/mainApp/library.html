@@ -6,6 +6,9 @@
 {% block content %}
 {# Сторінка view my_library: shelves - записи Shelf з вкладеними book та borrowed_from. #}
 
+<p class="mb-2 d-flex flex-wrap gap-2">
+    <a href="{% url 'settings' %}" class="btn btn-sm btn-outline-dark">Налаштування</a>
+</p>
 <p class="text-muted small mb-3">
     На полиці — лише те, що <strong>фізично у вас</strong>: власні вільні примірники та позичені книги
     (з власником і терміном). Видані вами в позику з’являються на полиці позичальника, доки не повернуться.
@@ -386,6 +389,10 @@
                     {% endif %}
                     <p class="mb-3 d-flex flex-wrap gap-2">
                         <a href="{% url 'copy_history' shelf.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія</a>
+                        {% if not shelf.borrowed_from_id and shelf.copy_id %}
+                        <a href="{% url 'copy_qr_scan' %}?attach_copy_id={{ shelf.copy_id }}"
+                           class="btn btn-sm btn-primary">Скан QR</a>
+                        {% endif %}
                         <a href="{% url 'create_post' %}?mode=feedback&amp;book_id={{ book.id }}" class="btn btn-sm btn-outline-success">Написати пост</a>
                         {% if shelf.can_edit_manual %}
                         <button type="button"

@@ -31,6 +31,7 @@ const LINKS: Link[] = [
   { label: "Мої черги", href: "/queues" },
   { label: "Сповіщення", href: "/notifications", badge: true },
   { label: "Новий пост", href: "/post/new" },
+  { label: "Налаштування", href: "/settings" },
   { label: "Контакт", href: "/contact" },
 ];
 

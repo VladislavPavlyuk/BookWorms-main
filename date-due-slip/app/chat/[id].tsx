@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ApiError, ExchangeApi, HandoffApi, LibraryApi, MsgApi, ShelfApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { formatMsgTime, otherPartners } from "../../src/chat";
+import { CopyQrScanModal } from "../../src/CopyQrScanModal";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { colors } from "../../src/theme";
 import type { Exchange, LoanHandoff, Message, Shelf, User } from "../../src/types";
@@ -95,6 +96,10 @@ export default function Chat() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [dueDraft, setDueDraft] = useState<Record<number, string>>({});
+  const [handoffScan, setHandoffScan] = useState<{
+    id: number;
+    action: "give" | "receive";
+  } | null>(null);
 
   const load = async () => {
     const [thread, plist] = await Promise.all([
@@ -320,20 +325,38 @@ export default function Chat() {
               <View style={styles.actionBtns}>
                 {h.can_confirm_give ? (
                   <Pressable
+                    onPress={() => setHandoffScan({ id: h.id, action: "give" })}
+                  >
+                    <Text style={styles.accept}>
+                      {h.requires_qr_scan ? "Скан QR → віддав" : "Я віддав (скан)"}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {h.can_confirm_receive ? (
+                  <Pressable
+                    onPress={() => setHandoffScan({ id: h.id, action: "receive" })}
+                  >
+                    <Text style={styles.accept}>
+                      {h.requires_qr_scan ? "Скан QR → отримав" : "Я отримав (скан)"}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {h.can_confirm_give && !h.requires_qr_scan ? (
+                  <Pressable
                     onPress={() =>
                       runAction(() => HandoffApi.confirmGive(h.id), "Віддача")
                     }
                   >
-                    <Text style={styles.accept}>Я віддав</Text>
+                    <Text style={styles.reject}>Без QR</Text>
                   </Pressable>
                 ) : null}
-                {h.can_confirm_receive ? (
+                {h.can_confirm_receive && !h.requires_qr_scan ? (
                   <Pressable
                     onPress={() =>
                       runAction(() => HandoffApi.confirmReceive(h.id), "Отримання")
                     }
                   >
-                    <Text style={styles.accept}>Я отримав</Text>
+                    <Text style={styles.reject}>Без QR</Text>
                   </Pressable>
                 ) : null}
                 {h.can_cancel ? (
@@ -726,6 +749,24 @@ export default function Chat() {
           <Ionicons name="send" size={22} color={colors.stamp} />
         </Pressable>
       </View>
+
+      <CopyQrScanModal
+        visible={!!handoffScan}
+        onClose={() => setHandoffScan(null)}
+        hint="Відскануйте QR примірника для підтвердження"
+        onScan={(payload) => {
+          const job = handoffScan;
+          setHandoffScan(null);
+          if (!job) return;
+          runAction(
+            () =>
+              job.action === "give"
+                ? HandoffApi.confirmGive(job.id, payload)
+                : HandoffApi.confirmReceive(job.id, payload),
+            job.action === "give" ? "Віддача" : "Отримання"
+          );
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }

@@ -219,6 +219,21 @@ class BookCopy(models.Model):
         verbose_name="Оренда за день",
         help_text="Обов’язково якщо For rent (UAH/день).",
     )
+    qr_token = models.CharField(
+        max_length=64,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="QR-токен примірника",
+        help_text="Унікальний секрет у QR-наклейці (BW1.<token>).",
+    )
+    qr_attached_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="QR приклеєно",
+        help_text="Коли власник відсканував наклейку на цьому примірнику.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -294,6 +309,45 @@ class BookCopy(models.Model):
         related_name="copies_added",
         verbose_name="Хто додав",
     )
+
+
+class PreprintedQrToken(models.Model):
+    """
+    Spare unique QR stickers printed on A4 sheets (fill to 36 / page).
+    Claimed onto a BookCopy when the owner scans «Скан QR» on that instance.
+    """
+
+    token = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        verbose_name="QR-токен",
+    )
+    owner = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="preprinted_qr_tokens",
+        verbose_name="Власник",
+    )
+    copy = models.ForeignKey(
+        BookCopy,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="claimed_preprint_tokens",
+        verbose_name="Примірник (після прив’язки)",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "заздалегідь надрукований QR"
+        verbose_name_plural = "заздалегідь надруковані QR"
+        ordering = ["id"]
+
+    def __str__(self):
+        state = f"→ copy#{self.copy_id}" if self.copy_id else "вільний"
+        return f"preprint#{self.pk} {state}"
 
 
 class Library(models.Model):
@@ -563,6 +617,7 @@ class CopyEvent(models.Model):
         TRANSMITTED = "transmitted", "Передано третій особі (з дозволу власника)"
         HANDOFF_APPROVED = "handoff_approved", "Власник схвалив передачу (очікує фізичну передачу)"
         HANDOFF_GIVEN = "handoff_given", "Попередній позичальник підтвердив віддачу"
+        QR_ATTACHED = "qr_attached", "QR-наклейку прив’язано до примірника"
 
     copy = models.ForeignKey(
         BookCopy,

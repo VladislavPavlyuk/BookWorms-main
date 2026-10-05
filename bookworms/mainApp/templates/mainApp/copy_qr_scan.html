@@ -1,0 +1,103 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Скан QR примірника{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Скан QR примірника</h1>
+<p class="text-muted small mb-3">
+  Відскануйте наклейку 2×2&nbsp;см, щоб відкрити картку примірника
+  {% if attach_copy_id %}або прив’язати її до #{{ attach_copy_id }}{% endif %}
+  {% if handoff_id %}або підтвердити передачу #{{ handoff_id }} ({{ action }}){% endif %}.
+</p>
+
+{% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{% if 'error' in message.tags %}danger{% else %}info{% endif %}">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
+<div id="qr-reader" class="mb-3" style="max-width:420px"></div>
+<p id="qr-status" class="small text-muted">Завантаження камери…</p>
+
+<form method="post" id="qr-form" class="mb-4">
+  {% csrf_token %}
+  {% if partner_id %}<input type="hidden" name="partner_id" value="{{ partner_id }}">{% endif %}
+  {% if handoff_id %}<input type="hidden" name="handoff_id" value="{{ handoff_id }}">{% endif %}
+  {% if action %}<input type="hidden" name="action" value="{{ action }}">{% endif %}
+  {% if attach_copy_id %}<input type="hidden" name="attach_copy_id" value="{{ attach_copy_id }}">{% endif %}
+  <label class="form-label" for="qr_payload">Або вставте код вручну</label>
+  <div class="input-group" style="max-width:28rem">
+    <input type="text" class="form-control" name="qr_payload" id="qr_payload" placeholder="BW1.…">
+    <button class="btn btn-primary" type="submit">OK</button>
+  </div>
+</form>
+
+{% if active_handoffs %}
+<h2 class="h6">Активні передачі (підтвердження сканом)</h2>
+<ul class="list-group mb-4">
+  {% for h in active_handoffs %}
+  <li class="list-group-item d-flex flex-wrap justify-content-between gap-2 align-items-center">
+    <span class="small">
+      #{{ h.copy_id }} «{{ h.copy.book.title }}»
+      · {{ h.from_user.username }} → {{ h.to_user.username }}
+      · {{ h.get_status_display }}
+    </span>
+    <span class="d-flex gap-2">
+      {% if h.status == "awaiting_give" and h.from_user_id == user.id %}
+      <a class="btn btn-sm btn-success"
+         href="{% url 'copy_qr_scan' %}?handoff_id={{ h.id }}&action=give&partner_id={{ h.to_user_id }}">
+        Скан → віддав
+      </a>
+      {% endif %}
+      {% if h.status == "awaiting_receive" and h.to_user_id == user.id %}
+      <a class="btn btn-sm btn-success"
+         href="{% url 'copy_qr_scan' %}?handoff_id={{ h.id }}&action=receive&partner_id={{ h.from_user_id }}">
+        Скан → отримав
+      </a>
+      {% endif %}
+    </span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<p><a href="{% url 'my_library' %}" class="btn btn-outline-secondary btn-sm">← Полиця</a></p>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+(function () {
+  var statusEl = document.getElementById("qr-status");
+  var form = document.getElementById("qr-form");
+  var input = document.getElementById("qr_payload");
+  var submitted = false;
+  function onScan(decoded) {
+    if (submitted || !decoded) return;
+    submitted = true;
+    input.value = decoded;
+    statusEl.textContent = "Знайдено: " + decoded;
+    form.submit();
+  }
+  if (!window.Html5Qrcode) {
+    statusEl.textContent = "Сканер недоступний — вставте код вручну.";
+    return;
+  }
+  var scanner = new Html5Qrcode("qr-reader");
+  Html5Qrcode.getCameras().then(function (cameras) {
+    if (!cameras || !cameras.length) {
+      statusEl.textContent = "Камеру не знайдено — вставте код вручну.";
+      return;
+    }
+    var camId = cameras[cameras.length - 1].id;
+    statusEl.textContent = "Наведіть на QR-наклейку примірника.";
+    return scanner.start(
+      camId,
+      { fps: 8, qrbox: { width: 220, height: 220 } },
+      onScan,
+      function () {}
+    );
+  }).catch(function () {
+    statusEl.textContent = "Немає доступу до камери — вставте код вручну.";
+  });
+})();
+</script>
+{% endblock %}
