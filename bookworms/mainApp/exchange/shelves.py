@@ -86,79 +86,62 @@ def browsable_owned_shelves_qs(exclude_user_id: int | None = None) -> QuerySet[S
     return physical_presence_shelves_qs(exclude_user_id=exclude_user_id)
 
 
-def group_shelves_by_book(shelves) -> list[dict]:
-    """Один ISBN → book + owners + shelf-рядки."""
-    groups: dict[int, dict] = {}
-    order: list[int] = []
-    for s in shelves:
-        bid = s.book_id
-        if bid not in groups:
-            groups[bid] = {
-                "book": s.book,
-                "shelves": [],
-                "owners": [],
-                "_owner_ids": set(),
-            }
-            order.append(bid)
-        g = groups[bid]
-        g["shelves"].append(s)
-        legal = s.borrowed_from if s.borrowed_from_id else s.user
-        if legal.id not in g["_owner_ids"]:
-            g["_owner_ids"].add(legal.id)
-            g["owners"].append(legal)
-    out = []
-    for bid in order:
-        g = groups[bid]
-        out.append(
-            {
-                "book": g["book"],
-                "shelves": g["shelves"],
-                "owners": g["owners"],
-            }
-        )
-    return out
-
-
-def _materialize(qs: QuerySet[Shelf], *, ensure_copies: bool) -> list[Shelf]:
-    rows = list(qs)
-    if ensure_copies:
-        from .copies import ensure_shelves_have_copies
-
-        rows = ensure_shelves_have_copies(rows)
-    return rows
-
-
 def for_browse_as_viewer(
     viewer: CustomUser, *, ensure_copies: bool = False
 ) -> list[Shelf]:
-    """Physical-presence catalog excluding viewer's own rows, with request targets."""
+    """Physical-presence catalog excluding viewer's own rows / shared library, with request targets."""
     qs = (
         physical_presence_shelves_qs(exclude_user_id=viewer.id)
         .exclude(copy__is_hidden=True)
-        .select_related(*_SHELF_RELATED)
+        .select_related(*_SHELF_RELATED, "copy__library")
         .order_by("-added_at")
     )
-    return attach_request_targets(
+    # Спільна бібліотека глядача — це «Моя полиця», не каталог чужих.
+    try:
+        from ..library_service import ensure_personal_library
+
+        lib = ensure_personal_library(viewer)
+        qs = qs.exclude(copy__library_id=lib.id)
+    except Exception:
+        pass
+    rows = attach_request_targets(
         attach_loan_info(_materialize(qs, ensure_copies=ensure_copies))
     )
+    return attach_library_owners(rows)
 
 
 def my_available_owned(
     user: CustomUser, *, ensure_copies: bool = False
 ) -> list[Shelf]:
-    """Viewer's free owned copies (offers / my_owned panel)."""
-    qs = (
-        available_owned_shelves_qs()
-        .filter(user=user)
-        .select_related(*_SHELF_RELATED)
+    """Viewer's free owned copies from personal/shared library (offers / my_owned panel)."""
+    from ..library_service import (
+        ensure_personal_library,
+        library_active_loans_by_copy,
+        list_my_library_shelves,
     )
-    return _materialize(qs, ensure_copies=ensure_copies)
+
+    lib = ensure_personal_library(user)
+    rows = [
+        s
+        for s in list_my_library_shelves(user)
+        if not s.borrowed_from_id
+    ]
+    if ensure_copies:
+        from .copies import ensure_shelves_have_copies
+
+        rows = ensure_shelves_have_copies(rows)
+    loan_by = library_active_loans_by_copy(lib)
+    free = [s for s in rows if not s.copy_id or s.copy_id not in loan_by]
+    return attach_library_owners(attach_loan_info(free))
 
 
 def get_available_owned_offer(
     user: CustomUser, offer_shelf_id: int
 ) -> Shelf | None:
-    """Single free owned shelf usable as exchange offer."""
+    """Single free owned shelf usable as exchange offer (incl. shared library)."""
+    for s in my_available_owned(user):
+        if s.pk == offer_shelf_id:
+            return s
     return (
         available_owned_shelves_qs()
         .filter(pk=offer_shelf_id, user=user)
@@ -174,12 +157,16 @@ def for_user_physical_shelf(
     viewer: CustomUser | None = None,
 ) -> list[Shelf]:
     """Rows physically at ``owner`` (free owned + borrowed-in)."""
-    qs = owner.shelf_entries.select_related(*_SHELF_RELATED).order_by("-added_at")
+    qs = owner.shelf_entries.select_related(
+        *_SHELF_RELATED, "copy__library"
+    ).order_by("-added_at")
     # Other users never see Hidden instances on this shelf.
     if viewer is not None and viewer.pk != owner.pk:
         qs = qs.exclude(copy__is_hidden=True)
-    return attach_request_targets(
-        filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
+    return attach_library_owners(
+        attach_request_targets(
+            filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
+        )
     )
 
 
@@ -188,11 +175,13 @@ def for_book_physical_holders(
 ) -> list[Shelf]:
     qs = (
         Shelf.objects.filter(book=book)
-        .select_related(*_SHELF_RELATED)
+        .select_related(*_SHELF_RELATED, "copy__library")
         .order_by("added_at")
     )
-    rows = attach_request_targets(
-        filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
+    rows = attach_library_owners(
+        attach_request_targets(
+            filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
+        )
     )
     if viewer is None:
         return [s for s in rows if not s.copy or not s.copy.is_hidden]
@@ -208,12 +197,100 @@ def for_copy_physical_holders(
 ) -> list[Shelf]:
     qs = (
         Shelf.objects.filter(copy=copy)
-        .select_related(*_SHELF_RELATED)
+        .select_related(*_SHELF_RELATED, "copy__library")
         .order_by("added_at")
     )
-    return attach_request_targets(
-        filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
+    return attach_library_owners(
+        attach_request_targets(
+            filter_physically_present(_materialize(qs, ensure_copies=ensure_copies))
+        )
     )
+
+
+def attach_library_owners(shelves: list[Shelf]) -> list[Shelf]:
+    """
+    Для примірників спільної бібліотеки — усі учасники як власники
+    (публічно: user1 + user2 + …).
+    """
+    from ..models import LibraryMembership
+
+    lib_ids = {
+        s.copy.library_id
+        for s in shelves
+        if s.copy_id and getattr(s, "copy", None) and s.copy.library_id
+    }
+    members_by_lib: dict[int, list] = {}
+    if lib_ids:
+        for m in (
+            LibraryMembership.objects.filter(library_id__in=lib_ids)
+            .select_related("user")
+            .order_by("user__username")
+        ):
+            members_by_lib.setdefault(m.library_id, []).append(m.user)
+
+    for s in shelves:
+        lib_id = (
+            s.copy.library_id
+            if s.copy_id and getattr(s, "copy", None)
+            else None
+        )
+        mems = members_by_lib.get(lib_id or -1) or []
+        if len(mems) >= 2:
+            s.library_owners = mems
+            s.owners_label = " + ".join(u.username for u in mems)
+        else:
+            legal = s.borrowed_from if s.borrowed_from_id else s.user
+            s.library_owners = [legal] if legal else []
+            s.owners_label = legal.username if legal else ""
+    return shelves
+
+
+def group_shelves_by_book(shelves) -> list[dict]:
+    """Один ISBN → book + owners (спільна бібліотека = усі учасники) + shelf-рядки."""
+    groups: dict[int, dict] = {}
+    order: list[int] = []
+    for s in shelves:
+        bid = s.book_id
+        if bid not in groups:
+            groups[bid] = {
+                "book": s.book,
+                "shelves": [],
+                "owners": [],
+                "_owner_ids": set(),
+            }
+            order.append(bid)
+        g = groups[bid]
+        g["shelves"].append(s)
+        owners = getattr(s, "library_owners", None)
+        if not owners:
+            legal = s.borrowed_from if s.borrowed_from_id else s.user
+            owners = [legal] if legal else []
+        for legal in owners:
+            if legal.id not in g["_owner_ids"]:
+                g["_owner_ids"].add(legal.id)
+                g["owners"].append(legal)
+    out = []
+    for bid in order:
+        g = groups[bid]
+        owners = g["owners"]
+        out.append(
+            {
+                "book": g["book"],
+                "shelves": g["shelves"],
+                "owners": owners,
+                "owners_label": " + ".join(u.username for u in owners),
+            }
+        )
+    return out
+
+
+def _materialize(qs: QuerySet[Shelf], *, ensure_copies: bool) -> list[Shelf]:
+    rows = list(qs)
+    if ensure_copies:
+        from .copies import ensure_shelves_have_copies
+
+        rows = ensure_shelves_have_copies(rows)
+    return rows
 
 
 @dataclass

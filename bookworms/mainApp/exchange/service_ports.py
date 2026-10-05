@@ -22,17 +22,30 @@ class IRequestService(ABC):
         *,
         from_queue: bool = False,
         join_queue_if_busy: bool = True,
+        proposed_due_date=None,
     ) -> BookExchangeRequest: ...
 
     @abstractmethod
     def create_many(
         self,
         requester: CustomUser,
-        lines: list[tuple[Shelf, Shelf | None]],
+        lines: list[tuple[Shelf, Shelf | None, object | None]],
     ) -> tuple[int, list[str]]: ...
 
     @abstractmethod
-    def accept(self, request_id: int, acting_user: CustomUser) -> None: ...
+    def accept(
+        self, request_id: int, acting_user: CustomUser, *, due_date=None
+    ) -> None: ...
+
+    @abstractmethod
+    def propose_due(
+        self, request_id: int, acting_user: CustomUser, due_date
+    ) -> BookExchangeRequest: ...
+
+    @abstractmethod
+    def confirm_due(
+        self, request_id: int, acting_user: CustomUser
+    ) -> BookExchangeRequest: ...
 
     @abstractmethod
     def reject(self, request_id: int, acting_user: CustomUser) -> None: ...

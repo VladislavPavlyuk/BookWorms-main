@@ -21,6 +21,7 @@ from .views import (
     edit_post,
     mark_post_watched,
     my_library,
+    shared_library,
     recognize_book_cover_view,
     due_slips,
     unlock_shelf_reader_age_edit,
@@ -28,6 +29,7 @@ from .views import (
     update_shelf_copy_listing,
     update_shelf_book_reader_age,
     remove_shelf_entry,
+    library_bulk_action,
     refresh_book_price_view,
     return_borrowed_shelf_book,
     confirm_return_borrowed_shelf_book,
@@ -38,6 +40,8 @@ from .views import (
     create_exchange,
     exchange_requests,
     exchange_accept,
+    exchange_propose_due,
+    exchange_confirm_due,
     exchange_reject,
     exchange_cancel,
     handoff_cancel_view,
@@ -53,6 +57,7 @@ urlpatterns = [
     path('', home, name='home'),
     # --- Бібліотека та обмін книгами ---
     path('library/', my_library, name='my_library'),
+    path('library/shared/', shared_library, name='shared_library'),
     path(
         'library/recognize-cover/',
         recognize_book_cover_view,
@@ -91,6 +96,7 @@ urlpatterns = [
         name='refresh_book_price',
     ),
     path('library/remove/<int:shelf_id>/', remove_shelf_entry, name='remove_shelf_entry'),
+    path('library/bulk/', library_bulk_action, name='library_bulk_action'),
     path('library/return/<int:shelf_id>/', return_borrowed_shelf_book, name='return_borrowed_shelf_book'),
     path(
         'library/confirm-return/<int:shelf_id>/',
@@ -104,6 +110,16 @@ urlpatterns = [
     path('library/exchange/new/', create_exchange, name='create_exchange'),
     path('library/exchange/', exchange_requests, name='exchange_requests'),
     path('library/exchange/<int:request_id>/accept/', exchange_accept, name='exchange_accept'),
+    path(
+        'library/exchange/<int:request_id>/propose-due/',
+        exchange_propose_due,
+        name='exchange_propose_due',
+    ),
+    path(
+        'library/exchange/<int:request_id>/confirm-due/',
+        exchange_confirm_due,
+        name='exchange_confirm_due',
+    ),
     path('library/exchange/<int:request_id>/reject/', exchange_reject, name='exchange_reject'),
     path('library/exchange/<int:request_id>/cancel/', exchange_cancel, name='exchange_cancel'),
     path(

@@ -277,6 +277,278 @@ class BookCopy(models.Model):
                 }
             )
 
+    library = models.ForeignKey(
+        "Library",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copies",
+        verbose_name="Спільна бібліотека",
+        help_text="Порожньо лише до міграції; далі кожен примірник належить бібліотеці.",
+    )
+    added_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copies_added",
+        verbose_name="Хто додав",
+    )
+
+
+class Library(models.Model):
+    """
+    Спільна / особиста бібліотека. Кілька користувачів (сім'я, партнери, друзі)
+    можуть об'єднати полиці. Рівно один адміністратор.
+    """
+
+    name = models.CharField(max_length=200, blank=True, verbose_name="Назва")
+    admin = models.ForeignKey(
+        CustomUser,
+        on_delete=models.PROTECT,
+        related_name="administered_libraries",
+        verbose_name="Адміністратор",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "бібліотека"
+        verbose_name_plural = "бібліотеки"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name or f"Бібліотека #{self.pk} ({self.admin.username})"
+
+    @property
+    def display_name(self) -> str:
+        return (self.name or "").strip() or f"Бібліотека {self.admin.username}"
+
+
+class LibraryMembership(models.Model):
+    class Role(models.TextChoices):
+        ADMIN = "admin", "Адміністратор"
+        MEMBER = "member", "Учасник"
+
+    library = models.ForeignKey(
+        Library,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+        verbose_name="Бібліотека",
+    )
+    user = models.OneToOneField(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="library_membership",
+        verbose_name="Користувач",
+    )
+    role = models.CharField(
+        max_length=16,
+        choices=Role.choices,
+        default=Role.MEMBER,
+        verbose_name="Роль",
+    )
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "членство в бібліотеці"
+        verbose_name_plural = "членства в бібліотеках"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["library", "user"],
+                name="uniq_library_membership_user",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} @ {self.library_id} ({self.role})"
+
+
+class LibraryInvite(models.Model):
+    """Запрошення об'єднати бібліотеку запрошеного з бібліотекою адміністратора."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Очікує"
+        AWAITING_ISBN = "awaiting_isbn", "Очікує ISBN від адміна"
+        ACCEPTED = "accepted", "Прийнято"
+        REJECTED = "rejected", "Відхилено"
+        CANCELLED = "cancelled", "Скасовано"
+
+    library = models.ForeignKey(
+        Library,
+        on_delete=models.CASCADE,
+        related_name="invites",
+        verbose_name="Цільова бібліотека",
+    )
+    from_user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="library_invites_sent",
+        verbose_name="Від кого",
+    )
+    to_user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="library_invites_received",
+        verbose_name="Кому",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    message = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "запрошення до бібліотеки"
+        verbose_name_plural = "запрошення до бібліотек"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"invite#{self.pk} {self.from_user_id}→{self.to_user_id} ({self.status})"
+
+
+class LibraryAction(models.Model):
+    """Дія учасника з примірником — потребує підтвердження адміністратора."""
+
+    class ActionType(models.TextChoices):
+        ADD_COPY = "add_copy", "Додати примірник"
+        REMOVE_COPY = "remove_copy", "Прибрати примірник"
+        LISTING = "listing", "Змінити статус оголошення"
+        SPLIT_LEAVE = "split_leave", "Вийти з поділом примірників"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Очікує"
+        APPROVED = "approved", "Схвалено"
+        REJECTED = "rejected", "Відхилено"
+        CANCELLED = "cancelled", "Скасовано"
+
+    library = models.ForeignKey(
+        Library,
+        on_delete=models.CASCADE,
+        related_name="actions",
+    )
+    initiator = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="library_actions",
+    )
+    action_type = models.CharField(max_length=32, choices=ActionType.choices)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="library_actions_resolved",
+    )
+    result_note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        verbose_name = "дія бібліотеки"
+        verbose_name_plural = "дії бібліотеки"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"action#{self.pk} {self.action_type} ({self.status})"
+
+
+class LibraryAdminElection(models.Model):
+    """Голосування за адміністратора спільної (об'єднаної) бібліотеки."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Триває"
+        COMPLETED = "completed", "Завершено"
+        CANCELLED = "cancelled", "Скасовано"
+
+    library = models.ForeignKey(
+        Library,
+        on_delete=models.CASCADE,
+        related_name="elections",
+        verbose_name="Бібліотека",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.OPEN,
+        db_index=True,
+    )
+    started_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="library_elections_started",
+        verbose_name="Ініціатор",
+    )
+    reason = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Причина",
+        help_text="Напр. після об'єднання бібліотек / зміна адміна.",
+    )
+    winner = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="library_elections_won",
+        verbose_name="Обраний адмін",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "вибори адміна бібліотеки"
+        verbose_name_plural = "вибори адміна бібліотеки"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"election#{self.pk} lib={self.library_id} ({self.status})"
+
+
+class LibraryAdminVote(models.Model):
+    election = models.ForeignKey(
+        LibraryAdminElection,
+        on_delete=models.CASCADE,
+        related_name="votes",
+        verbose_name="Вибори",
+    )
+    voter = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="library_admin_votes",
+        verbose_name="Голосуючий",
+    )
+    candidate = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="library_admin_votes_received",
+        verbose_name="Кандидат",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "голос за адміна"
+        verbose_name_plural = "голоси за адміна"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["election", "voter"],
+                name="uniq_library_election_voter",
+            ),
+        ]
+
+    def __str__(self):
+        return f"vote#{self.pk} {self.voter_id}→{self.candidate_id}"
+
 
 class CopyEvent(models.Model):
     """Журнал подій одного фізичного примірника (BookCopy), не ISBN."""
@@ -462,6 +734,29 @@ class BookExchangeRequest(models.Model):
         default=Status.PENDING,
         db_index=True,
     )
+    proposed_due_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Запропонований термін повернення",
+        help_text="Поточна пропозиція терміну для позики (хто запропонував — due_date_proposer).",
+    )
+
+    class DueProposer(models.TextChoices):
+        REQUESTER = "requester", "Позичальник"
+        OWNER = "owner", "Власник"
+
+    due_date_proposer = models.CharField(
+        max_length=16,
+        choices=DueProposer.choices,
+        default=DueProposer.REQUESTER,
+        blank=True,
+        verbose_name="Хто запропонував термін",
+    )
+    due_date_confirmed = models.BooleanField(
+        default=False,
+        verbose_name="Інша сторона погодила термін",
+        help_text="True після confirm-due від сторони, яка не робила останню пропозицію.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 
@@ -499,6 +794,22 @@ class PrivateMessage(models.Model):
         blank=True,
         related_name="private_messages",
         verbose_name="Зв’язаний запит",
+    )
+    library_invite = models.ForeignKey(
+        "LibraryInvite",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="private_messages",
+        verbose_name="Запрошення до бібліотеки",
+    )
+    library_action = models.ForeignKey(
+        "LibraryAction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="private_messages",
+        verbose_name="Дія спільної бібліотеки",
     )
     # Для сповіщень про повернення — рядок полиці позичальника (confirm_borrow_return).
     related_shelf = models.ForeignKey(

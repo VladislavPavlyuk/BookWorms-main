@@ -25,6 +25,12 @@ class MessageServiceNotifier(AbstractExchangeNotifier):
     def notify_exchange_request_cancelled(self, req: BookExchangeRequest):
         return message_service.notify_exchange_request_cancelled(req)
 
+    def notify_exchange_due_proposed(self, req: BookExchangeRequest, actor: CustomUser):
+        return message_service.notify_exchange_due_proposed(req, actor)
+
+    def notify_exchange_due_confirmed(self, req: BookExchangeRequest, actor: CustomUser):
+        return message_service.notify_exchange_due_confirmed(req, actor)
+
     def _emit_handoff(self, handoff: LoanHandoff, *, stage: str) -> None:
         if stage == "approved":
             message_service.notify_handoff_approved(handoff)

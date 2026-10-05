@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -31,10 +32,20 @@ type ManualPhoto = { uri: string; name: string; type: string };
 
 export default function ShelfScreen() {
   const router = useRouter();
+  const { width: winW, height: winH } = useWindowDimensions();
+  const gridCols = winW >= 992 ? 5 : 2;
+  const gridGap = 8;
+  const gridPad = 8;
+  const cardWidth =
+    (winW - gridPad * 2 - gridGap * (gridCols - 1)) / gridCols;
   const [shelves, setShelves] = useState<Shelf[]>([]);
   const [pending, setPending] = useState<Shelf[]>([]);
   const [lentOutCount, setLentOutCount] = useState(0);
   const [priceTotal, setPriceTotal] = useState("0.00");
+  const [sharedNote, setSharedNote] = useState<string | null>(null);
+  const [iAmLibraryAdmin, setIAmLibraryAdmin] = useState(true);
+  const [isSharedLibrary, setIsSharedLibrary] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [sourcesOpen, setSourcesOpen] = useState<BookPriceQuote[] | null>(null);
   const [isbn, setIsbn] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -49,6 +60,8 @@ export default function ShelfScreen() {
   const [ageMin, setAgeMin] = useState("0");
   const [ageMax, setAgeMax] = useState("18");
   const [listingShelf, setListingShelf] = useState<Shelf | null>(null);
+  const [listingBulk, setListingBulk] = useState(false);
+  const [detailShelf, setDetailShelf] = useState<Shelf | null>(null);
   const [listingFlags, setListingFlags] = useState({
     is_fee_sharing: true,
     is_hidden: false,
@@ -79,6 +92,20 @@ export default function ShelfScreen() {
     setPending(Array.isArray(data?.pending_returns) ? data.pending_returns : []);
     setLentOutCount(Number(data?.lent_out_count) || 0);
     setPriceTotal(data?.price_total_uah || "0.00");
+    setIsSharedLibrary(!!data?.is_shared_library);
+    setIAmLibraryAdmin(
+      !data?.is_shared_library || !!data?.i_am_library_admin
+    );
+    if (data?.is_shared_library) {
+      setSharedNote(
+        `Спільна бібліотека «${data.shared_library_name || ""}» (${data.shared_member_count || 0} учасн.) — усі спільні примірники видно кожному.`
+      );
+    } else {
+      setSharedNote(null);
+    }
+    setSelectedIds((prev) =>
+      prev.filter((id) => (data?.shelves || []).some((s) => s.id === id && !s.borrowed_from))
+    );
   };
 
   const refreshPrice = async (bookId: number) => {
@@ -104,7 +131,7 @@ export default function ShelfScreen() {
     }, [])
   );
 
-  const addIsbn = useCallback(async (raw?: string) => {
+  const addIsbn = useCallback(async (raw?: string, confirmExtra = false) => {
     const code = (raw ?? isbn).trim();
     const norm = normalizeIsbn(code);
     if (!norm) {
@@ -112,16 +139,78 @@ export default function ShelfScreen() {
       return;
     }
     if (adding) return;
-    if (norm === lastAutoRef.current) return;
+    if (!confirmExtra && norm === lastAutoRef.current) return;
     lastAutoRef.current = norm;
     setAdding(true);
     try {
-      await ShelfApi.addIsbn(norm);
+      const res = await ShelfApi.addIsbn(norm, confirmExtra);
+      if (res && typeof res === "object" && "needs_confirmation" in res && res.needs_confirmation) {
+        lastAutoRef.current = "";
+        Alert.alert(
+          "Примірник уже є",
+          String(res.detail || `Уже є ${res.existing_count} шт. Додати ще один?`),
+          [
+            { text: "Ні", style: "cancel" },
+            {
+              text: "Так, додати",
+              onPress: () => {
+                void addIsbn(norm, true);
+              },
+            },
+          ]
+        );
+        return;
+      }
+      if (res && typeof res === "object" && "pending_approval" in res && res.pending_approval) {
+        const partnerId = (res as { chat_partner_id?: number }).chat_partner_id;
+        Alert.alert(
+          "Спільна бібліотека",
+          String(
+            res.detail ||
+              "ISBN уже є. Запит надіслано адміністратору в чат."
+          ),
+          partnerId
+            ? [
+                { text: "OK" },
+                {
+                  text: "Відкрити чат",
+                  onPress: () => router.push(`/chat/${partnerId}`),
+                },
+              ]
+            : [{ text: "OK" }]
+        );
+        setIsbn("");
+        lastAutoRef.current = "";
+        return;
+      }
       setIsbn("");
       lastAutoRef.current = "";
       await load();
     } catch (e) {
       lastAutoRef.current = "";
+      if (e instanceof ApiError && e.status === 409) {
+        const p = (e.payload || {}) as {
+          needs_confirmation?: boolean;
+          detail?: string;
+          existing_count?: number;
+        };
+        if (p.needs_confirmation) {
+          Alert.alert(
+            "Примірник уже є",
+            String(p.detail || `Уже є ${p.existing_count} шт. Додати ще один?`),
+            [
+              { text: "Ні", style: "cancel" },
+              {
+                text: "Так, додати",
+                onPress: () => {
+                  void addIsbn(norm, true);
+                },
+              },
+            ]
+          );
+          return;
+        }
+      }
       Alert.alert("ISBN", e instanceof ApiError ? e.message : String(e));
     } finally {
       setAdding(false);
@@ -305,40 +394,147 @@ export default function ShelfScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ageMin, ageMax, ageShelf?.id]);
 
-  const openListing = (s: Shelf) => {
-    setListingFlags({
-      is_fee_sharing: !!s.is_fee_sharing,
-      is_hidden: !!s.is_hidden,
-      is_for_rent: !!s.is_for_rent,
-      is_for_exchange: !!s.is_for_exchange,
-      is_free_of_deposit: !!s.is_free_of_deposit,
-    });
-    setSaleGift((s.sale_gift as SaleGift) || (s.is_for_sale ? "for_sale" : s.is_as_gift ? "as_gift" : ""));
-    setSalePrice(s.sale_price || "");
-    setRentPrice(s.rent_price_per_day || "");
-    setListingShelf(s);
+  const openListing = (s?: Shelf) => {
+    const target = s || shelves.find((x) => selectedIds.includes(x.id));
+    if (target) {
+      setListingFlags({
+        is_fee_sharing: !!target.is_fee_sharing,
+        is_hidden: !!target.is_hidden,
+        is_for_rent: !!target.is_for_rent,
+        is_for_exchange: !!target.is_for_exchange,
+        is_free_of_deposit: !!target.is_free_of_deposit,
+      });
+      setSaleGift(
+        (target.sale_gift as SaleGift) ||
+          (target.is_for_sale ? "for_sale" : target.is_as_gift ? "as_gift" : "")
+      );
+      setSalePrice(target.sale_price || "");
+      setRentPrice(target.rent_price_per_day || "");
+    } else {
+      setListingFlags({
+        is_fee_sharing: true,
+        is_hidden: false,
+        is_for_rent: false,
+        is_for_exchange: false,
+        is_free_of_deposit: false,
+      });
+      setSaleGift("");
+      setSalePrice("");
+      setRentPrice("");
+    }
+    setListingBulk(!s && selectedIds.length > 0);
+    setListingShelf(s || target || ({ id: 0 } as Shelf));
+  };
+
+  const handlePendingChat = (res: unknown, title: string) => {
+    if (res && typeof res === "object" && "pending_approval" in res && (res as { pending_approval?: boolean }).pending_approval) {
+      const partner = (res as { chat_partner_id?: number }).chat_partner_id;
+      Alert.alert(
+        title,
+        (res as { detail?: string }).detail ||
+          "Запит надіслано адміністратору спільної бібліотеки в чат.",
+        partner
+          ? [
+              { text: "OK" },
+              { text: "Відкрити чат", onPress: () => router.push(`/chat/${partner}`) },
+            ]
+          : [{ text: "OK" }]
+      );
+      return true;
+    }
+    return false;
   };
 
   const saveListing = async () => {
     if (!listingShelf) return;
+    const body = {
+      ...listingFlags,
+      sale_gift: saleGift,
+      sale_price: saleGift === "for_sale" ? salePrice || null : null,
+      rent_price_per_day: listingFlags.is_for_rent ? rentPrice || null : null,
+    };
     try {
-      await ShelfApi.updateListing(listingShelf.id, {
-        ...listingFlags,
-        sale_gift: saleGift,
-        sale_price: saleGift === "for_sale" ? salePrice || null : null,
-        rent_price_per_day: listingFlags.is_for_rent ? rentPrice || null : null,
-      });
+      if (listingBulk && selectedIds.length) {
+        const res = await ShelfApi.bulk({
+          action: "listing",
+          shelf_ids: selectedIds,
+          ...body,
+        });
+        setListingShelf(null);
+        setListingBulk(false);
+        setSelectedIds([]);
+        if (handlePendingChat(res, "Статуси")) {
+          await load();
+          return;
+        }
+      } else if (listingShelf.id) {
+        const res = await ShelfApi.updateListing(listingShelf.id, body);
+        setListingShelf(null);
+        if (handlePendingChat(res, "Статуси")) {
+          await load();
+          return;
+        }
+      }
       setListingShelf(null);
+      setListingBulk(false);
       await load();
     } catch (e) {
       Alert.alert("Статус", e instanceof ApiError ? e.message : String(e));
     }
   };
 
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const bulkDelete = () => {
+    if (!selectedIds.length) return;
+    Alert.alert(
+      "Видалити",
+      `Прибрати ${selectedIds.length} примірник(ів) з полиці?` +
+        (isSharedLibrary && !iAmLibraryAdmin
+          ? "\nЗапит піде адміністратору в чат."
+          : ""),
+      [
+        { text: "Скасувати", style: "cancel" },
+        {
+          text: "Видалити",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const res = await ShelfApi.bulk({
+                action: "delete",
+                shelf_ids: selectedIds,
+              });
+              setSelectedIds([]);
+              if (handlePendingChat(res, "Видалення")) {
+                await load();
+                return;
+              }
+              await load();
+            } catch (e) {
+              Alert.alert("Полиця", e instanceof ApiError ? e.message : String(e));
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const act = async (s: Shelf) => {
     try {
-      if (s.borrowed_from) await ShelfApi.returnBook(s.id);
-      else await ShelfApi.remove(s.id);
+      if (s.borrowed_from) {
+        await ShelfApi.returnBook(s.id);
+        await load();
+        return;
+      }
+      const res = await ShelfApi.remove(s.id);
+      if (handlePendingChat(res, "Видалення")) {
+        await load();
+        return;
+      }
       await load();
     } catch (e) {
       Alert.alert("Полиця", e instanceof ApiError ? e.message : String(e));
@@ -390,8 +586,11 @@ export default function ShelfScreen() {
         </Pressable>
       </View>
       <FlatList
+        key={`shelf-grid-${gridCols}`}
         data={shelves}
         keyExtractor={(s) => String(s.id)}
+        numColumns={gridCols}
+        columnWrapperStyle={styles.flexRow}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -411,6 +610,40 @@ export default function ShelfScreen() {
                 ? ` Зараз у позиці з ваших: ${lentOutCount} — див. Date Due Slip.`
                 : ""}
             </Text>
+            {sharedNote ? <Text style={styles.sharedHint}>{sharedNote}</Text> : null}
+            {isSharedLibrary ? (
+              <Pressable onPress={() => router.push("/library")} style={styles.slipsLink}>
+                <Text style={styles.link}>Керувати спільною бібліотекою</Text>
+              </Pressable>
+            ) : (
+              <Pressable onPress={() => router.push("/library")} style={styles.slipsLink}>
+                <Text style={styles.link}>Спільна бібліотека / merge</Text>
+              </Pressable>
+            )}
+            <Text style={styles.selectHint}>
+              Обкладинка · назва · автор · вибір. Натисніть обкладинку для деталей.
+              {isSharedLibrary && iAmLibraryAdmin
+                ? " Адмін може видаляти будь-які примірники без підтвердження; власники отримають лише повідомлення в чаті."
+                : isSharedLibrary && !iAmLibraryAdmin
+                  ? " У спільній бібліотеці зміни підуть адміну в чат."
+                  : ""}
+            </Text>
+            {selectedIds.length > 0 ? (
+              <View style={styles.selectionBar}>
+                <Text style={styles.selectionCount}>Вибрано: {selectedIds.length}</Text>
+                <View style={styles.selectionActions}>
+                  <Pressable onPress={() => openListing()} style={styles.selectionBtn}>
+                    <Text style={styles.selectionBtnText}>Статуси</Text>
+                  </Pressable>
+                  <Pressable onPress={bulkDelete} style={styles.selectionBtnDanger}>
+                    <Text style={styles.selectionBtnDangerText}>Видалити</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setSelectedIds([])} style={styles.selectionBtn}>
+                    <Text style={styles.selectionBtnText}>Скасувати</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
             <View style={styles.priceTotalBox}>
               <Text style={styles.priceTotalLabel}>Оцінка вартості полиці</Text>
               <Text style={styles.priceTotalValue}>≈ {priceTotal} ₴</Text>
@@ -446,7 +679,7 @@ export default function ShelfScreen() {
             ) : null}
           </View>
         }
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{ paddingBottom: 24, paddingHorizontal: gridPad }}
         ListEmptyComponent={
           <Text style={styles.empty}>На полиці ще немає примірників. Додайте ISBN вище.</Text>
         }
@@ -455,163 +688,279 @@ export default function ShelfScreen() {
             item.book.cover_url ||
             (item.book.photo_urls && item.book.photo_urls[0]) ||
             null;
-          const extras = item.book.photo_urls || [];
+          const selectable = !item.borrowed_from;
+          const selected = selectedIds.includes(item.id);
           return (
-          <View style={styles.card}>
-            <Pressable onPress={() => router.push(`/book/${item.book.id}`)}>
-              <BookCover uri={coverUri} size="full" bleed={0} />
-              {extras.length > 0 ? (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.shelfPhotoStrip}
+            <View
+              style={[
+                styles.flexCard,
+                { width: cardWidth, maxWidth: cardWidth },
+                selected && styles.cardSelected,
+              ]}
+            >
+              <View style={styles.coverWrap}>
+                <Pressable
+                  onPress={() => setDetailShelf(item)}
+                  accessibilityRole="button"
+                  style={styles.coverPress}
                 >
-                  {extras.map((u, i) => (
-                    <Image key={`${u}-${i}`} source={{ uri: u }} style={styles.shelfPhotoThumb} />
-                  ))}
-                </ScrollView>
-              ) : null}
-              <View style={styles.cardBody}>
-                <Text style={styles.title}>{item.book.title}</Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
-                  <Text style={styles.meta}>
-                    {item.copy_id ? `Примірник #${item.copy_id} · ` : ""}
-                    {item.book.isbn?.startsWith("9799") || item.book.isbn_missing
-                      ? item.book.note || "ISBN code not exists"
-                      : item.book.isbn
-                        ? `ISBN ${item.book.isbn}`
-                        : ""}
-                    {item.book.authors ? ` · ${item.book.authors}` : ""}
-                  </Text>
-                  {item.borrowed_from ? (
-                    <>
-                      <Text style={styles.meta}> · позичено у </Text>
-                      <UserNameLink user={item.borrowed_from} style={styles.meta} />
-                    </>
+                  {coverUri ? (
+                    <Image
+                      source={{ uri: coverUri }}
+                      style={styles.coverImg}
+                      resizeMode="contain"
+                    />
                   ) : (
-                    <Text style={styles.meta}> · власна</Text>
-                  )}
-                  <Text
-                    style={[
-                      styles.meta,
-                      item.is_overdue ? { color: colors.stamp, fontWeight: "700" } : null,
-                    ]}
-                  >
-                    {item.due_date ? ` · до ${item.due_date}` : ""}
-                    {item.is_overdue
-                      ? " · прострочено"
-                      : item.days_left != null
-                        ? ` · ще ${item.days_left} дн.`
-                        : ""}
-                    {item.return_pending ? " · очікує підтвердження" : ""}
-                    {` · ${item.book.reader_age_summary}`}
-                  </Text>
-                  {!!item.listing_status_display && !item.borrowed_from && (
-                    <Text style={styles.meta}>
-                      {" · "}
-                      {item.listing_status_display}
-                      {item.is_for_sale && item.sale_price ? ` · ${item.sale_price} ₴` : ""}
-                      {item.is_for_rent && item.rent_price_per_day
-                        ? ` · ${item.rent_price_per_day} ₴/день`
-                        : ""}
-                      {item.requires_deposit === false ? " · без депозиту" : " · депозит"}
-                    </Text>
-                  )}
-                </View>
-                {item.price_eval?.status === "ready" && item.price_eval.price_avg ? (
-                  <View style={styles.priceRow}>
-                    <Text style={styles.priceAvg}>
-                      ≈ {item.price_eval.price_avg} ₴
-                      <Text style={styles.meta}>
-                        {" "}
-                        ({item.price_eval.price_min}–{item.price_eval.price_max})
-                      </Text>
-                    </Text>
-                    <View style={styles.priceActions}>
-                      <Pressable
-                        onPress={() => setSourcesOpen(item.price_eval?.quotes || [])}
-                        style={styles.priceBtn}
-                      >
-                        <Text style={styles.priceBtnText}>
-                          Price sources ({item.price_eval.source_count})
-                        </Text>
-                      </Pressable>
-                      <Pressable onPress={() => refreshPrice(item.book.id)} style={styles.priceBtn}>
-                        <Text style={styles.priceBtnText}>Оновити</Text>
-                      </Pressable>
+                    <View style={styles.coverMissing}>
+                      <Text style={styles.coverMissingText}>Немає обкладинки</Text>
                     </View>
-                  </View>
-                ) : (
-                  <View style={styles.priceRow}>
-                    <Text style={styles.meta}>
-                      {item.price_eval?.status === "pending"
-                        ? "Оцінка ціни…"
-                        : item.price_eval?.status === "missing"
-                          ? "Ціну не знайдено"
-                          : "Ціна ще не оцінена"}
-                    </Text>
-                    <Pressable onPress={() => refreshPrice(item.book.id)} style={styles.priceBtn}>
-                      <Text style={styles.priceBtnText}>
-                        {item.price_eval ? "Оновити ціну" : "Оцінити ціну"}
-                      </Text>
-                    </Pressable>
-                  </View>
-                )}
+                  )}
+                </Pressable>
+                {selectable ? (
+                  <Pressable
+                    onPress={() => toggleSelect(item.id)}
+                    style={styles.selectCheck}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name={selected ? "checkbox" : "square-outline"}
+                      size={22}
+                      color={selected ? colors.stamp : colors.muted}
+                    />
+                  </Pressable>
+                ) : null}
               </View>
+              <View style={styles.flexCardMeta}>
+                <Text style={styles.flexTitle} numberOfLines={2}>
+                  {item.book.title}
+                </Text>
+                <Text style={styles.flexAuthor} numberOfLines={2}>
+                  {item.book.authors || "Автор невідомий"}
+                </Text>
+              </View>
+            </View>
+          );
+        }}
+      />
+
+      <Modal
+        visible={!!detailShelf}
+        animationType="slide"
+        onRequestClose={() => setDetailShelf(null)}
+      >
+        {detailShelf ? (
+          <ScrollView
+            style={{ flex: 1, backgroundColor: colors.screen }}
+            contentContainerStyle={{ padding: 20, paddingTop: 56, paddingBottom: 40 }}
+          >
+            <Pressable onPress={() => setDetailShelf(null)} style={{ marginBottom: 12 }}>
+              <Text style={styles.link}>← Назад до полиці</Text>
             </Pressable>
-            <View style={[styles.actions, styles.cardBody]}>
-              <HistoryLink copyId={item.copy_id} style={styles.link} />
-              {item.borrowed_from && (
-                <Pressable onPress={() => router.push(`/chat/${item.borrowed_from!.id}`)}>
+            <BookCover
+              uri={
+                detailShelf.book.cover_url ||
+                (detailShelf.book.photo_urls && detailShelf.book.photo_urls[0]) ||
+                null
+              }
+              size="full"
+              bleed={0}
+            />
+            {(detailShelf.book.photo_urls || []).length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.shelfPhotoStrip}
+              >
+                {(detailShelf.book.photo_urls || []).map((u, i) => (
+                  <Image key={`${u}-${i}`} source={{ uri: u }} style={styles.shelfPhotoThumb} />
+                ))}
+              </ScrollView>
+            ) : null}
+            <Text style={styles.title}>{detailShelf.book.title}</Text>
+            <Text style={styles.meta}>
+              {detailShelf.book.authors || "Автор невідомий"}
+              {"\n"}
+              {detailShelf.copy_id ? `Примірник #${detailShelf.copy_id} · ` : ""}
+              {detailShelf.book.isbn?.startsWith("9799") || detailShelf.book.isbn_missing
+                ? detailShelf.book.note || "ISBN code not exists"
+                : detailShelf.book.isbn
+                  ? `ISBN ${detailShelf.book.isbn}`
+                  : ""}
+              {` · ${detailShelf.book.reader_age_summary}`}
+            </Text>
+            {detailShelf.borrowed_from ? (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 6 }}>
+                <Text style={styles.meta}>Позичено у </Text>
+                <UserNameLink user={detailShelf.borrowed_from} style={styles.meta} />
+                <Text
+                  style={[
+                    styles.meta,
+                    detailShelf.is_overdue ? { color: colors.stamp, fontWeight: "700" } : null,
+                  ]}
+                >
+                  {detailShelf.due_date ? ` · до ${detailShelf.due_date}` : ""}
+                  {detailShelf.is_overdue
+                    ? " · прострочено"
+                    : detailShelf.days_left != null
+                      ? ` · ще ${detailShelf.days_left} дн.`
+                      : ""}
+                  {detailShelf.return_pending ? " · очікує підтвердження" : ""}
+                </Text>
+              </View>
+            ) : null}
+            {!!detailShelf.listing_status_display && !detailShelf.borrowed_from ? (
+              <Text style={styles.meta}>
+                {detailShelf.listing_status_display}
+                {detailShelf.is_for_sale && detailShelf.sale_price
+                  ? ` · ${detailShelf.sale_price} ₴`
+                  : ""}
+                {detailShelf.is_for_rent && detailShelf.rent_price_per_day
+                  ? ` · ${detailShelf.rent_price_per_day} ₴/день`
+                  : ""}
+              </Text>
+            ) : null}
+            {detailShelf.owners_label && !detailShelf.borrowed_from ? (
+              <Text style={styles.meta}>Власники: {detailShelf.owners_label}</Text>
+            ) : null}
+            {detailShelf.price_eval?.status === "ready" && detailShelf.price_eval.price_avg ? (
+              <View style={styles.priceRow}>
+                <Text style={styles.priceAvg}>
+                  ≈ {detailShelf.price_eval.price_avg} ₴
+                  <Text style={styles.meta}>
+                    {" "}
+                    ({detailShelf.price_eval.price_min}–{detailShelf.price_eval.price_max})
+                  </Text>
+                </Text>
+                <View style={styles.priceActions}>
+                  <Pressable
+                    onPress={() => setSourcesOpen(detailShelf.price_eval?.quotes || [])}
+                    style={styles.priceBtn}
+                  >
+                    <Text style={styles.priceBtnText}>
+                      Price sources ({detailShelf.price_eval.source_count})
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => refreshPrice(detailShelf.book.id)}
+                    style={styles.priceBtn}
+                  >
+                    <Text style={styles.priceBtnText}>Оновити</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.priceRow}>
+                <Text style={styles.meta}>
+                  {detailShelf.price_eval?.status === "pending"
+                    ? "Оцінка ціни…"
+                    : detailShelf.price_eval?.status === "missing"
+                      ? "Ціну не знайдено"
+                      : "Ціна ще не оцінена"}
+                </Text>
+                <Pressable
+                  onPress={() => refreshPrice(detailShelf.book.id)}
+                  style={styles.priceBtn}
+                >
+                  <Text style={styles.priceBtnText}>
+                    {detailShelf.price_eval ? "Оновити ціну" : "Оцінити ціну"}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+            <View style={[styles.actions, { marginTop: 16 }]}>
+              <HistoryLink copyId={detailShelf.copy_id} style={styles.link} />
+              {detailShelf.borrowed_from ? (
+                <Pressable onPress={() => router.push(`/chat/${detailShelf.borrowed_from!.id}`)}>
                   <Text style={styles.link}>Чат з власником</Text>
                 </Pressable>
-              )}
-              {!item.borrowed_from && item.can_edit_manual && (
+              ) : null}
+              {!detailShelf.borrowed_from ? (
                 <Pressable
-                  onPress={() => openEditManual(item)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Редагувати"
-                  hitSlop={8}
+                  onPress={() => {
+                    const s = detailShelf;
+                    setDetailShelf(null);
+                    openListing(s);
+                  }}
+                >
+                  <Text style={styles.link}>Статуси</Text>
+                </Pressable>
+              ) : null}
+              {!detailShelf.borrowed_from && detailShelf.can_edit_manual ? (
+                <Pressable
+                  onPress={() => {
+                    setDetailShelf(null);
+                    openEditManual(detailShelf);
+                  }}
                 >
                   <Ionicons name="create-outline" size={22} color={colors.ink} />
                 </Pressable>
-              )}
-              {!item.borrowed_from && (
+              ) : null}
+              {!detailShelf.borrowed_from ? (
                 <Pressable
                   onPress={() => {
-                    const mn = String(item.book.min_readers_age);
-                    const mx = String(item.book.max_readers_age);
-                    ageSavedKeyRef.current = `${item.id}:${mn}:${mx}`;
+                    const mn = String(detailShelf.book.min_readers_age);
+                    const mx = String(detailShelf.book.max_readers_age);
+                    ageSavedKeyRef.current = `${detailShelf.id}:${mn}:${mx}`;
                     setAgeMin(mn);
                     setAgeMax(mx);
-                    setAgeShelf(item);
+                    setAgeShelf(detailShelf);
                   }}
                 >
                   <Text style={styles.link}>Вік читача</Text>
                 </Pressable>
-              )}
-              {!item.borrowed_from && (
-                <Pressable onPress={() => openListing(item)}>
-                  <Text style={styles.link}>Статус</Text>
-                </Pressable>
-              )}
+              ) : null}
               <Pressable
                 onPress={() =>
-                  router.push({ pathname: "/post/new", params: { book_id: String(item.book.id) } })
+                  router.push({
+                    pathname: "/post/new",
+                    params: { book_id: String(detailShelf.book.id) },
+                  })
                 }
               >
                 <Text style={styles.link}>Пост</Text>
               </Pressable>
-              <Pressable onPress={() => act(item)}>
-                <Text style={styles.action}>
-                  {item.borrowed_from ? "Повернути" : "Прибрати"}
-                </Text>
-              </Pressable>
+              {detailShelf.borrowed_from ? (
+                <Pressable
+                  onPress={async () => {
+                    await act(detailShelf);
+                    setDetailShelf(null);
+                  }}
+                >
+                  <Text style={styles.action}>Повернути</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    const s = detailShelf;
+                    Alert.alert(
+                      "Видалити",
+                      `Прибрати «${s.book.title}» з полиці?` +
+                        (isSharedLibrary && !iAmLibraryAdmin
+                          ? "\nЗапит піде адміністратору в чат."
+                          : isSharedLibrary && iAmLibraryAdmin
+                            ? "\nВласники отримають лише повідомлення в чаті."
+                            : ""),
+                      [
+                        { text: "Скасувати", style: "cancel" },
+                        {
+                          text: "Видалити",
+                          style: "destructive",
+                          onPress: async () => {
+                            setDetailShelf(null);
+                            await act(s);
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={styles.action}>Видалити</Text>
+                </Pressable>
+              )}
             </View>
-          </View>
-          );
-        }}
-      />
+          </ScrollView>
+        ) : null}
+      </Modal>
 
       <Modal
         visible={manualOpen}
@@ -762,8 +1111,18 @@ export default function ShelfScreen() {
         <View style={styles.backdrop}>
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20 }}>
             <View style={styles.sheet}>
-              <Text style={styles.modalH}>Статуси примірника</Text>
-              <Text style={styles.meta}>{listingShelf?.book.title}</Text>
+              <Text style={styles.modalH}>
+                {listingBulk
+                  ? `Статуси (${selectedIds.length})`
+                  : "Статуси примірника"}
+              </Text>
+              <Text style={styles.meta}>
+                {listingBulk
+                  ? isSharedLibrary && !iAmLibraryAdmin
+                    ? "Запит піде адміністратору в чат"
+                    : "Застосується до вибраних"
+                  : listingShelf?.book?.title || ""}
+              </Text>
               {LISTING_CHECKBOX_OPTIONS.map((opt) => {
                 const key = opt.key as keyof typeof listingFlags;
                 const on = !!listingFlags[key];
@@ -910,7 +1269,122 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     paddingHorizontal: 16,
     paddingTop: 4,
+    paddingBottom: 4,
+  },
+  sharedHint: {
+    color: colors.ink,
+    fontSize: 12,
+    lineHeight: 16,
+    paddingHorizontal: 16,
     paddingBottom: 8,
+    fontWeight: "600",
+  },
+  selectHint: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  selectionBar: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.stamp,
+    backgroundColor: colors.paper,
+    gap: 8,
+  },
+  selectionCount: { color: colors.ink, fontWeight: "700" },
+  selectionActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  selectionBtn: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: btnRadius,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  selectionBtnText: { color: colors.ink, fontWeight: "600", fontSize: 13 },
+  selectionBtnDanger: {
+    borderWidth: 1,
+    borderColor: colors.stamp,
+    borderRadius: btnRadius,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  selectionBtnDangerText: { color: colors.stamp, fontWeight: "700", fontSize: 13 },
+  cardSelected: { borderColor: colors.stamp, borderWidth: 2 },
+  flexRow: {
+    gap: 8,
+    marginBottom: 8,
+    justifyContent: "flex-start",
+  },
+  flexCard: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    overflow: "hidden",
+    position: "relative",
+  },
+  coverWrap: {
+    width: "100%",
+    aspectRatio: 2 / 3,
+    backgroundColor: "#F3F1EC",
+    position: "relative",
+    overflow: "hidden",
+  },
+  coverPress: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+  },
+  coverImg: {
+    width: "100%",
+    height: "100%",
+  },
+  coverMissing: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 8,
+  },
+  coverMissingText: {
+    color: colors.muted,
+    fontSize: 11,
+    textAlign: "center",
+  },
+  selectCheck: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    zIndex: 10,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderRadius: 6,
+    padding: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 4,
+  },
+  flexCardMeta: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minHeight: 64,
+  },
+  flexTitle: {
+    color: colors.ink,
+    fontWeight: "700",
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  flexAuthor: {
+    color: colors.muted,
+    fontSize: 11,
+    marginTop: 4,
+    lineHeight: 15,
   },
   priceTotalBox: {
     marginHorizontal: 16,

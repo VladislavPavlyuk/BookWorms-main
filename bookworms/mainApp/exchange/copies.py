@@ -5,16 +5,30 @@ from ..copy_events import log_copy_event
 from ..models import Book, BookCopy, CopyEvent, CustomUser, Shelf
 
 
-def add_owned_copy(user: CustomUser, book: Book) -> Shelf:
-    """Новий фізичний примірник на полиці власника."""
-    copy = BookCopy.objects.create(book=book, owner=user)
+def add_owned_copy(user: CustomUser, book: Book, *, library=None, added_by=None) -> Shelf:
+    """Новий фізичний примірник на полиці того, хто додає (legal owner = адмін бібліотеки)."""
+    lib = library
+    if lib is None:
+        try:
+            from ..library_service import ensure_personal_library
+
+            lib = ensure_personal_library(user)
+        except Exception:
+            lib = None
+    owner = lib.admin if lib is not None else user
+    copy = BookCopy.objects.create(
+        book=book,
+        owner=owner,
+        library=lib,
+        added_by=added_by or user,
+    )
     shelf = Shelf.objects.create(user=user, book=book, copy=copy)
     log_copy_event(
         copy,
         CopyEvent.Code.ADDED,
         actor=user,
         holder=user,
-        legal_owner=user,
+        legal_owner=owner,
     )
     try:
         from ..book_price import ensure_pending_and_schedule

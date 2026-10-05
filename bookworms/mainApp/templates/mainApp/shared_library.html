@@ -1,0 +1,331 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Спільна бібліотека{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Спільна бібліотека</h1>
+<p class="text-muted small mb-4">
+    Об’єднання / поділ полиць сім’ї чи друзів. Дії учасників підтверджує адмін.
+    Адміністратора спільної бібліотеки обирають голосуванням усіх учасників.
+</p>
+
+{% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">{{ snap.library.name }}</h2>
+        <p class="mb-1 small text-muted">
+            Адмін: <strong>@{{ snap.library.admin_username }}</strong>
+            {% if snap.library.i_am_admin %}(ви){% endif %}
+            · учасників: {{ snap.library.member_count }}
+            {% if snap.library.is_shared %}· <span class="badge text-bg-secondary">об’єднана</span>{% endif %}
+        </p>
+        <ul class="mb-0">
+            {% for m in snap.members %}
+            <li>@{{ m.username }} — {{ m.role }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+{# —— Admin election —— #}
+<div class="card mb-4 border-primary">
+    <div class="card-body">
+        <h2 class="h5">Голосування за адміністратора</h2>
+        {% if snap.election %}
+            <p class="small text-muted mb-2">
+                {{ snap.election.reason }} · голосів {{ snap.election.votes_cast }}/{{ snap.election.member_count }}
+            </p>
+            <ul class="list-unstyled mb-3">
+                {% for c in snap.election.candidates %}
+                <li class="d-flex flex-wrap align-items-center gap-2 border-bottom py-2">
+                    <span class="flex-grow-1">
+                        @{{ c.username }}
+                        {% if c.is_current_admin %}<span class="badge text-bg-dark">поточний</span>{% endif %}
+                        — <strong>{{ c.votes }}</strong>
+                    </span>
+                    {% if not snap.election.i_voted or snap.election.my_candidate_id != c.user_id %}
+                    <form method="post" class="m-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="vote_admin">
+                        <input type="hidden" name="election_id" value="{{ snap.election.election_id }}">
+                        <input type="hidden" name="candidate_id" value="{{ c.user_id }}">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                            {% if snap.election.i_voted %}Змінити голос{% else %}Голосувати{% endif %}
+                        </button>
+                    </form>
+                    {% else %}
+                    <span class="badge text-bg-success">ваш голос</span>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            <div class="d-flex flex-wrap gap-2">
+                {% if snap.election.can_finalize %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="finalize_election">
+                    <input type="hidden" name="election_id" value="{{ snap.election.election_id }}">
+                    <button type="submit" class="btn btn-success btn-sm">Завершити вибори</button>
+                </form>
+                {% endif %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="cancel_election">
+                    <input type="hidden" name="election_id" value="{{ snap.election.election_id }}">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">Скасувати</button>
+                </form>
+            </div>
+        {% elif snap.library.is_shared %}
+            <p class="small text-muted">Немає активного голосування. Будь-який учасник може відкрити вибори.</p>
+            <form method="post" class="row g-2 align-items-end">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="start_election">
+                <div class="col-md-8">
+                    <label class="form-label">Причина</label>
+                    <input name="reason" class="form-control" value="Зміна адміністратора" maxlength="200">
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary w-100">Відкрити голосування</button>
+                </div>
+            </form>
+        {% else %}
+            <p class="small text-muted mb-0">Голосування доступне після об’єднання з іншим користувачем.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% if snap.library.i_am_admin %}
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">Об’єднати бібліотеку</h2>
+        <p class="small text-muted">Оберіть користувача — запит піде в чат, де він підтвердить або відхилить.</p>
+        <form method="post" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="invite">
+            <div class="col-md-5">
+                <label class="form-label">Користувач</label>
+                <select name="username" class="form-select" required>
+                    <option value="" disabled selected>— оберіть —</option>
+                    {% for c in snap.merge_candidates %}
+                    <option value="{{ c.username }}" {% if c.invite_pending %}disabled{% endif %}>
+                        @{{ c.username }}{% if c.invite_pending %} (очікує){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Повідомлення (необов’язково)</label>
+                <input name="message" class="form-control" maxlength="300">
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100">Merge</button>
+            </div>
+        </form>
+        {% if not snap.merge_candidates %}
+        <p class="small text-muted mt-2 mb-0">Немає доступних користувачів для об’єднання.</p>
+        {% endif %}
+        {% if snap.invites_out %}
+        <hr>
+        <h3 class="h6">Очікують відповіді</h3>
+        <ul class="list-unstyled mb-0">
+            {% for i in snap.invites_out %}
+            <li class="d-flex justify-content-between align-items-center border-bottom py-2 gap-2">
+                <span>→ @{{ i.to_username }}
+                    {% if i.status == "awaiting_isbn" %}
+                    <span class="badge text-bg-warning">очікує ISBN</span>
+                    {% endif %}
+                    <a class="small ms-2" href="{% url 'message_thread' i.to_user_id %}">чат</a>
+                </span>
+                <form method="post" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="cancel_invite">
+                    <input type="hidden" name="invite_id" value="{{ i.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Скасувати</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if snap.awaiting_isbn_merges %}
+<div class="card mb-4 border-danger">
+    <div class="card-body">
+        <h2 class="h5">Підтвердіть кількість спільних ISBN</h2>
+        <p class="small text-muted">
+            Користувач погодився на об'єднання. Вкажіть <strong>реальну кількість</strong>
+            фізичних примірників для дубльованих ISBN.
+        </p>
+        {% for inv in snap.awaiting_isbn_merges %}
+        <div class="border rounded p-3 mb-3">
+            <p class="mb-2">Merge з <strong>@{{ inv.to_username }}</strong></p>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="confirm_merge_isbn">
+                <input type="hidden" name="invite_id" value="{{ inv.id }}">
+                {% for row in inv.overlap %}
+                <div class="mb-3">
+                    <label class="form-label">
+                        {{ row.title }} (ISBN {{ row.isbn }}) —
+                        у вас {{ row.target_count }} + у @{{ inv.to_username }} {{ row.source_count }}
+                        = {{ row.combined }} у базі
+                    </label>
+                    <input type="number" class="form-control" name="isbn_count_{{ row.isbn }}"
+                           min="1" max="{{ row.combined }}" value=""
+                           placeholder="1…{{ row.combined }}" required>
+                </div>
+                {% empty %}
+                <p class="small text-muted">Немає спільних ISBN — підтвердіть об'єднання.</p>
+                {% endfor %}
+                <button type="submit" class="btn btn-success">Підтвердити кількість і об'єднати</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if snap.invites_in or merge_overlap %}
+<div class="card mb-4 border-warning">
+    <div class="card-body">
+        <h2 class="h5">Вхідні запрошення (merge)</h2>
+        {% if merge_overlap %}
+        <div class="alert alert-warning">
+            Спільні ISBN — вкажіть <strong>реальну кількість</strong> фізичних примірників.
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="confirm_merge_isbn">
+            <input type="hidden" name="invite_id" value="{{ merge_invite_id }}">
+            {% for row in merge_overlap %}
+            <div class="mb-3">
+                <label class="form-label">
+                    {{ row.title }} (ISBN {{ row.isbn }}) —
+                    цільова {{ row.target_count }} + джерело {{ row.source_count }} = {{ row.combined }} у базі
+                </label>
+                <input type="number" class="form-control" name="isbn_count_{{ row.isbn }}"
+                       min="1" max="{{ row.combined }}" value=""
+                       placeholder="1…{{ row.combined }}" required>
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-success">Підтвердити об’єднання</button>
+        </form>
+        {% else %}
+            {% for i in snap.invites_in %}
+            <div class="border rounded p-3 mb-3">
+                <p class="mb-2">
+                    Від <strong>@{{ i.from_username }}</strong> · {{ i.library_name }}
+                    {% if i.message %}<br><span class="text-muted small">{{ i.message }}</span>{% endif %}
+                    <br><a class="small" href="{% url 'message_thread' i.from_user_id %}">відповісти в чаті</a>
+                </p>
+                {% if i.overlap %}
+                <p class="small text-warning mb-2">
+                    Є спільні ISBN ({{ i.overlap|length }}) — після вашої згоди адмін підтвердить кількість.
+                </p>
+                {% endif %}
+                <div class="d-flex gap-2">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="accept_invite">
+                        <input type="hidden" name="invite_id" value="{{ i.id }}">
+                        <button type="submit" class="btn btn-sm btn-success">Прийняти</button>
+                    </form>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="reject_invite">
+                        <input type="hidden" name="invite_id" value="{{ i.id }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Відхилити</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if snap.pending_actions %}
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">Очікують підтвердження адміна</h2>
+        <ul class="list-unstyled mb-0">
+            {% for a in snap.pending_actions %}
+            <li class="border-bottom py-3">
+                <div class="fw-semibold">{{ a.action_type_label }} · @{{ a.initiator_username }}</div>
+                <pre class="small text-muted mb-2" style="white-space:pre-wrap;">{{ a.payload }}</pre>
+                {% if snap.library.i_am_admin %}
+                <div class="d-flex gap-2">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="resolve_action">
+                        <input type="hidden" name="action_id" value="{{ a.id }}">
+                        <input type="hidden" name="approve" value="1">
+                        <button type="submit" class="btn btn-sm btn-success">Схвалити</button>
+                    </form>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="resolve_action">
+                        <input type="hidden" name="action_id" value="{{ a.id }}">
+                        <input type="hidden" name="approve" value="0">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Відхилити</button>
+                    </form>
+                </div>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+
+{% if not snap.library.i_am_admin %}
+<div class="card mb-4 border-danger">
+    <div class="card-body">
+        <h2 class="h5">Поділ / вихід</h2>
+        <p class="small text-muted">Оберіть примірники, які забираєте з собою. Адмін має схвалити.</p>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="split_leave">
+            {% if snap.splittable_copies %}
+            <div class="mb-3">
+                {% for c in snap.splittable_copies %}
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="copy_ids" value="{{ c.id }}" id="copy{{ c.id }}">
+                    <label class="form-check-label" for="copy{{ c.id }}">
+                        {{ c.title }} · ISBN {{ c.isbn }} · #{{ c.id }}
+                        {% if c.added_by_me %}<span class="text-muted">(додали ви)</span>{% endif %}
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="small text-muted">Немає примірників, які можна забрати (порожній вихід).</p>
+            {% endif %}
+            <button type="submit" class="btn btn-outline-danger">Надіслати запит на поділ</button>
+        </form>
+        {% if snap.library.i_am_admin %}
+        <p class="small text-warning mt-2 mb-0">Адмін спочатку передає роль через голосування, потім може вийти.</p>
+        {% endif %}
+    </div>
+</div>
+{% elif snap.library.is_shared %}
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">Поділ (адмін)</h2>
+        <p class="small text-muted mb-0">
+            Щоб вийти з об’єднаної бібліотеки: проведіть голосування → оберіть іншого адміна → після зміни ролі
+            з’явиться форма поділу.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+<p><a href="{% url 'my_library' %}">← Моя полиця</a></p>
+{% endblock %}

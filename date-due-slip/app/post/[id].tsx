@@ -12,6 +12,7 @@ import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
+import { shareComment, sharePost } from "../../src/shareContent";
 import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Post } from "../../src/types";
@@ -116,21 +117,31 @@ export default function PostDetail() {
         </>
       )}
 
-      <Pressable
-        onPress={like}
-        style={styles.likeRow}
-        accessibilityRole="button"
-        accessibilityLabel={`Вподобайка ${post.likes_count}`}
-      >
-        <Ionicons
-          name={post.liked_by_me ? "heart" : "heart-outline"}
-          size={22}
-          color="#E11D48"
-        />
-        <Text style={[styles.like, post.liked_by_me && styles.likeOn]}>
-          {post.likes_count}
-        </Text>
-      </Pressable>
+      <View style={styles.actionsRow}>
+        <Pressable
+          onPress={like}
+          style={styles.likeRow}
+          accessibilityRole="button"
+          accessibilityLabel={`Вподобайка ${post.likes_count}`}
+        >
+          <Ionicons
+            name={post.liked_by_me ? "heart" : "heart-outline"}
+            size={22}
+            color="#E11D48"
+          />
+          <Text style={[styles.like, post.liked_by_me && styles.likeOn]}>
+            {post.likes_count}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => sharePost(post).catch(() => {})}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Поділитися"
+        >
+          <Ionicons name="share-social-outline" size={22} color={colors.ink} />
+        </Pressable>
+      </View>
 
       {mine && !editing && (
         <View style={styles.row}>
@@ -156,7 +167,25 @@ export default function PostDetail() {
       <Text style={styles.sec}>Коментарі</Text>
       {(post.comments || []).map((c) => (
         <View key={c.id} style={styles.comment}>
-          <UserNameLink user={c.author} style={styles.meta} />
+          <View style={styles.commentHead}>
+            <UserNameLink user={c.author} style={styles.meta} />
+            <Pressable
+              onPress={() =>
+                shareComment({
+                  postId: post.id,
+                  commentId: c.id,
+                  author: c.author.username,
+                  text: c.text,
+                  postTitle: post.title,
+                }).catch(() => {})
+              }
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Поділитися коментарем"
+            >
+              <Ionicons name="share-social-outline" size={18} color={colors.ink} />
+            </Pressable>
+          </View>
           <Text style={styles.body}>{c.text}</Text>
         </View>
       ))}
@@ -188,11 +217,23 @@ const styles = StyleSheet.create({
   body: { color: colors.ink, marginTop: 8, lineHeight: 22 },
   like: { marginTop: 0, color: colors.muted, fontWeight: "700", fontSize: 16 },
   likeOn: { color: "#E11D48", fontWeight: "800" },
-  likeRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 },
+  likeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 14,
+  },
   row: { flexDirection: "row", gap: 20, marginTop: 12, alignItems: "center" },
   link: { color: colors.ink, fontWeight: "700" },
   sec: { marginTop: 24, fontWeight: "800", color: colors.ink, marginBottom: 8 },
   comment: { borderBottomWidth: 1, borderColor: colors.line, paddingVertical: 8 },
+  commentHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   input: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 10, marginTop: 12 },
   commentSendRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
   sendIconBtn: {

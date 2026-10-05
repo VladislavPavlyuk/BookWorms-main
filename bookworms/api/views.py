@@ -18,12 +18,14 @@ from mainApp.exchange_service import (
     cancel_exchange_request,
     cancel_loan_handoff,
     confirm_borrow_return,
+    confirm_exchange_due_date,
     confirm_handoff_give,
     confirm_handoff_receive,
     create_exchange_request,
     ensure_shelves_have_copies,
     get_or_create_book_from_payload,
     is_copy_lent_out,
+    propose_exchange_due_date,
     reject_exchange_request,
     remove_owned_shelf,
     request_borrow_return,
@@ -275,6 +277,28 @@ def me(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+def contact_config(request):
+    """Public Web3Forms config for RN / SPA client-side submit (same as /contact/)."""
+    from mainApp.forms import (
+        CONTACT_MAX_FILE_BYTES,
+        CONTACT_MAX_SCREENSHOTS,
+        CONTACT_MESSAGE_MAX,
+    )
+
+    return Response(
+        {
+            "access_key": (settings.WEB3FORMS_ACCESS_KEY or "").strip(),
+            "endpoint": "https://api.web3forms.com/submit",
+            "max_screenshots": CONTACT_MAX_SCREENSHOTS,
+            "max_file_bytes": CONTACT_MAX_FILE_BYTES,
+            "message_max": CONTACT_MESSAGE_MAX,
+            "to_hint": "vladpavliuk@gmail.com",
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def post_list(request):
     from mainApp.feed_resume import (
         FEED_ORDER,
@@ -426,27 +450,23 @@ def post_comment(request, post_id):
 
 @api_view(["GET"])
 def my_shelf(request):
-    shelves_all = list(
-        request.user.shelf_entries.select_related(
-            "book", "borrowed_from", "user", "copy", "book__price_evaluation"
-        )
-        .prefetch_related("book__photos", "book__price_evaluation__quotes")
-        .order_by("-added_at")
+    from mainApp.library_service import (
+        ensure_personal_library,
+        library_active_loans_by_copy,
+        list_my_library_shelves,
     )
+
+    shelves_all = list_my_library_shelves(request.user)
     shelves_all = ensure_shelves_have_copies(shelves_all)
+    lib = ensure_personal_library(request.user)
+    member_count = lib.memberships.count()
     pending = list(
         Shelf.objects.filter(borrowed_from=request.user, return_pending=True)
         .select_related("user", "book", "borrowed_from", "copy")
         .order_by("-added_at")
     )
     pending = ensure_shelves_have_copies(pending)
-    loan_by_copy = {
-        row.copy_id: row
-        for row in Shelf.objects.filter(borrowed_from=request.user).select_related(
-            "user", "book", "copy"
-        )
-        if row.copy_id
-    }
+    loan_by_copy = library_active_loans_by_copy(lib)
     pending_by_copy = {p.copy_id: p.id for p in pending if p.copy_id}
     lent_out_count = 0
     for s in shelves_all:
@@ -476,6 +496,10 @@ def my_shelf(request):
             ).data,
             "lent_out_count": lent_out_count,
             "price_total_uah": str(library_price_total_uah(evals)),
+            "is_shared_library": member_count >= 2,
+            "shared_member_count": member_count,
+            "shared_library_name": lib.display_name,
+            "i_am_library_admin": lib.admin_id == request.user.id,
         }
     )
 
@@ -519,12 +543,54 @@ def due_slips(request):
 
 @api_view(["POST"])
 def shelf_add_isbn(request):
+    from mainApp.library_service import (
+        IsbnConfirmNeeded,
+        LibraryAction,
+        LibraryError,
+        add_copy_for_user,
+    )
+
     ser = AddIsbnSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
     book = resolve_and_sync_book_by_isbn(ser.validated_data["isbn"])
-    shelf = add_owned_copy(request.user, book)
+    try:
+        result = add_copy_for_user(
+            request.user,
+            book,
+            confirm_extra=bool(ser.validated_data.get("confirm_extra")),
+        )
+    except LibraryError as e:
+        return _error(e.message)
+    if isinstance(result, IsbnConfirmNeeded):
+        return Response(
+            {
+                "needs_confirmation": True,
+                "isbn": result.isbn,
+                "existing_count": result.existing_count,
+                "title": result.title,
+                "detail": (
+                    f"У бібліотеці вже є {result.existing_count} примірник(и) "
+                    f"«{result.title}» (ISBN {result.isbn}). "
+                    f"Додати ще один фізичний примірник?"
+                ),
+            },
+            status=409,
+        )
+    if isinstance(result, LibraryAction):
+        return Response(
+            {
+                "pending_approval": True,
+                "action_id": result.id,
+                "chat_partner_id": result.library.admin_id,
+                "detail": (
+                    "У бібліотеці вже є цей ISBN. Запит надіслано адміністратору в чат — "
+                    "очікуйте підтвердження або відхилення."
+                ),
+            },
+            status=202,
+        )
     shelf = Shelf.objects.select_related("book", "borrowed_from", "user", "copy").get(
-        pk=shelf.pk
+        pk=result.pk
     )
     return Response(ShelfSerializer(shelf, context={"request": request}).data, status=201)
 
@@ -560,11 +626,52 @@ def shelf_add_manual(request):
     )
     save_book_photos(book, files, request=request)
     book.refresh_from_db()
-    shelf = add_owned_copy(request.user, book)
+    from mainApp.library_service import (
+        IsbnConfirmNeeded,
+        LibraryAction,
+        LibraryError,
+        add_copy_for_user,
+    )
+
+    try:
+        result = add_copy_for_user(
+            request.user,
+            book,
+            confirm_extra=bool(d.get("confirm_extra")),
+        )
+    except LibraryError as e:
+        return _error(e.message)
+    if isinstance(result, IsbnConfirmNeeded):
+        return Response(
+            {
+                "needs_confirmation": True,
+                "isbn": result.isbn,
+                "existing_count": result.existing_count,
+                "title": result.title,
+                "detail": (
+                    f"У бібліотеці вже є {result.existing_count} примірник(и) "
+                    f"з ISBN {result.isbn}. Додати ще один?"
+                ),
+            },
+            status=409,
+        )
+    if isinstance(result, LibraryAction):
+        return Response(
+            {
+                "pending_approval": True,
+                "action_id": result.id,
+                "chat_partner_id": result.library.admin_id,
+                "detail": (
+                    "У бібліотеці вже є цей ISBN. Запит надіслано адміністратору в чат — "
+                    "очікуйте підтвердження або відхилення."
+                ),
+            },
+            status=202,
+        )
     shelf = (
         Shelf.objects.select_related("book", "borrowed_from", "user", "copy")
         .prefetch_related("book__photos")
-        .get(pk=shelf.pk)
+        .get(pk=result.pk)
     )
     return Response(ShelfSerializer(shelf, context={"request": request}).data, status=201)
 
@@ -675,14 +782,34 @@ def shelf_recognize_cover(request):
 
 @api_view(["DELETE"])
 def shelf_remove(request, shelf_id):
-    shelf = Shelf.objects.filter(pk=shelf_id, user=request.user).select_related("copy").first()
-    if not shelf:
-        return _error("Запис не знайдено.", 404)
-    if shelf.borrowed_from_id:
-        return _error("Позичену книгу не можна видалити — лише повернути власнику.")
+    from mainApp.library_service import (
+        LibraryAction,
+        LibraryError,
+        get_removable_shelf,
+        request_remove_copy,
+    )
+
+    try:
+        shelf = get_removable_shelf(request.user, shelf_id)
+    except LibraryError as e:
+        status = 404 if "не знайдено" in (e.message or "").lower() else 403
+        return _error(e.message, status)
     if is_copy_lent_out(shelf.copy_id):
         return _error("Примірник зараз у позиці — спочатку дочекайтесь повернення.")
-    remove_owned_shelf(shelf)
+    try:
+        result = request_remove_copy(request.user, shelf)
+    except LibraryError as e:
+        return _error(e.message)
+    if isinstance(result, LibraryAction):
+        return Response(
+            {
+                "pending_approval": True,
+                "action_id": result.id,
+                "chat_partner_id": result.library.admin_id,
+                "detail": "Запит на видалення надіслано адміністратору в чат.",
+            },
+            status=202,
+        )
     return Response(status=204)
 
 
@@ -706,11 +833,15 @@ def shelf_reader_age(request, shelf_id):
 
 @api_view(["POST"])
 def shelf_listing(request, shelf_id):
-    """Owner updates BookCopy listing status / sale / rent price."""
-    from mainApp.copy_listing import apply_copy_listing
+    """Admin applies listing immediately; shared-library members need approval."""
+    from mainApp.library_service import (
+        LibraryAction,
+        LibraryError,
+        request_listing_change,
+    )
 
     shelf = (
-        Shelf.objects.select_related("copy", "book")
+        Shelf.objects.select_related("copy", "book", "copy__library", "copy__book")
         .filter(pk=shelf_id, user=request.user)
         .first()
     )
@@ -718,36 +849,112 @@ def shelf_listing(request, shelf_id):
         return _error("Запис не знайдено.", 404)
     if shelf.borrowed_from_id:
         return _error("Статус можна змінити лише для власного примірника.")
-    if not shelf.copy_id or shelf.copy.owner_id != request.user.pk:
+    if not shelf.copy_id:
         return _error("Це не ваш примірник.")
+    copy = shelf.copy
     ser = CopyListingSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
     vd = ser.validated_data
+    listing_kwargs = dict(
+        flags={
+            k: vd.get(k)
+            for k in (
+                "is_fee_sharing",
+                "is_hidden",
+                "is_for_rent",
+                "is_for_exchange",
+                "is_free_of_deposit",
+            )
+            if k in vd
+        }
+        or None,
+        sale_gift=vd.get("sale_gift") if "sale_gift" in vd else None,
+        sale_price=vd.get("sale_price"),
+        rent_price_per_day=vd.get("rent_price_per_day"),
+        listing_status=vd.get("listing_status") or None,
+    )
     try:
-        apply_copy_listing(
-            shelf.copy,
-            flags={
-                k: vd.get(k)
-                for k in (
-                    "is_fee_sharing",
-                    "is_hidden",
-                    "is_for_rent",
-                    "is_for_exchange",
-                    "is_free_of_deposit",
-                )
-                if k in vd
-            }
-            or None,
-            sale_gift=vd.get("sale_gift") if "sale_gift" in vd else None,
-            sale_price=vd.get("sale_price"),
-            rent_price_per_day=vd.get("rent_price_per_day"),
-            listing_status=vd.get("listing_status") or None,
+        result = request_listing_change(request.user, copy, listing_kwargs)
+    except (DjangoValidationError, LibraryError) as exc:
+        return _error(str(getattr(exc, "message", exc)))
+    if isinstance(result, LibraryAction):
+        return Response(
+            {
+                "pending_approval": True,
+                "action_id": result.id,
+                "chat_partner_id": result.library.admin_id,
+                "detail": "Запит на зміну статусу надіслано адміністратору в чат.",
+            },
+            status=202,
         )
-    except DjangoValidationError as exc:
-        return _error(str(exc))
     shelf.refresh_from_db()
     shelf.copy.refresh_from_db()
     return Response(ShelfSerializer(shelf, context={"request": request}).data)
+
+
+@api_view(["POST"])
+def shelf_bulk(request):
+    """Bulk listing / delete for selected owned shelves."""
+    from mainApp.library_service import (
+        LibraryError,
+        request_bulk_listing,
+        request_bulk_remove,
+    )
+
+    shelf_ids = request.data.get("shelf_ids") or []
+    if not isinstance(shelf_ids, (list, tuple)):
+        return _error("shelf_ids має бути списком.")
+    action = (request.data.get("action") or "").strip()
+    try:
+        if action == "delete":
+            result = request_bulk_remove(request.user, list(shelf_ids))
+        elif action == "listing":
+            ser = CopyListingSerializer(data=request.data)
+            ser.is_valid(raise_exception=True)
+            vd = ser.validated_data
+            listing_kwargs = dict(
+                flags={
+                    k: vd.get(k)
+                    for k in (
+                        "is_fee_sharing",
+                        "is_hidden",
+                        "is_for_rent",
+                        "is_for_exchange",
+                        "is_free_of_deposit",
+                    )
+                    if k in vd
+                }
+                or None,
+                sale_gift=vd.get("sale_gift") if "sale_gift" in vd else None,
+                sale_price=vd.get("sale_price"),
+                rent_price_per_day=vd.get("rent_price_per_day"),
+                listing_status=vd.get("listing_status") or None,
+            )
+            result = request_bulk_listing(request.user, list(shelf_ids), listing_kwargs)
+        else:
+            return _error("action має бути delete або listing.")
+    except (DjangoValidationError, LibraryError) as exc:
+        return _error(str(getattr(exc, "message", exc)))
+
+    if result.get("pending_approval"):
+        return Response(
+            {
+                "pending_approval": True,
+                "action_id": result.get("action_id"),
+                "chat_partner_id": result.get("admin_id"),
+                "count": result.get("count"),
+                "detail": "Запит надіслано адміністратору спільної бібліотеки в чат.",
+            },
+            status=202,
+        )
+    return Response(
+        {
+            "ok": True,
+            "removed": result.get("removed"),
+            "updated": result.get("updated"),
+            "blocked": result.get("blocked") or [],
+        }
+    )
 
 
 @api_view(["POST"])
@@ -814,11 +1021,13 @@ def book_detail(request, book_id):
     owners = []
     seen = set()
     for h in holders:
-        oid = h.borrowed_from_id or h.user_id
-        u = h.borrowed_from if h.borrowed_from_id else h.user
-        if oid not in seen:
-            seen.add(oid)
-            owners.append(u)
+        for u in getattr(h, "library_owners", None) or [
+            h.borrowed_from if h.borrowed_from_id else h.user
+        ]:
+            if u and u.id not in seen:
+                seen.add(u.id)
+                owners.append(u)
+    owners_label = " + ".join(u.username for u in owners)
     comments_qs = Comment.objects.select_related("author").order_by("created_at")
     posts = (
         _annotate_posts(Post.objects.filter(book=book), request.user)
@@ -831,6 +1040,7 @@ def book_detail(request, book_id):
         {
             "book": BookSerializer(book).data,
             "owners": UserPublicSerializer(owners, many=True, context=ctx).data,
+            "owners_label": owners_label,
             "holders": ShelfSerializer(holders, many=True, context=ctx).data,
             "posts": PostSerializer(posts, many=True, context=ctx).data,
         }
@@ -1037,7 +1247,12 @@ def exchange_create(request):
                 )
                 continue
         try:
-            req = create_exchange_request(request.user, target, offer)
+            req = create_exchange_request(
+                request.user,
+                target,
+                offer,
+                proposed_due_date=row.get("proposed_due_date"),
+            )
             created.append(req)
         except ExchangeError as exc:
             errors.append(f'"{target.book.title[:45]}": {exc.message}')
@@ -1051,14 +1266,40 @@ def exchange_create(request):
     )
 
 
-def _exchange_action(request, request_id, fn):
-    fn(request_id, request.user)
+def _exchange_action(request, request_id, fn, **kwargs):
+    fn(request_id, request.user, **kwargs)
     return Response({"ok": True})
 
 
 @api_view(["POST"])
 def exchange_accept_view(request, request_id):
-    return _exchange_action(request, request_id, accept_exchange_request)
+    due = request.data.get("due_date") if hasattr(request, "data") else None
+    return _exchange_action(
+        request, request_id, accept_exchange_request, due_date=due
+    )
+
+
+@api_view(["POST"])
+def exchange_propose_due_view(request, request_id):
+    due = request.data.get("due_date") or request.data.get("proposed_due_date")
+    try:
+        req = propose_exchange_due_date(request_id, request.user, due)
+    except ExchangeError as exc:
+        return _error(exc.message, getattr(exc, "status", 400) or 400)
+    return Response(
+        ExchangeRequestSerializer(req, context={"request": request}).data
+    )
+
+
+@api_view(["POST"])
+def exchange_confirm_due_view(request, request_id):
+    try:
+        req = confirm_exchange_due_date(request_id, request.user)
+    except ExchangeError as exc:
+        return _error(exc.message, getattr(exc, "status", 400) or 400)
+    return Response(
+        ExchangeRequestSerializer(req, context={"request": request}).data
+    )
 
 
 @api_view(["POST"])
@@ -1120,6 +1361,10 @@ def message_thread(request, partner_id):
             "handoffs": LoanHandoffSerializer(
                 thread.handoffs, many=True, context=ctx
             ).data,
+            "library_invites_in": thread.library_invites_in,
+            "library_invites_out": thread.library_invites_out,
+            "library_actions_in": thread.library_actions_in,
+            "library_actions_out": thread.library_actions_out,
         }
     )
 
@@ -1175,3 +1420,205 @@ def notifications_mark_read(request):
         return _error("ids має бути списком.")
     n = mark_messages_read_for_user(request.user, ids if ids is not None else None)
     return Response({"marked": n, "unread_count": unread_count(request.user)})
+
+
+@api_view(["GET"])
+def library_mine(request):
+    from mainApp.library_service import library_snapshot
+
+    return Response(library_snapshot(request.user))
+
+
+@api_view(["POST"])
+def library_invite(request):
+    from mainApp.library_service import LibraryError, invite_to_library
+
+    username = (request.data.get("username") or "").strip()
+    message = (request.data.get("message") or "").strip()
+    if not username:
+        return _error("Вкажіть username.")
+    try:
+        inv = invite_to_library(request.user, username, message)
+    except LibraryError as e:
+        return _error(e.message)
+    return Response(
+        {
+            "id": inv.id,
+            "to_username": inv.to_user.username,
+            "to_user_id": inv.to_user_id,
+            "chat_partner_id": inv.to_user_id,
+        },
+        status=201,
+    )
+
+
+@api_view(["POST"])
+def library_invite_cancel(request, invite_id):
+    from mainApp.library_service import LibraryError, cancel_invite
+
+    try:
+        cancel_invite(request.user, invite_id)
+    except LibraryError as e:
+        return _error(e.message)
+    return Response({"ok": True})
+
+
+@api_view(["POST"])
+def library_invite_reject(request, invite_id):
+    from mainApp.library_service import LibraryError, reject_invite
+
+    try:
+        reject_invite(request.user, invite_id)
+    except LibraryError as e:
+        return _error(e.message)
+    return Response({"ok": True})
+
+
+@api_view(["POST"])
+def library_invite_accept(request, invite_id):
+    from mainApp.library_service import AwaitAdminIsbn, LibraryError, accept_invite
+
+    try:
+        result = accept_invite(request.user, invite_id)
+    except LibraryError as e:
+        return _error(e.message)
+    if isinstance(result, AwaitAdminIsbn):
+        return Response(
+            {
+                "awaiting_admin_isbn": True,
+                "invite_id": result.invite.id,
+                "overlap": result.overlap,
+                "detail": (
+                    "Об'єднання очікує підтвердження кількості примірників адміністратором."
+                ),
+            },
+            status=200,
+        )
+    return Response(
+        {"ok": True, "library_id": result.id, "name": result.display_name}
+    )
+
+
+@api_view(["POST"])
+def library_invite_confirm_isbn(request, invite_id):
+    from mainApp.library_service import LibraryError, admin_confirm_merge_isbn
+
+    raw = request.data.get("isbn_counts") or {}
+    if not isinstance(raw, dict):
+        return _error("isbn_counts має бути об'єктом {isbn: count}.")
+    try:
+        lib = admin_confirm_merge_isbn(request.user, invite_id, isbn_counts=raw)
+    except LibraryError as e:
+        overlap = getattr(e, "overlap", None)
+        if overlap is not None:
+            return Response(
+                {
+                    "needs_isbn_counts": True,
+                    "awaiting_admin_isbn": True,
+                    "overlap": overlap,
+                    "detail": e.message,
+                },
+                status=409,
+            )
+        return _error(e.message)
+    return Response({"ok": True, "library_id": lib.id, "name": lib.display_name})
+
+
+@api_view(["POST"])
+def library_action_resolve(request, action_id):
+    from mainApp.library_service import LibraryError, resolve_action
+
+    approve = bool(request.data.get("approve", True))
+    try:
+        action = resolve_action(request.user, action_id, approve=approve)
+    except LibraryError as e:
+        return _error(e.message)
+    return Response(
+        {
+            "ok": True,
+            "status": action.status,
+            "action_id": action.id,
+            "result_note": action.result_note,
+        }
+    )
+
+
+@api_view(["POST"])
+def library_split_leave(request):
+    from mainApp.library_service import LibraryAction, LibraryError, request_split_leave
+
+    copy_ids = request.data.get("copy_ids") or []
+    if not isinstance(copy_ids, list):
+        return _error("copy_ids має бути списком.")
+    try:
+        result = request_split_leave(request.user, copy_ids)
+    except LibraryError as e:
+        return _error(e.message)
+    if isinstance(result, LibraryAction):
+        return Response(
+            {
+                "pending_approval": True,
+                "action_id": result.id,
+                "detail": "Запит на вихід/поділ надіслано адміністратору.",
+            },
+            status=202,
+        )
+    return Response({"ok": True, "library_id": result.id})
+
+
+@api_view(["POST"])
+def library_election_start(request):
+    from mainApp.library_service import LibraryError, election_tally, start_admin_election
+
+    try:
+        el = start_admin_election(
+            request.user, reason=(request.data.get("reason") or "")[:200]
+        )
+    except LibraryError as e:
+        return _error(e.message)
+    return Response(election_tally(el), status=201)
+
+
+@api_view(["POST"])
+def library_election_vote(request, election_id):
+    from mainApp.library_service import LibraryError, cast_admin_vote, election_tally
+
+    try:
+        cid = int(request.data.get("candidate_id"))
+    except (TypeError, ValueError):
+        return _error("candidate_id обов'язковий.")
+    try:
+        el = cast_admin_vote(request.user, election_id, cid)
+    except LibraryError as e:
+        return _error(e.message)
+    data = election_tally(el)
+    data["status"] = el.status
+    data["winner_id"] = el.winner_id
+    return Response(data)
+
+
+@api_view(["POST"])
+def library_election_finalize(request, election_id):
+    from mainApp.library_service import LibraryError, election_tally, finalize_admin_election
+
+    try:
+        el = finalize_admin_election(request.user, election_id)
+    except LibraryError as e:
+        return _error(e.message)
+    data = election_tally(el) if el.status == "open" else {
+        "election_id": el.id,
+        "status": el.status,
+        "winner_id": el.winner_id,
+    }
+    return Response(data)
+
+
+@api_view(["POST"])
+def library_election_cancel(request, election_id):
+    from mainApp.library_service import LibraryError, cancel_admin_election
+
+    try:
+        el = cancel_admin_election(request.user, election_id)
+    except LibraryError as e:
+        return _error(e.message)
+    return Response({"ok": True, "status": el.status})

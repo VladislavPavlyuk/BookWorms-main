@@ -26,12 +26,35 @@
                     <br><span class="small text-muted">Пропонує в обмін: "<a href="{% url 'copy_history' r.offer_shelf.copy_id %}" class="link-primary text-decoration-none">{{ r.offer_shelf.book.title }}</a>"</span>
                 {% else %}
                     <br><span class="small text-muted">Без книги взамін - <strong>позика</strong> (після згоди позичальник зможе лише повернути книгу)</span>
+                    {% if r.proposed_due_date %}
+                    <br><span class="small">
+                        {% if r.due_date_proposer == "owner" %}Ви запропонували{% else %}Пропонує повернути{% endif %}
+                        до <strong>{{ r.proposed_due_date|date:"d.m.Y" }}</strong>
+                        {% if r.due_date_confirmed %}<span class="text-success"> · погоджено</span>{% endif %}
+                    </span>
+                    {% endif %}
                 {% endif %}
                 <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
+                    {% if not r.offer_shelf %}
+                    <form method="post" action="{% url 'exchange_accept' r.id %}" class="d-flex flex-wrap gap-2 align-items-center">
+                        {% csrf_token %}
+                        <input type="date" name="due_date" class="form-control form-control-sm" style="max-width:11rem;"
+                               value="{{ r.proposed_due_date|date:'Y-m-d' }}"
+                               title="Термін повернення">
+                        <button type="submit" class="btn btn-outline-primary btn-sm"
+                                formaction="{% url 'exchange_propose_due' r.id %}">Запропонувати термін</button>
+                        {% if r.proposed_due_date and r.due_date_proposer == "requester" and not r.due_date_confirmed %}
+                        <button type="submit" class="btn btn-outline-success btn-sm"
+                                formaction="{% url 'exchange_confirm_due' r.id %}">Погодити термін</button>
+                        {% endif %}
+                        <button type="submit" class="btn btn-success btn-sm">Прийняти</button>
+                    </form>
+                    {% else %}
                     <form method="post" action="{% url 'exchange_accept' r.id %}">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-success btn-sm">Прийняти</button>
                     </form>
+                    {% endif %}
                     <form method="post" action="{% url 'exchange_reject' r.id %}">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-outline-secondary btn-sm">Відхилити</button>
@@ -56,8 +79,27 @@
                     <br><span class="small text-muted">Ваш обмін: "<a href="{% url 'copy_history' r.offer_shelf.copy_id %}" class="link-primary text-decoration-none">{{ r.offer_shelf.book.title }}</a>" (повна передача)</span>
                 {% else %}
                     <br><span class="small text-muted">Позика (без вашої книги взамін)</span>
+                    {% if r.proposed_due_date %}
+                    <br><span class="small">
+                        {% if r.due_date_proposer == "owner" %}Власник пропонує{% else %}Запропоновано повернути{% endif %}
+                        до <strong>{{ r.proposed_due_date|date:"d.m.Y" }}</strong>
+                        {% if r.due_date_confirmed %}<span class="text-success"> · погоджено</span>{% endif %}
+                    </span>
+                    {% endif %}
                 {% endif %}
                 <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
+                    {% if not r.offer_shelf %}
+                    <form method="post" action="{% url 'exchange_propose_due' r.id %}" class="d-flex flex-wrap gap-2 align-items-center">
+                        {% csrf_token %}
+                        <input type="date" name="due_date" class="form-control form-control-sm" style="max-width:11rem;"
+                               value="{{ r.proposed_due_date|date:'Y-m-d' }}">
+                        {% if r.proposed_due_date and r.due_date_proposer == "owner" and not r.due_date_confirmed %}
+                        <button type="submit" class="btn btn-success btn-sm"
+                                formaction="{% url 'exchange_confirm_due' r.id %}">Погодити термін</button>
+                        {% endif %}
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Інша дата</button>
+                    </form>
+                    {% endif %}
                     <form method="post" action="{% url 'exchange_cancel' r.id %}">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-outline-danger btn-sm">Скасувати</button>

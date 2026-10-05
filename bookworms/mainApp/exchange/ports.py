@@ -29,6 +29,16 @@ class IExchangeNotifier(ABC):
     def notify_exchange_request_cancelled(self, req: BookExchangeRequest) -> object: ...
 
     @abstractmethod
+    def notify_exchange_due_proposed(
+        self, req: BookExchangeRequest, actor: CustomUser
+    ) -> object: ...
+
+    @abstractmethod
+    def notify_exchange_due_confirmed(
+        self, req: BookExchangeRequest, actor: CustomUser
+    ) -> object: ...
+
+    @abstractmethod
     def notify_handoff_approved(self, handoff: LoanHandoff) -> None: ...
 
     @abstractmethod

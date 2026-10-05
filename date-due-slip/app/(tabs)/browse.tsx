@@ -31,6 +31,7 @@ function groupShelvesByBook(others: Shelf[]): BookBrowseGroup[] {
     g.copies.push(s);
     const legal = s.borrowed_from || s.user;
     if (!g.owners.some((o) => o.id === legal.id)) g.owners.push(legal);
+    if (s.owners_label && !g.owners_label) g.owners_label = s.owners_label;
   }
   return order.map((id) => map.get(id)!);
 }
@@ -136,12 +137,16 @@ export default function Browse() {
                 </Text>
                 <View style={styles.ownersRow}>
                   <Text style={styles.ownersLabel}>Власники: </Text>
-                  {g.owners.map((o, i) => (
-                    <View key={o.id} style={{ flexDirection: "row" }}>
-                      {i > 0 ? <Text style={styles.ownersLabel}> · </Text> : null}
-                      <UserNameLink user={o} style={styles.owner} />
-                    </View>
-                  ))}
+                  {g.owners_label ? (
+                    <Text style={styles.owner}>{g.owners_label}</Text>
+                  ) : (
+                    g.owners.map((o, i) => (
+                      <View key={o.id} style={{ flexDirection: "row" }}>
+                        {i > 0 ? <Text style={styles.ownersLabel}> + </Text> : null}
+                        <UserNameLink user={o} style={styles.owner} />
+                      </View>
+                    ))
+                  )}
                 </View>
               </View>
             </Pressable>

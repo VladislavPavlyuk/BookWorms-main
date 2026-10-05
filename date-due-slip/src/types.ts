@@ -86,6 +86,8 @@ export type Shelf = {
   requires_deposit?: boolean;
   is_publicly_listed?: boolean;
   listing_status_display?: string | null;
+  library_owners?: User[];
+  owners_label?: string;
   added_at: string;
 };
 
@@ -130,6 +132,7 @@ export type CopyEvent = {
 export type BookBrowseGroup = {
   book: Book;
   owners: User[];
+  owners_label?: string;
   copies: Shelf[];
 };
 
@@ -163,6 +166,12 @@ export type Exchange = {
   kind: "borrow" | "exchange";
   /** Pending borrow while copy is lent — accepting transmits to requester. */
   is_transmission?: boolean;
+  /** Requester's proposed return date (YYYY-MM-DD) for borrow/transmit. */
+  proposed_due_date?: string | null;
+  due_date_proposer?: "requester" | "owner" | string;
+  due_date_confirmed?: boolean;
+  can_propose_due?: boolean;
+  can_confirm_due?: boolean;
   created_at: string;
   resolved_at: string | null;
 };
@@ -202,8 +211,51 @@ export type Message = {
   recipient: User;
   body: string;
   exchange_request: number | null;
+  exchange_request_detail: {
+    id: number;
+    status: string;
+    kind: "exchange" | "loan";
+    is_transmission: boolean;
+    book_title: string;
+    proposed_due_date?: string | null;
+    due_date_proposer?: "requester" | "owner" | string;
+    due_date_confirmed?: boolean;
+    can_accept: boolean;
+    can_reject: boolean;
+    can_cancel: boolean;
+    can_propose_due?: boolean;
+    can_confirm_due?: boolean;
+  } | null;
+  library_invite: {
+    id: number;
+    status: string;
+    library_name: string;
+    message: string;
+    can_respond: boolean;
+    can_cancel: boolean;
+    overlap: {
+      isbn: string;
+      title: string;
+      combined: number;
+      target_count: number;
+      source_count: number;
+    }[] | null;
+  } | null;
+  library_action: {
+    id: number;
+    status: string;
+    action_type: string;
+    action_type_label?: string;
+    title: string;
+    isbn: string;
+    existing_count: number;
+    count?: number;
+    can_decide: boolean;
+    initiator_username: string;
+  } | null;
   created_at: string;
   read_at: string | null;
+  is_system?: boolean;
 };
 
 export type Paginated<T> = {
@@ -211,4 +263,79 @@ export type Paginated<T> = {
   next: string | null;
   previous: string | null;
   results: T[];
+};
+
+export type LibraryOverlap = {
+  isbn: string;
+  title: string;
+  combined: number;
+  target_count: number;
+  source_count: number;
+  book_id?: number;
+};
+
+export type LibraryElection = {
+  election_id: number;
+  status: string;
+  reason: string;
+  member_count: number;
+  votes_cast: number;
+  can_finalize: boolean;
+  i_voted?: boolean;
+  my_candidate_id?: number | null;
+  candidates: {
+    user_id: number;
+    username: string;
+    votes: number;
+    is_current_admin: boolean;
+  }[];
+};
+
+/** GET /api/library/ snapshot for shared-library screen. */
+export type LibrarySnapshot = {
+  library: {
+    id: number;
+    name: string;
+    admin_username: string;
+    i_am_admin: boolean;
+    member_count: number;
+    is_shared?: boolean;
+  };
+  members: { username: string; role: string; user_id?: number }[];
+  invites_in: {
+    id: number;
+    from_user_id?: number;
+    from_username: string;
+    library_name: string;
+    message: string;
+    overlap: LibraryOverlap[];
+  }[];
+  invites_out: {
+    id: number;
+    to_user_id?: number;
+    to_username: string;
+    status?: string;
+  }[];
+  awaiting_isbn_merges?: {
+    id: number;
+    to_user_id: number;
+    to_username: string;
+    overlap: LibraryOverlap[];
+  }[];
+  merge_candidates?: { id: number; username: string; invite_pending: boolean }[];
+  pending_actions: {
+    id: number;
+    action_type: string;
+    action_type_label: string;
+    initiator_username: string;
+    payload: Record<string, unknown>;
+  }[];
+  election: LibraryElection | null;
+  splittable_copies: {
+    id: number;
+    title: string;
+    isbn: string;
+    added_by_me: boolean;
+    held_by_me: boolean;
+  }[];
 };

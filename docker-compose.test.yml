@@ -67,7 +67,7 @@ services:
                 time.sleep(1)
         sys.exit("postgres not reachable")
         PY
-        exec python manage.py test mainApp.tests.repositories --verbosity=2
+        exec python manage.py test mainApp.tests --verbosity=2
     mem_limit: 384m
 
   fastapi-test:

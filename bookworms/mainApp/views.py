@@ -53,11 +53,13 @@ from .exchange_service import (
     cancel_exchange_request,
     cancel_loan_handoff,
     confirm_borrow_return,
+    confirm_exchange_due_date,
     confirm_handoff_give,
     confirm_handoff_receive,
     create_many_exchange_requests,
     get_or_create_book_from_payload,
     is_copy_lent_out,
+    propose_exchange_due_date,
     reject_exchange_request,
     remove_owned_shelf,
     request_borrow_return,
@@ -548,9 +550,45 @@ def my_library(request):
             except ExchangeError as exc:
                 messages.error(request, exc.message)
             else:
-                add_owned_copy(request.user, book)
-                messages.success(request, f"Додано: {book.title}")
-                return redirect("my_library")
+                from .library_service import (
+                    IsbnConfirmNeeded,
+                    LibraryAction,
+                    LibraryError,
+                    add_copy_for_user,
+                )
+
+                confirm = request.POST.get("confirm_extra") == "1"
+                try:
+                    result = add_copy_for_user(
+                        request.user, book, confirm_extra=confirm
+                    )
+                except LibraryError as exc:
+                    messages.error(request, exc.message)
+                else:
+                    if isinstance(result, IsbnConfirmNeeded):
+                        messages.warning(
+                            request,
+                            f"У бібліотеці вже є {result.existing_count} примірник(и) "
+                            f"«{result.title}» (ISBN {result.isbn}). "
+                            f"Підтвердіть додавання ще одного нижче.",
+                        )
+                        request.session["library_confirm_extra"] = {
+                            "isbn": result.isbn,
+                            "count": result.existing_count,
+                            "title": result.title,
+                        }
+                        return redirect("my_library")
+                    if isinstance(result, LibraryAction):
+                        messages.info(
+                            request,
+                            "У бібліотеці вже є цей ISBN. Запит надіслано адміністратору в чат.",
+                        )
+                        return redirect(
+                            "message_thread", partner_id=result.library.admin_id
+                        )
+                    else:
+                        messages.success(request, f"Додано: {book.title}")
+                    return redirect("my_library")
 
     elif request.method == "POST" and "add_manual" in request.POST:
         manual_form = AddBookManualForm(request.POST, request.FILES)
@@ -592,20 +630,82 @@ def my_library(request):
                     cover_text=(d.get("cover_text") or "").strip(),
                 )
                 saved = save_book_photos(book, photos, request=request)
-                add_owned_copy(request.user, book)
-                messages.success(request, f"Додано вручну: {book.title}")
-                if is_xhr:
+                from .library_service import (
+                    IsbnConfirmNeeded,
+                    LibraryAction,
+                    LibraryError,
+                    add_copy_for_user,
+                )
+
+                confirm = request.POST.get("confirm_extra") == "1"
+                try:
+                    result = add_copy_for_user(
+                        request.user, book, confirm_extra=confirm
+                    )
+                except LibraryError as exc:
+                    messages.error(request, exc.message)
+                    if is_xhr:
+                        return JsonResponse({"ok": False, "detail": exc.message}, status=400)
+                else:
                     from django.urls import reverse
 
-                    return JsonResponse(
-                        {
-                            "ok": True,
-                            "redirect": reverse("my_library"),
-                            "title": book.title,
-                            "photos_saved": len(saved),
+                    if isinstance(result, IsbnConfirmNeeded):
+                        detail = (
+                            f"У бібліотеці вже є {result.existing_count} примірник(и) "
+                            f"з ISBN {result.isbn}. Додати ще один?"
+                        )
+                        if is_xhr:
+                            return JsonResponse(
+                                {
+                                    "ok": False,
+                                    "needs_confirmation": True,
+                                    "isbn": result.isbn,
+                                    "existing_count": result.existing_count,
+                                    "title": result.title,
+                                    "detail": detail,
+                                },
+                                status=409,
+                            )
+                        messages.warning(request, detail)
+                        request.session["library_confirm_extra"] = {
+                            "isbn": result.isbn,
+                            "count": result.existing_count,
+                            "title": result.title,
                         }
-                    )
-                return redirect("my_library")
+                        return redirect("my_library")
+                    if isinstance(result, LibraryAction):
+                        msg = (
+                            "У бібліотеці вже є цей ISBN. "
+                            "Запит надіслано адміністратору в чат."
+                        )
+                        if is_xhr:
+                            return JsonResponse(
+                                {
+                                    "ok": True,
+                                    "pending_approval": True,
+                                    "detail": msg,
+                                    "chat_partner_id": result.library.admin_id,
+                                    "redirect": reverse(
+                                        "message_thread",
+                                        args=[result.library.admin_id],
+                                    ),
+                                }
+                            )
+                        messages.info(request, msg)
+                        return redirect(
+                            "message_thread", partner_id=result.library.admin_id
+                        )
+                    messages.success(request, f"Додано вручну: {book.title}")
+                    if is_xhr:
+                        return JsonResponse(
+                            {
+                                "ok": True,
+                                "redirect": reverse("my_library"),
+                                "title": book.title,
+                                "photos_saved": len(saved),
+                            }
+                        )
+                    return redirect("my_library")
         if is_xhr:
             errs = []
             for field, flist in manual_form.errors.items():
@@ -621,26 +721,24 @@ def my_library(request):
                 status=400,
             )
 
-    # Полиця = фізичне місце: власні вільні + позичені вами.
+    # Полиця = спільна бібліотека учасників + позичені вами.
     # Власні примірники, які зараз у когось у позиці, тут НЕ показуємо.
-    shelves_all = list(
-        request.user.shelf_entries.select_related(
-            "book", "borrowed_from", "copy", "book__price_evaluation"
-        )
-        .prefetch_related("book__photos", "book__price_evaluation__quotes")
-        .all()
+    from .library_service import (
+        ensure_personal_library,
+        library_active_loans_by_copy,
+        list_my_library_shelves,
     )
+
+    shelves_all = list_my_library_shelves(request.user)
+    lib = ensure_personal_library(request.user)
+    shared_member_count = lib.memberships.count()
+    is_shared_library = shared_member_count >= 2
     pending_returns_to_confirm = list(
         Shelf.objects.filter(borrowed_from=request.user, return_pending=True)
         .select_related("user", "book", "copy")
         .order_by("-added_at")
     )
-    loan_by_copy = {
-        row.copy_id: row
-        for row in Shelf.objects.filter(borrowed_from=request.user)
-        .select_related("user", "book", "copy")
-        if row.copy_id
-    }
+    loan_by_copy = library_active_loans_by_copy(lib)
     lent_out_count = 0
     today = timezone.now().date()
     for s in shelves_all:
@@ -723,6 +821,10 @@ def my_library(request):
         request.session["reader_age_locked_shelf_ids"] = []
         request.session.modified = True
 
+    confirm_extra = request.session.pop("library_confirm_extra", None)
+    if confirm_extra:
+        request.session.modified = True
+
     return render(
         request,
         "mainApp/library.html",
@@ -738,7 +840,151 @@ def my_library(request):
             "library_price_total": library_price_total,
             "listing_checkbox_flags": LISTING_CHECKBOX_FLAGS,
             "sale_gift_radio": SALE_GIFT_RADIO,
+            "confirm_extra": confirm_extra,
+            "is_shared_library": is_shared_library,
+            "shared_member_count": shared_member_count,
+            "shared_library_name": lib.display_name,
+            "i_am_library_admin": lib.admin_id == request.user.id,
         },
+    )
+
+
+@login_required
+def shared_library(request):
+    """Спільна бібліотека: merge/split, голосування за адміна, approve дій."""
+    from .library_service import (
+        LibraryError,
+        accept_invite,
+        admin_confirm_merge_isbn,
+        cancel_admin_election,
+        cancel_invite,
+        cast_admin_vote,
+        finalize_admin_election,
+        invite_to_library,
+        library_snapshot,
+        reject_invite,
+        request_split_leave,
+        resolve_action,
+        start_admin_election,
+    )
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        try:
+            if action == "invite":
+                inv = invite_to_library(
+                    request.user,
+                    request.POST.get("username") or "",
+                    request.POST.get("message") or "",
+                )
+                messages.success(
+                    request,
+                    "Запит на об'єднання надіслано в чат.",
+                )
+                return redirect("message_thread", partner_id=inv.to_user_id)
+            elif action == "cancel_invite":
+                cancel_invite(request.user, int(request.POST.get("invite_id")))
+                messages.info(request, "Запрошення скасовано.")
+            elif action == "reject_invite":
+                reject_invite(request.user, int(request.POST.get("invite_id")))
+                messages.info(request, "Запрошення відхилено.")
+            elif action == "accept_invite":
+                from .library_service import AwaitAdminIsbn
+
+                result = accept_invite(
+                    request.user,
+                    int(request.POST.get("invite_id")),
+                )
+                if isinstance(result, AwaitAdminIsbn):
+                    messages.info(
+                        request,
+                        "Ви погодились. Адміністратор має підтвердити кількість "
+                        "спільних ISBN.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        "Бібліотеки об'єднано. За потреби проголосуйте за адміністратора.",
+                    )
+            elif action == "confirm_merge_isbn":
+                isbn_counts = {}
+                for key, val in request.POST.items():
+                    if key.startswith("isbn_count_"):
+                        isbn_counts[key.replace("isbn_count_", "", 1)] = int(val)
+                admin_confirm_merge_isbn(
+                    request.user,
+                    int(request.POST.get("invite_id")),
+                    isbn_counts=isbn_counts,
+                )
+                messages.success(
+                    request,
+                    "Кількість ISBN підтверджено — бібліотеки об'єднано.",
+                )
+            elif action == "resolve_action":
+                resolve_action(
+                    request.user,
+                    int(request.POST.get("action_id")),
+                    approve=request.POST.get("approve") == "1",
+                )
+                messages.success(request, "Рішення збережено.")
+            elif action == "split_leave":
+                ids = [
+                    int(x)
+                    for x in request.POST.getlist("copy_ids")
+                    if str(x).isdigit()
+                ]
+                if not ids:
+                    raw = request.POST.get("copy_ids") or ""
+                    ids = [
+                        int(x)
+                        for x in raw.replace(",", " ").split()
+                        if x.strip().isdigit()
+                    ]
+                request_split_leave(request.user, ids)
+                messages.info(request, "Запит на вихід/поділ надіслано адміністратору.")
+            elif action == "start_election":
+                start_admin_election(
+                    request.user,
+                    reason=request.POST.get("reason") or "Зміна адміністратора",
+                )
+                messages.success(request, "Голосування за адміна відкрито.")
+            elif action == "vote_admin":
+                cast_admin_vote(
+                    request.user,
+                    int(request.POST.get("election_id")),
+                    int(request.POST.get("candidate_id")),
+                )
+                messages.success(request, "Голос зараховано.")
+            elif action == "finalize_election":
+                finalize_admin_election(
+                    request.user, int(request.POST.get("election_id"))
+                )
+                messages.success(request, "Адміністратора обрано.")
+            elif action == "cancel_election":
+                cancel_admin_election(
+                    request.user, int(request.POST.get("election_id"))
+                )
+                messages.info(request, "Голосування скасовано.")
+        except LibraryError as e:
+            overlap = getattr(e, "overlap", None)
+            if overlap is not None:
+                snap = library_snapshot(request.user)
+                return render(
+                    request,
+                    "mainApp/shared_library.html",
+                    {
+                        "snap": snap,
+                        "merge_overlap": overlap,
+                        "merge_invite_id": request.POST.get("invite_id"),
+                    },
+                )
+            messages.error(request, e.message)
+        return redirect("shared_library")
+
+    return render(
+        request,
+        "mainApp/shared_library.html",
+        {"snap": library_snapshot(request.user)},
     )
 
 
@@ -996,34 +1242,37 @@ def update_shelf_book_reader_age(request, shelf_id):
 @login_required
 @require_POST
 def update_shelf_copy_listing(request, shelf_id):
-    """Owner sets BookCopy listing status (+ sale/rent price when required)."""
-    from .copy_listing import apply_copy_listing
+    """Owner / admin sets listing; shared-library members → admin chat approval."""
+    from .library_service import LibraryAction, LibraryError, request_listing_change
 
     shelf = get_object_or_404(
-        Shelf.objects.select_related("copy", "book"),
+        Shelf.objects.select_related("copy", "book", "copy__library", "copy__book"),
         pk=shelf_id,
         user=request.user,
     )
     if shelf.borrowed_from_id:
         messages.error(request, "Статус можна змінити лише для власного примірника.")
         return redirect("my_library")
-    if not shelf.copy_id or shelf.copy.owner_id != request.user.pk:
+    if not shelf.copy_id:
         messages.error(request, "Це не ваш примірник.")
         return redirect("my_library")
+    listing_kwargs = dict(
+        flags={
+            "is_fee_sharing": request.POST.get("is_fee_sharing"),
+            "is_hidden": request.POST.get("is_hidden"),
+            "is_for_rent": request.POST.get("is_for_rent"),
+            "is_for_exchange": request.POST.get("is_for_exchange"),
+            "is_free_of_deposit": request.POST.get("is_free_of_deposit"),
+        },
+        sale_gift=request.POST.get("sale_gift", ""),
+        sale_price=request.POST.get("sale_price"),
+        rent_price_per_day=request.POST.get("rent_price_per_day"),
+    )
     try:
-        apply_copy_listing(
-            shelf.copy,
-            flags={
-                "is_fee_sharing": request.POST.get("is_fee_sharing"),
-                "is_hidden": request.POST.get("is_hidden"),
-                "is_for_rent": request.POST.get("is_for_rent"),
-                "is_for_exchange": request.POST.get("is_for_exchange"),
-                "is_free_of_deposit": request.POST.get("is_free_of_deposit"),
-            },
-            sale_gift=request.POST.get("sale_gift", ""),
-            sale_price=request.POST.get("sale_price"),
-            rent_price_per_day=request.POST.get("rent_price_per_day"),
-        )
+        result = request_listing_change(request.user, shelf.copy, listing_kwargs)
+    except LibraryError as exc:
+        messages.error(request, exc.message)
+        return redirect("my_library")
     except DjangoValidationError as exc:
         msgs = []
         if hasattr(exc, "message_dict"):
@@ -1033,6 +1282,12 @@ def update_shelf_copy_listing(request, shelf_id):
             msgs = list(getattr(exc, "messages", [str(exc)]))
         messages.error(request, "; ".join(str(m) for m in msgs) or "Помилка збереження.")
         return redirect("my_library")
+    if isinstance(result, LibraryAction):
+        messages.info(
+            request,
+            "Запит на зміну статусів надіслано адміністратору в чат.",
+        )
+        return redirect("message_thread", partner_id=result.library.admin_id)
     messages.success(request, "Статус примірника збережено.")
     return redirect("my_library")
 
@@ -1052,15 +1307,20 @@ def unlock_shelf_reader_age_edit(request, shelf_id):
 
 @login_required
 def remove_shelf_entry(request, shelf_id):
-    """Видалити з полиці лише власну книгу; позичену - заборонено (тільки return)."""
+    """Видалити з полиці; у спільній бібліотеці учасник — через адміна, адмін — одразу."""
     if request.method != "POST":
         return redirect("my_library")
-    shelf = get_object_or_404(Shelf, pk=shelf_id, user=request.user)
-    if shelf.borrowed_from_id:
-        messages.error(
-            request,
-            "Позичену книгу не можна видалити з полиці - лише повернути власнику.",
-        )
+    from .library_service import (
+        LibraryAction,
+        LibraryError,
+        get_removable_shelf,
+        request_remove_copy,
+    )
+
+    try:
+        shelf = get_removable_shelf(request.user, shelf_id)
+    except LibraryError as exc:
+        messages.error(request, exc.message)
         return redirect("my_library")
     if is_copy_lent_out(shelf.copy_id):
         messages.error(
@@ -1068,8 +1328,88 @@ def remove_shelf_entry(request, shelf_id):
             "Примірник зараз у позиці — спочатку дочекайтесь повернення.",
         )
         return redirect("my_library")
-    remove_owned_shelf(shelf)
+    try:
+        result = request_remove_copy(request.user, shelf)
+    except LibraryError as exc:
+        messages.error(request, exc.message)
+        return redirect("my_library")
+    if isinstance(result, LibraryAction):
+        messages.info(
+            request,
+            "Запит на видалення надіслано адміністратору в чат.",
+        )
+        return redirect("message_thread", partner_id=result.library.admin_id)
     messages.success(request, "Книгу видалено з полиці.")
+    return redirect("my_library")
+
+
+@login_required
+@require_POST
+def library_bulk_action(request):
+    """Bulk status change / delete for selected owned shelf rows."""
+    from .library_service import LibraryError, request_bulk_listing, request_bulk_remove
+
+    raw_ids = request.POST.getlist("shelf_ids")
+    if not raw_ids and request.POST.get("shelf_ids"):
+        raw_ids = str(request.POST.get("shelf_ids")).split(",")
+    try:
+        shelf_ids = [int(x) for x in raw_ids if str(x).strip().isdigit()]
+    except (TypeError, ValueError):
+        shelf_ids = []
+    action = (request.POST.get("bulk_action") or "").strip()
+    if not shelf_ids:
+        messages.error(request, "Не вибрано жодної книги.")
+        return redirect("my_library")
+
+    try:
+        if action == "delete":
+            result = request_bulk_remove(request.user, shelf_ids)
+        elif action == "listing":
+            listing_kwargs = dict(
+                flags={
+                    "is_fee_sharing": request.POST.get("is_fee_sharing"),
+                    "is_hidden": request.POST.get("is_hidden"),
+                    "is_for_rent": request.POST.get("is_for_rent"),
+                    "is_for_exchange": request.POST.get("is_for_exchange"),
+                    "is_free_of_deposit": request.POST.get("is_free_of_deposit"),
+                },
+                sale_gift=request.POST.get("sale_gift", ""),
+                sale_price=request.POST.get("sale_price"),
+                rent_price_per_day=request.POST.get("rent_price_per_day"),
+            )
+            result = request_bulk_listing(request.user, shelf_ids, listing_kwargs)
+        else:
+            messages.error(request, "Невідома дія.")
+            return redirect("my_library")
+    except (LibraryError, DjangoValidationError) as exc:
+        msg = getattr(exc, "message", None) or str(exc)
+        if isinstance(exc, DjangoValidationError):
+            msgs = []
+            if hasattr(exc, "message_dict"):
+                for v in exc.message_dict.values():
+                    msgs.extend(v if isinstance(v, (list, tuple)) else [v])
+            else:
+                msgs = list(getattr(exc, "messages", [str(exc)]))
+            msg = "; ".join(str(m) for m in msgs) or msg
+        messages.error(request, msg)
+        return redirect("my_library")
+
+    if result.get("pending_approval"):
+        messages.info(
+            request,
+            "Запит надіслано адміністратору спільної бібліотеки в чат.",
+        )
+        return redirect("message_thread", partner_id=result["admin_id"])
+    if action == "delete":
+        messages.success(
+            request,
+            f"Видалено примірників: {result.get('removed', 0)}.",
+        )
+    else:
+        messages.success(
+            request,
+            f"Оновлено статуси для {result.get('updated', 0)} примірник(ів).",
+        )
     return redirect("my_library")
 
 
@@ -1126,6 +1466,7 @@ def browse_shelves(request):
         {
             "others_grouped": catalog.others_grouped,
             "my_owned_shelves": catalog.my_owned,
+            "loan_days": int(getattr(settings, "DEFAULT_LOAN_DAYS", 14)),
         },
     )
 
@@ -1295,7 +1636,13 @@ def create_exchange(request):
                 )
                 continue
 
-        lines.append((target_shelf, offer_shelf))
+        proposed_due = None
+        if not offer_shelf:
+            raw_due = (request.POST.get(f"proposed_due_date_{tid}", "") or "").strip()
+            if raw_due:
+                proposed_due = raw_due
+
+        lines.append((target_shelf, offer_shelf, proposed_due))
 
     if not lines:
         for e in preflight[:err_cap]:
@@ -1409,7 +1756,11 @@ def exchange_accept(request, request_id):
         req and not had_offer and is_copy_lent_out(getattr(req.target_shelf, "copy_id", None))
     )
     try:
-        accept_exchange_request(request_id, request.user)
+        accept_exchange_request(
+            request_id,
+            request.user,
+            due_date=request.POST.get("due_date") or None,
+        )
     except ExchangeError as exc:
         messages.error(request, exc.message)
     else:
@@ -1423,6 +1774,51 @@ def exchange_accept(request, request_id):
         else:
             msg = "Запит прийнято: книгу видано в позику (повернення - з полиці позичальника)."
         messages.success(request, msg)
+    partner_id = request.POST.get("partner_id")
+    if partner_id:
+        try:
+            return redirect("message_thread", partner_id=int(partner_id))
+        except (TypeError, ValueError):
+            pass
+    return redirect("exchange_requests")
+
+
+@login_required
+def exchange_propose_due(request, request_id):
+    """Власник / позичальник пропонує інший термін повернення."""
+    if request.method != "POST":
+        return redirect("exchange_requests")
+    due = request.POST.get("due_date") or request.POST.get("proposed_due_date")
+    try:
+        propose_exchange_due_date(request_id, request.user, due)
+        messages.success(request, "Новий термін повернення надіслано іншій стороні.")
+    except ExchangeError as exc:
+        messages.error(request, exc.message)
+    partner_id = request.POST.get("partner_id")
+    if partner_id:
+        try:
+            return redirect("message_thread", partner_id=int(partner_id))
+        except (TypeError, ValueError):
+            pass
+    return redirect("exchange_requests")
+
+
+@login_required
+def exchange_confirm_due(request, request_id):
+    """Погодити запропонований термін повернення."""
+    if request.method != "POST":
+        return redirect("exchange_requests")
+    try:
+        confirm_exchange_due_date(request_id, request.user)
+        messages.success(request, "Термін повернення погоджено.")
+    except ExchangeError as exc:
+        messages.error(request, exc.message)
+    partner_id = request.POST.get("partner_id")
+    if partner_id:
+        try:
+            return redirect("message_thread", partner_id=int(partner_id))
+        except (TypeError, ValueError):
+            pass
     return redirect("exchange_requests")
 
 
@@ -1438,6 +1834,12 @@ def exchange_reject(request, request_id):
         request.user,
         success="Запит відхилено.",
     )
+    partner_id = request.POST.get("partner_id")
+    if partner_id:
+        try:
+            return redirect("message_thread", partner_id=int(partner_id))
+        except (TypeError, ValueError):
+            pass
     return redirect("exchange_requests")
 
 
@@ -1453,6 +1855,12 @@ def exchange_cancel(request, request_id):
         request.user,
         success="Запит скасовано.",
     )
+    partner_id = request.POST.get("partner_id")
+    if partner_id:
+        try:
+            return redirect("message_thread", partner_id=int(partner_id))
+        except (TypeError, ValueError):
+            pass
     return redirect("exchange_requests")
 
 
@@ -1526,9 +1934,10 @@ def notification_open_chat(request, message_id: int):
 @login_required
 def message_thread(request, partner_id: int):
     """
-    Окремий чат лише з одним користувачем (спільний запит на позику/обмін).
-    Загальної скриньки немає - посилання тільки з обмінів / позики.
+    Окремий чат лише з одним користувачем (спільний запит на позику/обмін / merge бібліотек).
+    Загальної скриньки немає - посилання тільки з обмінів / позики / спільної бібліотеки.
     """
+    from .library_service import LibraryError, accept_invite, cancel_invite, reject_invite
     from .messaging import (
         MessagingForbidden,
         MessagingNoPartners,
@@ -1537,6 +1946,58 @@ def message_thread(request, partner_id: int):
     )
 
     chat = get_messaging_service()
+
+    if request.method == "POST" and "library_invite_accept" in request.POST:
+        from .library_service import AwaitAdminIsbn
+
+        try:
+            result = accept_invite(
+                request.user,
+                int(request.POST.get("invite_id")),
+            )
+            if isinstance(result, AwaitAdminIsbn):
+                messages.info(
+                    request,
+                    "Ви погодились. Адміністратор підтвердить кількість спільних ISBN.",
+                )
+            else:
+                messages.success(
+                    request,
+                    "Бібліотеки об'єднано. За потреби проголосуйте за адміністратора.",
+                )
+        except LibraryError as exc:
+            messages.error(request, exc.message)
+        return redirect("message_thread", partner_id=partner_id)
+
+    if request.method == "POST" and "library_invite_reject" in request.POST:
+        try:
+            reject_invite(request.user, int(request.POST.get("invite_id")))
+            messages.info(request, "Запит на об'єднання відхилено.")
+        except LibraryError as exc:
+            messages.error(request, exc.message)
+        return redirect("message_thread", partner_id=partner_id)
+
+    if request.method == "POST" and "library_invite_cancel" in request.POST:
+        try:
+            cancel_invite(request.user, int(request.POST.get("invite_id")))
+            messages.info(request, "Запит на об'єднання скасовано.")
+        except LibraryError as exc:
+            messages.error(request, exc.message)
+        return redirect("message_thread", partner_id=partner_id)
+
+    if request.method == "POST" and "library_action_resolve" in request.POST:
+        from .library_service import resolve_action
+
+        try:
+            resolve_action(
+                request.user,
+                int(request.POST.get("action_id")),
+                approve=request.POST.get("approve") == "1",
+            )
+            messages.success(request, "Рішення збережено.")
+        except LibraryError as exc:
+            messages.error(request, exc.message)
+        return redirect("message_thread", partner_id=partner_id)
 
     if request.method == "POST" and "send_message" in request.POST:
         form = SendExchangePartnerMessageForm(request.POST)

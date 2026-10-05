@@ -54,6 +54,35 @@
     font-weight: 800;
 }
 
+/* Share: classic 3-node icon, ink chrome */
+.btn-share {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    color: #2a1f14 !important;
+    padding-left: 0.35rem !important;
+    padding-right: 0.35rem !important;
+}
+
+.btn-share:hover,
+.btn-share:focus,
+.btn-share:active {
+    background: rgba(42, 31, 20, 0.08) !important;
+    border-color: transparent !important;
+    color: #2a1f14 !important;
+    box-shadow: none !important;
+}
+
+.btn-share .btn-icon-action__glyph {
+    color: inherit;
+}
+
+.share-target-flash {
+    outline: 2px solid #c23b22;
+    outline-offset: 3px;
+    transition: outline-color 0.3s ease;
+}
+
 .input-group .btn-icon-action {
     border-radius: 0 9999px 9999px 0 !important;
 }
@@ -201,6 +230,166 @@ input[type="button"].btn {
 .library-book-cover-link:hover .card-img-top,
 .library-book-cover-link:hover img {
     opacity: 0.92;
+}
+
+.library-shelf-grid-wrap {
+    width: 100%;
+    max-width: 100%;
+}
+
+.library-select-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    align-items: stretch;
+    width: 100%;
+}
+
+/* Adaptive / mobile: always 2 columns */
+@media (max-width: 991.98px) {
+    .library-select-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Desktop: 5 columns, use full content width */
+@media (min-width: 992px) {
+    .library-shelf-grid-wrap {
+        width: 95%;
+        max-width: min(calc((100vw - 2.5rem) * 0.95), 1330px);
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .library-select-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 1rem;
+    }
+}
+
+.library-select-card {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    overflow: hidden;
+}
+
+.library-select-card.is-selected {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+.library-cover-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    background: #f8f9fa;
+    flex-shrink: 0;
+    isolation: isolate;
+}
+
+.library-cover-btn {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    min-height: 0;
+}
+
+.library-select-check {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.35rem;
+    left: auto;
+    bottom: auto;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.94);
+    border-radius: 0.35rem;
+    padding: 0.15rem 0.35rem;
+    margin: 0;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.library-select-check .form-check-input {
+    margin: 0;
+    cursor: pointer;
+    float: none;
+}
+
+.library-cover-btn:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: -2px;
+}
+
+.library-cover-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #f8f9fa;
+}
+
+.library-cover-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #6c757d;
+    font-size: 0.75rem;
+    padding: 0.5rem;
+    text-align: center;
+}
+
+.library-select-card__meta {
+    flex: 1 1 auto;
+    min-height: 4rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.library-select-card__title {
+    font-size: 0.9rem;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 0.25rem;
+}
+
+.library-select-card__author {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.25;
+}
+
+.library-detail-cover {
+    width: 96px;
+    height: 140px;
+    object-fit: contain;
+    background: #f8f9fa;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.library-selection-bar {
+    position: sticky;
+    top: 0.75rem;
+    z-index: 20;
+    background: var(--bs-body-bg);
 }
 
 .library-book-title-link:hover {
@@ -749,15 +938,23 @@ input[type="button"].btn {
         width: 100%;
     }
 
-    /* typing: widen search — hide logo / усі·мої; burger stays on same row */
+    /* typing: widen search — keep logo+feed; only shrink brand if needed */
     html.search-chrome-compact .site-navbar__chrome {
         flex-wrap: nowrap;
     }
 
-    html.search-chrome-compact .site-navbar .navbar-brand,
+    html.search-chrome-compact .site-navbar .navbar-brand {
+        flex: 0 0 auto;
+    }
+
+    html.search-chrome-compact .site-navbar .navbar-logo {
+        width: calc(var(--nav-logo, 61px) * 0.72) !important;
+        height: calc(var(--nav-logo, 61px) * 0.72) !important;
+    }
+
     html.search-chrome-compact .site-navbar-feed,
     html.search-chrome-compact .site-navbar-feed--bar {
-        display: none !important;
+        flex: 0 0 auto;
     }
 
     html.search-chrome-compact .site-navbar-search {
@@ -1168,6 +1365,62 @@ html {
     .home-advanced__panel .btn {
         min-height: 41px !important;
         font-size: 17px !important;
+    }
+}
+
+/* Browse exchange table → stacked cards on phones */
+@media (max-width: 767.98px) {
+    .browse-copy-table thead {
+        display: none;
+    }
+
+    .browse-copy-table,
+    .browse-copy-table tbody,
+    .browse-copy-table tr,
+    .browse-copy-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .browse-copy-table tr {
+        border: 1px solid rgba(42, 31, 20, 0.12);
+        border-radius: 8px;
+        padding: 0.65rem 0.75rem;
+        margin-bottom: 0.75rem;
+        background: #fff;
+    }
+
+    .browse-copy-table tr.table-warning {
+        background: #fff8e6;
+    }
+
+    .browse-copy-table td {
+        border: 0 !important;
+        padding: 0.35rem 0 !important;
+    }
+
+    .browse-copy-table td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #6c757d;
+        margin-bottom: 0.15rem;
+    }
+
+    .browse-copy-table td[data-label="Обрати"] {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .browse-copy-table td[data-label="Обрати"]::before {
+        margin-bottom: 0;
+    }
+
+    .browse-copy-table td .form-select {
+        max-width: none !important;
+        width: 100%;
     }
 }
 

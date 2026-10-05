@@ -27,6 +27,7 @@ class RequestService(IRequestService):
         *,
         from_queue: bool = False,
         join_queue_if_busy: bool = True,
+        proposed_due_date=None,
     ) -> BookExchangeRequest:
         from . import requests as m
 
@@ -36,21 +37,40 @@ class RequestService(IRequestService):
             offer_shelf,
             from_queue=from_queue,
             join_queue_if_busy=join_queue_if_busy,
+            proposed_due_date=proposed_due_date,
         )
 
     def create_many(
         self,
         requester: CustomUser,
-        lines: list[tuple[Shelf, Shelf | None]],
+        lines: list[tuple[Shelf, Shelf | None, object | None]],
     ) -> tuple[int, list[str]]:
         from . import requests as m
 
         return m.create_many_exchange_requests(requester, lines)
 
-    def accept(self, request_id: int, acting_user: CustomUser) -> None:
+    def accept(
+        self, request_id: int, acting_user: CustomUser, *, due_date=None
+    ) -> None:
         from . import requests as m
 
-        return m.accept_exchange_request(request_id, acting_user)
+        return m.accept_exchange_request(
+            request_id, acting_user, due_date=due_date
+        )
+
+    def propose_due(
+        self, request_id: int, acting_user: CustomUser, due_date
+    ) -> BookExchangeRequest:
+        from . import requests as m
+
+        return m.propose_exchange_due_date(request_id, acting_user, due_date)
+
+    def confirm_due(
+        self, request_id: int, acting_user: CustomUser
+    ) -> BookExchangeRequest:
+        from . import requests as m
+
+        return m.confirm_exchange_due_date(request_id, acting_user)
 
     def reject(self, request_id: int, acting_user: CustomUser) -> None:
         from . import requests as m

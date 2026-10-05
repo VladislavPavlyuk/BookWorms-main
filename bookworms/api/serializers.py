@@ -199,6 +199,8 @@ class ShelfSerializer(serializers.ModelSerializer):
     requires_deposit = serializers.SerializerMethodField()
     is_publicly_listed = serializers.SerializerMethodField()
     listing_status_display = serializers.SerializerMethodField()
+    library_owners = serializers.SerializerMethodField()
+    owners_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Shelf
@@ -233,6 +235,8 @@ class ShelfSerializer(serializers.ModelSerializer):
             "requires_deposit",
             "is_publicly_listed",
             "listing_status_display",
+            "library_owners",
+            "owners_label",
             "added_at",
         )
 
@@ -304,6 +308,23 @@ class ShelfSerializer(serializers.ModelSerializer):
     def get_listing_status_display(self, obj):
         c = self._copy(obj)
         return ", ".join(c.listing_labels()) if c else ""
+
+    def get_library_owners(self, obj):
+        owners = getattr(obj, "library_owners", None)
+        if owners is None:
+            legal = obj.borrowed_from if obj.borrowed_from_id else obj.user
+            owners = [legal] if legal else []
+        return UserPublicSerializer(owners, many=True, context=self.context).data
+
+    def get_owners_label(self, obj):
+        label = getattr(obj, "owners_label", None)
+        if label:
+            return label
+        owners = getattr(obj, "library_owners", None)
+        if owners:
+            return " + ".join(u.username for u in owners)
+        legal = obj.borrowed_from if obj.borrowed_from_id else obj.user
+        return legal.username if legal else ""
 
     def get_price_eval(self, obj):
         # Only expose on the owner's library endpoint (my_shelf / refresh).
@@ -465,6 +486,7 @@ class BookCopySerializer(serializers.ModelSerializer):
 
 class AddIsbnSerializer(serializers.Serializer):
     isbn = serializers.CharField(max_length=32)
+    confirm_extra = serializers.BooleanField(required=False, default=False)
 
 
 class AddBookManualSerializer(serializers.Serializer):
@@ -476,6 +498,7 @@ class AddBookManualSerializer(serializers.Serializer):
     cover_url = serializers.URLField(required=False, allow_blank=True, default="")
     info_url = serializers.URLField(required=False, allow_blank=True, default="")
     cover_text = serializers.CharField(required=False, allow_blank=True, default="")
+    confirm_extra = serializers.BooleanField(required=False, default=False)
 
 
 class UpdateBookManualSerializer(serializers.Serializer):
@@ -530,6 +553,8 @@ class ExchangeRequestSerializer(serializers.ModelSerializer):
     offer_shelf = ShelfSerializer(read_only=True)
     kind = serializers.SerializerMethodField()
     is_transmission = serializers.SerializerMethodField()
+    can_propose_due = serializers.SerializerMethodField()
+    can_confirm_due = serializers.SerializerMethodField()
 
     class Meta:
         model = BookExchangeRequest
@@ -542,6 +567,11 @@ class ExchangeRequestSerializer(serializers.ModelSerializer):
             "status",
             "kind",
             "is_transmission",
+            "proposed_due_date",
+            "due_date_proposer",
+            "due_date_confirmed",
+            "can_propose_due",
+            "can_confirm_due",
             "created_at",
             "resolved_at",
         )
@@ -560,10 +590,42 @@ class ExchangeRequestSerializer(serializers.ModelSerializer):
 
         return is_copy_lent_out(copy_id)
 
+    def _viewer(self):
+        request = self.context.get("request")
+        return getattr(request, "user", None) if request else None
+
+    def get_can_propose_due(self, obj):
+        user = self._viewer()
+        if (
+            not user
+            or not user.is_authenticated
+            or obj.status != BookExchangeRequest.Status.PENDING
+            or obj.offer_shelf_id
+        ):
+            return False
+        return user.id in (obj.shelf_owner_id, obj.requester_id)
+
+    def get_can_confirm_due(self, obj):
+        user = self._viewer()
+        if (
+            not user
+            or not user.is_authenticated
+            or obj.status != BookExchangeRequest.Status.PENDING
+            or obj.offer_shelf_id
+            or not obj.proposed_due_date
+            or obj.due_date_confirmed
+        ):
+            return False
+        proposer = obj.due_date_proposer or "requester"
+        if proposer == "owner":
+            return user.id == obj.requester_id
+        return user.id == obj.shelf_owner_id
+
 
 class CreateExchangeSerializer(serializers.Serializer):
     target_shelf_id = serializers.IntegerField()
     offer_shelf_id = serializers.IntegerField(required=False, allow_null=True)
+    proposed_due_date = serializers.DateField(required=False, allow_null=True)
 
 
 class BookBrowseGroupSerializer(serializers.Serializer):
@@ -571,16 +633,18 @@ class BookBrowseGroupSerializer(serializers.Serializer):
 
     book = BookSerializer()
     owners = UserPublicSerializer(many=True)
+    owners_label = serializers.CharField(required=False, allow_blank=True)
     copies = ShelfSerializer(many=True)
 
     def to_representation(self, instance):
-        # instance: {book, owners, shelves}
+        # instance: {book, owners, shelves, owners_label?}
         ctx = self.context
+        owners = instance.get("owners") or []
+        label = instance.get("owners_label") or " + ".join(u.username for u in owners)
         return {
             "book": BookSerializer(instance["book"], context=ctx).data,
-            "owners": UserPublicSerializer(
-                instance["owners"], many=True, context=ctx
-            ).data,
+            "owners": UserPublicSerializer(owners, many=True, context=ctx).data,
+            "owners_label": label,
             "copies": ShelfSerializer(
                 instance["shelves"], many=True, context=ctx
             ).data,
@@ -590,6 +654,9 @@ class BookBrowseGroupSerializer(serializers.Serializer):
 class MessageSerializer(serializers.ModelSerializer):
     sender = UserPublicSerializer(read_only=True)
     recipient = UserPublicSerializer(read_only=True)
+    library_invite = serializers.SerializerMethodField()
+    library_action = serializers.SerializerMethodField()
+    exchange_request_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = PrivateMessage
@@ -599,9 +666,155 @@ class MessageSerializer(serializers.ModelSerializer):
             "recipient",
             "body",
             "exchange_request",
+            "exchange_request_detail",
+            "library_invite",
+            "library_action",
             "created_at",
             "read_at",
+            "is_system",
         )
+
+    def get_exchange_request_detail(self, obj):
+        req = obj.exchange_request
+        if not req:
+            return None
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        pending = req.status == "pending"
+        can_accept = bool(
+            user
+            and user.is_authenticated
+            and pending
+            and req.shelf_owner_id == user.id
+        )
+        can_reject = can_accept
+        can_cancel = bool(
+            user
+            and user.is_authenticated
+            and pending
+            and req.requester_id == user.id
+        )
+        title = ""
+        try:
+            title = req.target_shelf.book.title
+        except Exception:
+            pass
+        return {
+            "id": req.id,
+            "status": req.status,
+            "kind": "exchange" if req.offer_shelf_id else "loan",
+            "is_transmission": bool(
+                getattr(req, "is_transmission", False)
+                or (
+                    not req.offer_shelf_id
+                    and getattr(getattr(req, "target_shelf", None), "borrowed_from_id", None)
+                )
+            ),
+            "book_title": title,
+            "proposed_due_date": (
+                req.proposed_due_date.isoformat() if req.proposed_due_date else None
+            ),
+            "due_date_proposer": getattr(req, "due_date_proposer", None) or "requester",
+            "due_date_confirmed": bool(getattr(req, "due_date_confirmed", False)),
+            "can_accept": can_accept,
+            "can_reject": can_reject,
+            "can_cancel": can_cancel,
+            "can_propose_due": bool(
+                pending
+                and user
+                and user.is_authenticated
+                and not req.offer_shelf_id
+                and user.id in (req.shelf_owner_id, req.requester_id)
+            ),
+            "can_confirm_due": bool(
+                pending
+                and user
+                and user.is_authenticated
+                and not req.offer_shelf_id
+                and req.proposed_due_date
+                and not getattr(req, "due_date_confirmed", False)
+                and (
+                    (
+                        (getattr(req, "due_date_proposer", None) or "requester") == "owner"
+                        and user.id == req.requester_id
+                    )
+                    or (
+                        (getattr(req, "due_date_proposer", None) or "requester") != "owner"
+                        and user.id == req.shelf_owner_id
+                    )
+                )
+            ),
+        }
+
+    def get_library_invite(self, obj):
+        inv = obj.library_invite
+        if not inv:
+            return None
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        can_respond = bool(
+            user
+            and user.is_authenticated
+            and inv.status == "pending"
+            and inv.to_user_id == user.id
+        )
+        can_cancel = bool(
+            user
+            and user.is_authenticated
+            and inv.status in ("pending", "awaiting_isbn")
+            and (inv.from_user_id == user.id)
+        )
+        overlap = None
+        if can_respond:
+            try:
+                from mainApp.library_service import (
+                    ensure_personal_library,
+                    merge_overlap_preview,
+                )
+
+                overlap = merge_overlap_preview(
+                    inv.library, ensure_personal_library(user)
+                )
+            except Exception:
+                overlap = []
+        return {
+            "id": inv.id,
+            "status": inv.status,
+            "library_name": inv.library.display_name if inv.library_id else "",
+            "message": inv.message,
+            "can_respond": can_respond,
+            "can_cancel": can_cancel,
+            "overlap": overlap,
+        }
+
+    def get_library_action(self, obj):
+        act = obj.library_action
+        if not act:
+            return None
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        payload = act.payload or {}
+        can_decide = bool(
+            user
+            and user.is_authenticated
+            and act.status == "pending"
+            and act.library_id
+            and act.library.admin_id == user.id
+        )
+        return {
+            "id": act.id,
+            "status": act.status,
+            "action_type": act.action_type,
+            "action_type_label": act.get_action_type_display(),
+            "title": payload.get("title") or "",
+            "isbn": payload.get("isbn") or "",
+            "existing_count": payload.get("existing_count") or 0,
+            "count": payload.get("count") or 1,
+            "can_decide": can_decide,
+            "initiator_username": (
+                act.initiator.username if act.initiator_id else ""
+            ),
+        }
 
 
 class SendMessageSerializer(serializers.Serializer):

@@ -9,6 +9,10 @@
 <p class="text-muted small mb-3">
     На полиці — лише те, що <strong>фізично у вас</strong>: власні вільні примірники та позичені книги
     (з власником і терміном). Видані вами в позику з’являються на полиці позичальника, доки не повернуться.
+    {% if is_shared_library %}
+    <br>Спільна бібліотека <strong>«{{ shared_library_name }}»</strong>
+    ({{ shared_member_count }} учасн.) — усі спільні примірники видно кожному учаснику як «Моя полиця».
+    {% endif %}
     {% if lent_out_count %}
     Зараз у позиці з ваших: <strong>{{ lent_out_count }}</strong>
     — див. <a href="{% url 'due_slips' %}">Date Due Slip</a> / підтвердження повернення нижче.
@@ -53,7 +57,28 @@
 
 <div class="card mb-4">
     <div class="card-body">
-        <h5 class="card-title">Додати книгу за ISBN</h5>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <h5 class="card-title mb-0">Додати книгу за ISBN</h5>
+            <a href="{% url 'shared_library' %}" class="btn btn-sm btn-outline-dark">Спільна бібліотека</a>
+        </div>
+        {% if confirm_extra %}
+        <div class="alert alert-warning">
+            У бібліотеці вже є <strong>{{ confirm_extra.count }}</strong> примірник(и)
+            «{{ confirm_extra.title }}» (ISBN {{ confirm_extra.isbn }}).
+            Додати ще один фізичний примірник?
+            {% if is_shared_library and not i_am_library_admin %}
+            <br><span class="small">Якщо підтвердите — запит піде адміністратору в чат.</span>
+            {% endif %}
+            <form method="post" class="mt-2">
+                {% csrf_token %}
+                <input type="hidden" name="add_isbn" value="1">
+                <input type="hidden" name="confirm_extra" value="1">
+                <input type="hidden" name="isbn" value="{{ confirm_extra.isbn }}">
+                <button type="submit" class="btn btn-warning btn-sm">Так, додати ще один</button>
+                <a href="{% url 'my_library' %}" class="btn btn-outline-secondary btn-sm">Ні</a>
+            </form>
+        </div>
+        {% endif %}
         <form method="post" class="row g-2 align-items-end" id="addIsbnForm">
             {% csrf_token %}
             <input type="hidden" name="add_isbn" value="1">
@@ -154,6 +179,13 @@
                             </svg>
                         </button>
                         <button type="button"
+                                class="btn btn-outline-dark btn-sm"
+                                id="manualPhotoGallery"
+                                title="Обрати з галереї"
+                                aria-label="Обрати з галереї">
+                            Галерея
+                        </button>
+                        <button type="button"
                                 class="btn btn-outline-primary btn-sm"
                                 id="manualPhotoRecognize"
                                 disabled
@@ -164,6 +196,7 @@
                         <span class="small text-muted" id="manualPhotoAiStatus"></span>
                     </div>
                     <input type="file" name="photos" id="manualPhotos" class="d-none" accept="image/*" multiple>
+                    <input type="file" id="manualPhotoGalleryInput" class="d-none" accept="image/*" multiple>
                     <div id="manualPhotoPreview" class="manual-photo-preview d-flex flex-wrap gap-2"></div>
                     <input type="hidden" id="manualRecognizeUrl" value="{% url 'recognize_book_cover' %}">
                 </div>
@@ -189,8 +222,15 @@
 {% if shelves %}
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div class="alert alert-info border-0 shadow-sm mb-0 flex-grow-1" role="status">
-            <strong>Поділіться враженнями:</strong> напишіть пост про прочитану книгу - натисніть
-            <span class="text-nowrap">"Написати пост про книгу"</span> на картці нижче.
+            <strong>Полиця:</strong> обкладинка · назва · автор · вибір.
+            Натисніть <strong>обкладинку</strong>, щоб відкрити деталі (ціна, вік, історія, пост…).
+            <br><span class="small">Виберіть один або кілька примірників — з’являться дії «Статуси» / «Видалити».
+            {% if is_shared_library and i_am_library_admin %}
+            Як адміністратор спільної бібліотеки ви можете видаляти будь-які примірники без підтвердження; власники отримають лише повідомлення в чаті.
+            {% elif is_shared_library and not i_am_library_admin %}
+            У спільній бібліотеці зміни підуть адміністратору в чат на підтвердження.
+            {% endif %}
+            </span>
         </div>
         <div class="library-price-total border rounded px-3 py-2 bg-body-secondary">
             <span class="small text-muted d-block">Оцінка вартості полиці</span>
@@ -198,22 +238,97 @@
             <span class="small text-muted d-block">сума оцінок ISBN (де знайдено ≥3 джерела)</span>
         </div>
     </div>
-    <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
+
+    <div id="librarySelectionBar" class="library-selection-bar shadow-sm border rounded px-3 py-2 mb-3 bg-body" hidden>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span class="small mb-0">Вибрано: <strong id="librarySelectionCount">0</strong></span>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="libraryBulkListingBtn" data-bs-toggle="modal" data-bs-target="#libraryBulkListingModal">
+                    Змінити статуси
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-danger" id="libraryBulkDeleteBtn">
+                    Видалити з полиці
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="libraryClearSelectionBtn">
+                    Скасувати вибір
+                </button>
+            </div>
+        </div>
+        {% if is_shared_library and not i_am_library_admin %}
+        <p class="small text-muted mb-0 mt-1">Запит піде адміністратору спільної бібліотеки в чат.</p>
+        {% endif %}
+    </div>
+
+    <form id="libraryBulkForm" method="post" action="{% url 'library_bulk_action' %}" class="d-none">
+        {% csrf_token %}
+        <input type="hidden" name="bulk_action" id="libraryBulkAction" value="">
+        <div id="libraryBulkIds"></div>
+        <div id="libraryBulkListingFields"></div>
+    </form>
+
+    <div class="library-shelf-grid-wrap">
+    <div class="library-select-grid">
         {% for shelf in shelves %}
             {% with book=shelf.book %}
-            <div class="col">
-                <div class="card h-100">
-                    {% if book.cover_url %}
-                        <a href="{% url 'copy_history' shelf.copy_id %}" class="d-block text-center text-decoration-none library-book-cover-link">
-                            <img src="{{ book.cover_url }}" class="card-img-top" alt="" style="max-height: 220px; object-fit: contain; background: #f8f9fa;">
-                        </a>
-                    {% elif book.photos.all %}
-                        <a href="{% url 'copy_history' shelf.copy_id %}" class="d-block text-center text-decoration-none library-book-cover-link">
-                            <img src="{{ book.photos.all.0.image.url }}" class="card-img-top" alt="" style="max-height: 220px; object-fit: contain; background: #f8f9fa;">
-                        </a>
+            <div class="library-select-card card {% if not shelf.borrowed_from_id and shelf.copy %}library-select-card--owned{% endif %}"
+                 data-shelf-id="{{ shelf.id }}"
+                 {% if not shelf.borrowed_from_id and shelf.copy %}data-selectable="1"{% endif %}>
+                <div class="library-cover-wrap">
+                    <button type="button"
+                            class="library-cover-btn js-library-open-detail"
+                            data-detail-id="{{ shelf.id }}"
+                            aria-label="Деталі: {{ book.title }}">
+                        {% if book.cover_url %}
+                            <img src="{{ book.cover_url }}" class="library-cover-img" alt="">
+                        {% elif book.photos.all %}
+                            <img src="{{ book.photos.all.0.image.url }}" class="library-cover-img" alt="">
+                        {% else %}
+                            <span class="library-cover-placeholder">Немає обкладинки</span>
+                        {% endif %}
+                    </button>
+                    {% if not shelf.borrowed_from_id and shelf.copy %}
+                    <label class="library-select-check form-check m-0">
+                        <input type="checkbox" class="form-check-input js-library-select" value="{{ shelf.id }}" aria-label="Вибрати {{ book.title }}">
+                    </label>
                     {% endif %}
+                </div>
+                <div class="card-body library-select-card__meta pt-2 pb-2">
+                    <h6 class="card-title mb-1 library-select-card__title">{{ book.title }}</h6>
+                    {% if book.authors %}
+                        <p class="card-text small text-muted mb-0 library-select-card__author">{{ book.authors }}</p>
+                    {% else %}
+                        <p class="card-text small text-muted mb-0 library-select-card__author">Автор невідомий</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="d-none" id="library-detail-host-{{ shelf.id }}" hidden>
+                <div class="library-instance-detail" data-shelf-id="{{ shelf.id }}">
+                    <div class="d-flex gap-3 mb-3">
+                        {% if book.cover_url %}
+                            <img src="{{ book.cover_url }}" class="library-detail-cover" alt="">
+                        {% elif book.photos.all %}
+                            <img src="{{ book.photos.all.0.image.url }}" class="library-detail-cover" alt="">
+                        {% endif %}
+                        <div class="flex-grow-1">
+                            <h5 class="mb-1">{{ book.title }}</h5>
+                            {% if book.authors %}<p class="mb-1">{{ book.authors }}</p>{% endif %}
+                            {% if book.isbn|slice:":4" == "9799" %}
+                                <p class="small text-muted mb-1">ISBN code not exists</p>
+                            {% else %}
+                                <p class="small text-muted mb-1">ISBN: {{ book.isbn }}</p>
+                            {% endif %}
+                            {% if not shelf.borrowed_from_id and shelf.copy %}
+                                {% with labels=shelf.copy.listing_labels %}
+                                {% if labels %}
+                                <p class="small text-muted mb-0">{{ labels|join:", " }}</p>
+                                {% endif %}
+                                {% endwith %}
+                            {% endif %}
+                        </div>
+                    </div>
                     {% if book.photos.all %}
-                        <div class="library-book-photo-strip px-2 pt-2 d-flex flex-wrap gap-1">
+                        <div class="library-book-photo-strip d-flex flex-wrap gap-1 mb-3">
                             {% for photo in book.photos.all %}
                                 <a href="{{ photo.image.url }}" target="_blank" rel="noopener" class="library-book-photo-thumb">
                                     <img src="{{ photo.image.url }}" alt="">
@@ -221,212 +336,104 @@
                             {% endfor %}
                         </div>
                     {% endif %}
-                    <div class="card-body d-flex flex-column">
-                        <h5 class="card-title"><a href="{% url 'copy_history' shelf.copy_id %}" class="link-dark text-decoration-none library-book-title-link">{{ book.title }}</a></h5>
-                        {% if book.isbn|slice:":4" == "9799" %}
-                            <p class="card-text small text-muted mb-1">ISBN code not exists</p>
-                        {% else %}
-                            <p class="card-text small text-muted mb-1">ISBN: {{ book.isbn }}</p>
-                        {% endif %}
-                        {% if book.authors %}
-                            <p class="card-text small mb-1">{{ book.authors }}</p>
-                        {% endif %}
-                        <div class="library-book-price mb-2" data-book-id="{{ book.id }}">
-                            {% if shelf.price_eval %}
-                                {% if shelf.price_eval.status == "ready" and shelf.price_eval.price_avg %}
-                                    <p class="mb-1">
-                                        <span class="fw-semibold">≈ {{ shelf.price_eval.price_avg }} ₴</span>
-                                        <span class="small text-muted">({{ shelf.price_eval.price_min }}–{{ shelf.price_eval.price_max }})</span>
-                                    </p>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <button type="button"
-                                                class="btn btn-sm btn-outline-secondary js-price-sources"
-                                                data-book-id="{{ book.id }}"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#priceSourcesModal">
-                                            Price sources ({{ shelf.price_eval.source_count }})
-                                        </button>
-                                        <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline js-price-refresh-form">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm btn-outline-primary">Оновити ціну</button>
-                                        </form>
-                                    </div>
-                                    <script type="application/json" id="price-quotes-{{ book.id }}">{{ shelf.price_quotes_json }}</script>
-                                {% elif shelf.price_eval.status == "pending" %}
-                                    <p class="small text-muted mb-1">Оцінка ціни…</p>
-                                    <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-sm btn-outline-primary">Оновити ціну</button>
-                                    </form>
-                                {% elif shelf.price_eval.status == "missing" %}
-                                    <p class="small text-muted mb-1">Ціну не знайдено</p>
-                                    {% if shelf.price_eval.source_count %}
+                    <div class="library-book-price mb-3" data-book-id="{{ book.id }}">
+                        {% if shelf.price_eval %}
+                            {% if shelf.price_eval.status == "ready" and shelf.price_eval.price_avg %}
+                                <p class="mb-1">
+                                    <span class="fw-semibold">≈ {{ shelf.price_eval.price_avg }} ₴</span>
+                                    <span class="small text-muted">({{ shelf.price_eval.price_min }}–{{ shelf.price_eval.price_max }})</span>
+                                </p>
+                                <div class="d-flex flex-wrap gap-2">
                                     <button type="button"
-                                            class="btn btn-sm btn-outline-secondary js-price-sources me-1"
+                                            class="btn btn-sm btn-outline-secondary js-price-sources"
                                             data-book-id="{{ book.id }}"
                                             data-bs-toggle="modal"
                                             data-bs-target="#priceSourcesModal">
                                         Price sources ({{ shelf.price_eval.source_count }})
                                     </button>
-                                    <script type="application/json" id="price-quotes-{{ book.id }}">{{ shelf.price_quotes_json }}</script>
-                                    {% endif %}
-                                    <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
+                                    <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline js-price-refresh-form">
                                         {% csrf_token %}
-                                        <button type="submit" class="btn btn-sm btn-outline-primary">Оновити ціну</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Оновити</button>
                                     </form>
-                                {% else %}
-                                    <p class="small text-muted mb-1">Оцінка недоступна</p>
-                                    <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-sm btn-outline-primary">Оновити ціну</button>
-                                    </form>
-                                {% endif %}
+                                </div>
+                                <script type="application/json" id="price-quotes-{{ book.id }}">{{ shelf.price_quotes_json }}</script>
                             {% else %}
-                                <p class="small text-muted mb-1">Ціна ще не оцінена</p>
                                 <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-sm btn-outline-primary">Оцінити ціну</button>
                                 </form>
                             {% endif %}
-                        </div>
-                        <form method="post" action="{% url 'update_shelf_book_reader_age' shelf.id %}" class="book-reader-age-form border rounded p-2 mb-2 bg-body-secondary" data-autosave="1">
-                            {% csrf_token %}
-                            <p class="small fw-semibold mb-1">Рекомендований вік читача</p>
-                            <div class="reader-age-ticks small text-muted user-select-none">
-                                <span>0</span><span>3</span><span>5</span><span>7</span><span>10</span><span>12</span><span>15</span><span>18+</span>
-                            </div>
-                            <div class="reader-age-dual">
-                                <input type="range" name="min_readers_age" min="{{ reader_age_min }}" max="{{ reader_age_max }}" step="1" value="{{ book.min_readers_age }}" class="reader-age-input reader-age-min" aria-label="Мінімальний вік">
-                                <input type="range" name="max_readers_age" min="{{ reader_age_min }}" max="{{ reader_age_max }}" step="1" value="{{ book.max_readers_age }}" class="reader-age-input reader-age-max" aria-label="Максимальний вік">
-                            </div>
-                            <p class="small text-muted mb-0 mt-1 js-reader-age-status" aria-live="polite"></p>
-                        </form>
-                        {% if not shelf.borrowed_from_id and shelf.copy %}
-                        <form method="post"
-                              action="{% url 'update_shelf_copy_listing' shelf.id %}"
-                              class="book-listing-form border rounded p-2 mb-2 js-listing-form">
-                            {% csrf_token %}
-                            <p class="small fw-semibold mb-1">Статуси примірника</p>
-                            <div class="d-flex flex-column gap-1 mb-2">
-                                {% for field, label in listing_checkbox_flags %}
-                                <label class="form-check small mb-0">
-                                    <input type="checkbox"
-                                           class="form-check-input js-listing-flag"
-                                           name="{{ field }}"
-                                           value="1"
-                                           data-flag="{{ field }}"
-                                           {% if field == "is_fee_sharing" and shelf.copy.is_fee_sharing %}checked{% endif %}
-                                           {% if field == "is_hidden" and shelf.copy.is_hidden %}checked{% endif %}
-                                           {% if field == "is_for_rent" and shelf.copy.is_for_rent %}checked{% endif %}
-                                           {% if field == "is_for_exchange" and shelf.copy.is_for_exchange %}checked{% endif %}
-                                           {% if field == "is_free_of_deposit" and shelf.copy.is_free_of_deposit %}checked{% endif %}>
-                                    {{ label }}
-                                </label>
-                                {% endfor %}
-                            </div>
-                            <p class="small fw-semibold mb-1">Продаж / подарунок <span class="text-muted fw-normal">(взаємовиключно)</span></p>
-                            <div class="d-flex flex-wrap gap-3 mb-2">
-                                {% for value, label in sale_gift_radio %}
-                                <label class="form-check small mb-0">
-                                    <input type="radio"
-                                           class="form-check-input js-sale-gift"
-                                           name="sale_gift"
-                                           value="{{ value }}"
-                                           {% if value == "" and not shelf.copy.is_for_sale and not shelf.copy.is_as_gift %}checked{% endif %}
-                                           {% if value == "for_sale" and shelf.copy.is_for_sale %}checked{% endif %}
-                                           {% if value == "as_gift" and shelf.copy.is_as_gift %}checked{% endif %}>
-                                    {{ label }}
-                                </label>
-                                {% endfor %}
-                            </div>
-                            <div class="js-listing-sale mb-2"{% if not shelf.copy.is_for_sale %} hidden{% endif %}>
-                                <label class="form-label small mb-0" for="sale-price-{{ shelf.id }}">Ціна продажу (₴)</label>
-                                <input type="number" step="0.01" min="0.01" name="sale_price" id="sale-price-{{ shelf.id }}"
-                                       class="form-control form-control-sm"
-                                       value="{{ shelf.copy.sale_price|default_if_none:'' }}">
-                            </div>
-                            <div class="js-listing-rent mb-2"{% if not shelf.copy.is_for_rent %} hidden{% endif %}>
-                                <label class="form-label small mb-0" for="rent-price-{{ shelf.id }}">Оренда за день (₴)</label>
-                                <input type="number" step="0.01" min="0.01" name="rent_price_per_day" id="rent-price-{{ shelf.id }}"
-                                       class="form-control form-control-sm"
-                                       value="{{ shelf.copy.rent_price_per_day|default_if_none:'' }}">
-                            </div>
-                            <p class="small text-muted mb-2 js-listing-deposit-hint">
-                                {% if shelf.copy.requires_deposit %}
-                                Позика потребує банківський депозит до повернення.
-                                {% else %}
-                                Депозит не потрібен (For sale / As a gift / Free of deposit).
-                                {% endif %}
-                            </p>
-                            <button type="submit" class="btn btn-sm btn-outline-primary">Зберегти статуси</button>
-                        </form>
-                        {% endif %}
-                        {% if book.publisher or book.publish_date %}
-                            <p class="card-text small mb-2">{{ book.publisher }}{% if book.publisher and book.publish_date %}, {% endif %}{{ book.publish_date }}</p>
-                        {% endif %}
-                        {% if book.info_url %}
-                            <p class="mt-auto mb-2"><a href="{{ book.info_url }}" target="_blank" rel="noopener">Open Library</a></p>
-                        {% endif %}
-                        <p class="mb-2 d-flex flex-wrap gap-2">
-                            <a href="{% url 'copy_history' shelf.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія подій</a>
-                            <a href="{% url 'create_post' %}?mode=feedback&amp;book_id={{ book.id }}" class="btn btn-sm btn-outline-success">Написати відгук</a>
-                            {% if shelf.can_edit_manual %}
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-primary js-edit-manual-book btn-icon-action"
-                                    data-shelf-id="{{ shelf.id }}"
-                                    title="Редагувати"
-                                    aria-label="Редагувати">
-                                <svg class="btn-icon-action__glyph" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                    <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/>
-                                </svg>
-                            </button>
-                            <script type="application/json" id="edit-book-payload-{{ shelf.id }}">{{ shelf.edit_payload_json }}</script>
-                            {% endif %}
-                        </p>
-                        {# Позичена книга: не показуємо "Видалити", лише форму на return_borrowed_shelf_book. #}
-                        {% if shelf.borrowed_from_id %}
-                            <p class="small text-warning mb-1">
-                                Позичено у <strong>{% shelf_user_link shelf.borrowed_from %}</strong>
-                            </p>
-                            {% if shelf.due_date %}
-                            <p class="small mb-2 {% if shelf.is_overdue %}text-danger fw-semibold{% else %}text-muted{% endif %}">
-                                Термін повернення: <strong>{{ shelf.due_date|date:"d.m.Y" }}</strong>
-                                {% if shelf.is_overdue %}
-                                    · прострочено
-                                {% elif shelf.days_left is not None %}
-                                    · ще {{ shelf.days_left }} дн.
-                                {% endif %}
-                            </p>
-                            {% endif %}
-                            <a href="{% url 'message_thread' shelf.borrowed_from_id %}" class="btn btn-outline-secondary btn-sm mb-2">Чат з власником</a>
-                            {% if shelf.return_pending %}
-                                <p class="small text-info mb-0">Очікується підтвердження повернення позикодавцем.</p>
-                            {% else %}
-                            <form method="post" action="{% url 'return_borrowed_shelf_book' shelf.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-success btn-sm">Повернути власнику</button>
-                            </form>
-                            {% endif %}
                         {% else %}
-                            {% if shelf.pending_return_row %}
-                            <p class="small text-success mb-2">
-                                {% shelf_user_link shelf.pending_return_row.user %} повідомив про повернення цієї книги.
-                            </p>
-                            <form method="post" action="{% url 'confirm_return_borrowed_shelf_book' shelf.pending_return_row.id %}" class="mb-2">
+                            <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-success btn-sm">Підтвердити повернення</button>
-                            </form>
-                            {% endif %}
-                            <form method="post" action="{% url 'remove_shelf_entry' shelf.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-outline-danger btn-sm">Видалити з полиці</button>
+                                <button type="submit" class="btn btn-sm btn-outline-primary">Оцінити ціну</button>
                             </form>
                         {% endif %}
                     </div>
+                    {% if not shelf.borrowed_from_id %}
+                    <form method="post" action="{% url 'update_shelf_book_reader_age' shelf.id %}" class="book-reader-age-form border rounded p-2 mb-3 bg-body-secondary" data-autosave="1">
+                        {% csrf_token %}
+                        <p class="small fw-semibold mb-1">Рекомендований вік читача</p>
+                        <div class="reader-age-ticks small text-muted user-select-none">
+                            <span>0</span><span>3</span><span>5</span><span>7</span><span>10</span><span>12</span><span>15</span><span>18+</span>
+                        </div>
+                        <div class="reader-age-dual">
+                            <input type="range" name="min_readers_age" min="{{ reader_age_min }}" max="{{ reader_age_max }}" step="1" value="{{ book.min_readers_age }}" class="reader-age-input reader-age-min" aria-label="Мінімальний вік">
+                            <input type="range" name="max_readers_age" min="{{ reader_age_min }}" max="{{ reader_age_max }}" step="1" value="{{ book.max_readers_age }}" class="reader-age-input reader-age-max" aria-label="Максимальний вік">
+                        </div>
+                        <p class="small text-muted mb-0 mt-1 js-reader-age-status" aria-live="polite"></p>
+                    </form>
+                    {% endif %}
+                    <p class="mb-3 d-flex flex-wrap gap-2">
+                        <a href="{% url 'copy_history' shelf.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія</a>
+                        <a href="{% url 'create_post' %}?mode=feedback&amp;book_id={{ book.id }}" class="btn btn-sm btn-outline-success">Написати пост</a>
+                        {% if shelf.can_edit_manual %}
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary js-edit-manual-book btn-icon-action"
+                                data-shelf-id="{{ shelf.id }}"
+                                title="Редагувати"
+                                aria-label="Редагувати">
+                            <svg class="btn-icon-action__glyph" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/>
+                            </svg>
+                        </button>
+                        <script type="application/json" id="edit-book-payload-{{ shelf.id }}">{{ shelf.edit_payload_json }}</script>
+                        {% endif %}
+                    </p>
+                    {% if shelf.borrowed_from_id %}
+                        <p class="small text-warning mb-1">
+                            Позичено у <strong>{% shelf_user_link shelf.borrowed_from %}</strong>
+                        </p>
+                        {% if shelf.due_date %}
+                        <p class="small mb-2 {% if shelf.is_overdue %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                            Термін: <strong>{{ shelf.due_date|date:"d.m.Y" }}</strong>
+                            {% if shelf.is_overdue %} · прострочено
+                            {% elif shelf.days_left is not None %} · ще {{ shelf.days_left }} дн.{% endif %}
+                        </p>
+                        {% endif %}
+                        <a href="{% url 'message_thread' shelf.borrowed_from_id %}" class="btn btn-outline-secondary btn-sm mb-2">Чат з власником</a>
+                        {% if shelf.return_pending %}
+                            <p class="small text-info mb-0">Очікується підтвердження повернення.</p>
+                        {% else %}
+                        <form method="post" action="{% url 'return_borrowed_shelf_book' shelf.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success btn-sm">Повернути власнику</button>
+                        </form>
+                        {% endif %}
+                    {% elif shelf.pending_return_row %}
+                        <p class="small text-success mb-2">
+                            {% shelf_user_link shelf.pending_return_row.user %} повідомив про повернення.
+                        </p>
+                        <form method="post" action="{% url 'confirm_return_borrowed_shelf_book' shelf.pending_return_row.id %}" class="mb-2">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success btn-sm">Підтвердити повернення</button>
+                        </form>
+                    {% endif %}
                 </div>
             </div>
             {% endwith %}
         {% endfor %}
+    </div>
     </div>
 {% else %}
     <p class="text-muted">Поки що порожньо -додайте першу книгу за ISBN.</p>
@@ -543,6 +550,18 @@
     </div>
 </div>
 
+<div class="modal fade" id="libraryInstanceModal" tabindex="-1" aria-labelledby="libraryInstanceLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="libraryInstanceLabel">Примірник</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="libraryInstanceModalBody"></div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="priceSourcesModal" tabindex="-1" aria-labelledby="priceSourcesLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
@@ -557,12 +576,57 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="libraryBulkListingModal" tabindex="-1" aria-labelledby="libraryBulkListingLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="libraryBulkListingLabel">Статуси вибраних примірників</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">Застосується до всіх вибраних книг.</p>
+                <div class="d-flex flex-column gap-1 mb-3" id="libraryBulkFlagList">
+                    {% for field, label in listing_checkbox_flags %}
+                    <label class="form-check small mb-0">
+                        <input type="checkbox" class="form-check-input js-bulk-listing-flag" name="{{ field }}" value="1" data-flag="{{ field }}" {% if field == "is_fee_sharing" %}checked{% endif %}>
+                        {{ label }}
+                    </label>
+                    {% endfor %}
+                </div>
+                <p class="small fw-semibold mb-1">Продаж / подарунок</p>
+                <div class="d-flex flex-wrap gap-3 mb-2">
+                    {% for value, label in sale_gift_radio %}
+                    <label class="form-check small mb-0">
+                        <input type="radio" class="form-check-input js-bulk-sale-gift" name="bulk_sale_gift" value="{{ value }}" {% if value == "" %}checked{% endif %}>
+                        {{ label }}
+                    </label>
+                    {% endfor %}
+                </div>
+                <div class="js-bulk-listing-sale mb-2" hidden>
+                    <label class="form-label small mb-0" for="bulkSalePrice">Ціна продажу (₴)</label>
+                    <input type="number" step="0.01" min="0.01" id="bulkSalePrice" class="form-control form-control-sm">
+                </div>
+                <div class="js-bulk-listing-rent mb-2" hidden>
+                    <label class="form-label small mb-0" for="bulkRentPrice">Оренда за день (₴)</label>
+                    <input type="number" step="0.01" min="0.01" id="bulkRentPrice" class="form-control form-control-sm">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Скасувати</button>
+                <button type="button" class="btn btn-primary" id="libraryBulkListingSubmit">
+                    {% if is_shared_library and not i_am_library_admin %}Надіслати адміну{% else %}Зберегти{% endif %}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 {% load static %}
 <script src="{% url 'isbn_scan_asset' 'isbn_scan.js' %}?v=9"></script>
-<script src="{% url 'isbn_scan_asset' 'manual_book_photos.js' %}?v=17"></script>
+<script src="{% url 'isbn_scan_asset' 'manual_book_photos.js' %}?v=18"></script>
 <script>
 (function () {
   document.querySelectorAll(".js-price-sources").forEach(function (btn) {
@@ -641,6 +705,180 @@
     });
     sync();
   });
+
+  (function librarySelection() {
+    var bar = document.getElementById("librarySelectionBar");
+    var countEl = document.getElementById("librarySelectionCount");
+    var form = document.getElementById("libraryBulkForm");
+    var idsBox = document.getElementById("libraryBulkIds");
+    var fieldsBox = document.getElementById("libraryBulkListingFields");
+    var actionInput = document.getElementById("libraryBulkAction");
+    var detailModalEl = document.getElementById("libraryInstanceModal");
+    var detailBody = document.getElementById("libraryInstanceModalBody");
+    var detailTitle = document.getElementById("libraryInstanceLabel");
+    var parkedPanel = null;
+    var parkedHost = null;
+    if (!bar || !form) return;
+
+    function selectedIds() {
+      return Array.prototype.map.call(
+        document.querySelectorAll(".js-library-select:checked"),
+        function (el) { return el.value; }
+      );
+    }
+
+    function syncBar() {
+      var ids = selectedIds();
+      countEl.textContent = String(ids.length);
+      bar.hidden = ids.length === 0;
+      document.querySelectorAll(".library-select-card--owned").forEach(function (card) {
+        var cb = card.querySelector(".js-library-select");
+        card.classList.toggle("is-selected", !!(cb && cb.checked));
+      });
+    }
+
+    document.querySelectorAll(".js-library-select").forEach(function (cb) {
+      cb.addEventListener("change", syncBar);
+      cb.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+      });
+    });
+
+    function parkDetail() {
+      if (parkedPanel && parkedHost) {
+        parkedHost.appendChild(parkedPanel);
+      }
+      parkedPanel = null;
+      parkedHost = null;
+      if (detailBody) detailBody.innerHTML = "";
+    }
+
+    function openDetail(id) {
+      if (!detailModalEl || !detailBody) return;
+      parkDetail();
+      var host = document.getElementById("library-detail-host-" + id);
+      if (!host) return;
+      var panel = host.querySelector(".library-instance-detail");
+      if (!panel) return;
+      parkedHost = host;
+      parkedPanel = panel;
+      detailBody.appendChild(panel);
+      var h = panel.querySelector("h5");
+      if (detailTitle) detailTitle.textContent = h ? h.textContent : "Примірник";
+      var modal = window.bootstrap && bootstrap.Modal.getOrCreateInstance(detailModalEl);
+      if (modal) modal.show();
+      requestAnimationFrame(function () {
+        panel.querySelectorAll(".book-reader-age-form .reader-age-dual").forEach(function (el) {
+          el.dispatchEvent(new Event("resize"));
+          var minI = panel.querySelector(".reader-age-min");
+          var maxI = panel.querySelector(".reader-age-max");
+          if (minI) minI.dispatchEvent(new Event("input"));
+          if (maxI) maxI.dispatchEvent(new Event("input"));
+        });
+      });
+    }
+
+    if (detailModalEl) {
+      detailModalEl.addEventListener("hidden.bs.modal", parkDetail);
+    }
+    document.querySelectorAll(".js-library-open-detail").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openDetail(btn.getAttribute("data-detail-id"));
+      });
+    });
+
+    function fillIds() {
+      idsBox.innerHTML = "";
+      selectedIds().forEach(function (id) {
+        var inp = document.createElement("input");
+        inp.type = "hidden";
+        inp.name = "shelf_ids";
+        inp.value = id;
+        idsBox.appendChild(inp);
+      });
+    }
+
+    var clearBtn = document.getElementById("libraryClearSelectionBtn");
+    if (clearBtn) {
+      clearBtn.addEventListener("click", function () {
+        document.querySelectorAll(".js-library-select:checked").forEach(function (cb) {
+          cb.checked = false;
+        });
+        syncBar();
+      });
+    }
+
+    var delBtn = document.getElementById("libraryBulkDeleteBtn");
+    if (delBtn) {
+      delBtn.addEventListener("click", function () {
+        var n = selectedIds().length;
+        if (!n) return;
+        if (!confirm("Видалити вибрані примірники (" + n + ") з полиці?")) return;
+        fillIds();
+        fieldsBox.innerHTML = "";
+        actionInput.value = "delete";
+        form.submit();
+      });
+    }
+
+    function syncBulkListingUi() {
+      var sale = document.querySelector(".js-bulk-listing-sale");
+      var rent = document.querySelector(".js-bulk-listing-rent");
+      var rentFlag = document.querySelector('#libraryBulkListingModal [data-flag="is_for_rent"]');
+      var checked = document.querySelector(".js-bulk-sale-gift:checked");
+      var sg = checked ? checked.value : "";
+      if (sale) sale.hidden = sg !== "for_sale";
+      if (rent) rent.hidden = !(rentFlag && rentFlag.checked);
+    }
+    document.querySelectorAll(".js-bulk-sale-gift, .js-bulk-listing-flag").forEach(function (el) {
+      el.addEventListener("change", syncBulkListingUi);
+    });
+    syncBulkListingUi();
+
+    var submitListing = document.getElementById("libraryBulkListingSubmit");
+    if (submitListing) {
+      submitListing.addEventListener("click", function () {
+        if (!selectedIds().length) return;
+        fillIds();
+        fieldsBox.innerHTML = "";
+        actionInput.value = "listing";
+        document.querySelectorAll(".js-bulk-listing-flag").forEach(function (cb) {
+          if (!cb.checked) return;
+          var inp = document.createElement("input");
+          inp.type = "hidden";
+          inp.name = cb.getAttribute("name");
+          inp.value = "1";
+          fieldsBox.appendChild(inp);
+        });
+        var sg = document.querySelector(".js-bulk-sale-gift:checked");
+        var sgInp = document.createElement("input");
+        sgInp.type = "hidden";
+        sgInp.name = "sale_gift";
+        sgInp.value = sg ? sg.value : "";
+        fieldsBox.appendChild(sgInp);
+        var salePrice = document.getElementById("bulkSalePrice");
+        if (salePrice && salePrice.value) {
+          var sp = document.createElement("input");
+          sp.type = "hidden";
+          sp.name = "sale_price";
+          sp.value = salePrice.value;
+          fieldsBox.appendChild(sp);
+        }
+        var rentPrice = document.getElementById("bulkRentPrice");
+        if (rentPrice && rentPrice.value) {
+          var rp = document.createElement("input");
+          rp.type = "hidden";
+          rp.name = "rent_price_per_day";
+          rp.value = rentPrice.value;
+          fieldsBox.appendChild(rp);
+        }
+        form.submit();
+      });
+    }
+    syncBar();
+  })();
 })();
 </script>
 {% endblock %}

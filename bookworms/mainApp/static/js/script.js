@@ -529,4 +529,83 @@
     } else {
         initNavChrome();
     }
+
+    function sharePayload(btn) {
+        var title = (btn.getAttribute("data-share-title") || "").trim() || "Реченець";
+        var text = (btn.getAttribute("data-share-text") || "").trim();
+        var url = (btn.getAttribute("data-share-url") || "").trim() || window.location.href;
+        return { title: title, text: text, url: url };
+    }
+
+    function fallbackCopy(url) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(url).then(function () {
+                alert("Посилання скопійовано:\n" + url);
+            });
+        }
+        try {
+            var ta = document.createElement("textarea");
+            ta.value = url;
+            ta.setAttribute("readonly", "");
+            ta.style.position = "fixed";
+            ta.style.left = "-9999px";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            alert("Посилання скопійовано:\n" + url);
+            return Promise.resolve();
+        } catch (e) {
+            prompt("Скопіюй посилання:", url);
+            return Promise.resolve();
+        }
+    }
+
+    function initShare() {
+        document.addEventListener("click", function (ev) {
+            var btn = ev.target && ev.target.closest ? ev.target.closest(".js-share") : null;
+            if (!btn) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            var p = sharePayload(btn);
+            var message = [p.title, p.text, p.url].filter(Boolean).join("\n\n");
+            if (navigator.share) {
+                navigator
+                    .share({ title: p.title, text: p.text || p.title, url: p.url })
+                    .catch(function (err) {
+                        if (err && err.name === "AbortError") return;
+                        fallbackCopy(p.url);
+                    });
+                return;
+            }
+            fallbackCopy(message);
+        });
+
+        function scrollToShareTarget() {
+            var hash = (window.location.hash || "").replace(/^#/, "");
+            if (!hash || hash.indexOf("post-") !== 0) return;
+            var el = document.getElementById(hash);
+            if (!el) return;
+            try {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+            } catch (e) {
+                el.scrollIntoView(true);
+            }
+            el.classList.add("share-target-flash");
+            setTimeout(function () {
+                el.classList.remove("share-target-flash");
+            }, 2200);
+        }
+
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", function () {
+                setTimeout(scrollToShareTarget, 80);
+            });
+        } else {
+            setTimeout(scrollToShareTarget, 80);
+        }
+        window.addEventListener("hashchange", scrollToShareTarget);
+    }
+
+    initShare();
 })();

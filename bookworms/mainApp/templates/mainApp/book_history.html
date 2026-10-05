@@ -61,26 +61,34 @@
 <h3 class="h5 mb-3">Пости, вподобайки та коментарі (спільні для ISBN)</h3>
 {% if posts %}
     {% for post in posts %}
-    <article class="card mb-4">
+    <article class="card mb-4" id="post-{{ post.id }}">
         <div class="card-body">
             <header class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                 <h4 class="h6 mb-0">{{ post.title }}</h4>
                 <span class="small text-muted">{{ post.created_ad|date:"d.m.Y H:i" }}</span>
             </header>
-            <p class="small mb-2">
-                Автор: {% shelf_user_link post.author %}
-                · ♥ {{ post.likes.count }}
-                · коментарі {{ post.comments.count }}
+            <p class="small mb-2 d-flex flex-wrap align-items-center gap-2">
+                <span>
+                    Автор: {% shelf_user_link post.author %}
+                    · ♥ {{ post.likes.count }}
+                    · коментарі {{ post.comments.count }}
+                </span>
+                {% include "mainApp/includes/share_button.html" with request=request post_id=post.id share_title=post.title share_text=post.text only %}
             </p>
             <div class="post-text mb-3">{{ post.text|linebreaks }}</div>
             {% if post.comments.all %}
                 <h5 class="small text-uppercase text-muted mb-2">Коментарі</h5>
                 <ul class="list-unstyled small mb-0 border-start border-3 ps-3">
                     {% for c in post.comments.all %}
-                    <li class="mb-2">
-                        <strong>{% shelf_user_link c.author %}</strong>
-                        <span class="text-muted">· {{ c.created_at|date:"d.m.Y H:i" }}</span><br>
-                        {{ c.text|linebreaksbr }}
+                    <li class="mb-2 d-flex gap-2 align-items-start" id="post-{{ post.id }}-c{{ c.id }}">
+                        <div class="flex-grow-1 min-w-0">
+                            <strong>{% shelf_user_link c.author %}</strong>
+                            <span class="text-muted">· {{ c.created_at|date:"d.m.Y H:i" }}</span><br>
+                            {{ c.text|linebreaksbr }}
+                        </div>
+                        {% with cshare=c.author.username|add:": "|add:c.text %}
+                        {% include "mainApp/includes/share_button.html" with request=request post_id=post.id comment_id=c.id share_title=post.title share_text=cshare only %}
+                        {% endwith %}
                     </li>
                     {% endfor %}
                 </ul>

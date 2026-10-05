@@ -122,7 +122,7 @@ sh deploy/qnap/rebuild-api.sh   # або compose up --build; див. CACHEBUST
 
 ## Тести (жива БД)
 
-Конвенція: `test_<method>_<when>_<returns>`, змінні `actualResult` / `expectedResult`, один assert. Repo-layer — live DB; вище — мок репозиторію.
+Конвенція: `test_<method>_<when>_<returns>`, змінні `actualResult` / `expectedResult`, один assert. Repo-layer — live DB; вище — мок репозиторію (`set_library_repository` / `set_shelf_repository`).
 
 ```bash
 # на NAS (docker0 + links; не exec у dds-api з 172.17.0.1)
@@ -131,7 +131,7 @@ sh deploy/qnap/run-repo-tests.sh fastapi
 # або: sh deploy/qnap/run-repo-tests.sh all
 ```
 
-Compose: `docker-compose.test.yml` (`dds-postgres-test` + one-shot runners).
+Compose `django-test` ганяє `mainApp.tests` (repositories live DB + services з моком repo).
 
 ---
 

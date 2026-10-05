@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   type LayoutChangeEvent,
 } from "react-native";
@@ -17,19 +18,30 @@ import { UserNameLink } from "../src/UserNameLink";
 import type { Exchange, User } from "../src/types";
 
 function conditionText(e: Exchange, asOwner: boolean): string {
+  const due =
+    e.proposed_due_date && !e.offer_shelf
+      ? ` Термін до ${e.proposed_due_date}` +
+        (e.due_date_proposer === "owner" ? " (від власника)" : " (від позичальника)") +
+        (e.due_date_confirmed ? ", погоджено." : ".")
+      : "";
   if (e.kind === "exchange" && e.offer_shelf) {
     return asOwner
       ? `Обмін: пропонує «${e.offer_shelf.book.title}» замість вашої книги (повна передача).`
       : `Обмін: ви пропонуєте «${e.offer_shelf.book.title}» (повна передача).`;
   }
   if (e.is_transmission) {
-    return asOwner
-      ? "Передача третій особі: примірник зараз у позиці. Після згоди його знімуть з поточного позичальника і видадуть цьому запитувачу."
-      : "Передача: примірник зараз у когось у позиці. Власник може схвалити передачу вам (або ви в черзі до повернення).";
+    return (
+      (asOwner
+        ? "Передача третій особі: примірник зараз у позиці. Після згоди його знімуть з поточного позичальника і видадуть цьому запитувачу."
+        : "Передача: примірник зараз у когось у позиці. Власник може схвалити передачу вам (або ви в черзі до повернення).") + due
+    );
   }
-  return asOwner
-    ? "Позика: без книги взамін. Після згоди позичальник триматиме книгу й зможе лише повернути її вам."
-    : "Позика: без вашої книги взамін. Після згоди книга з’явиться у вас на полиці з терміном повернення.";
+  return (
+    (asOwner
+      ? "Позика: без книги взамін. Після згоди позичальник триматиме книгу й зможе лише повернути її вам."
+      : "Позика: без вашої книги взамін. Після згоди книга з’явиться у вас на полиці з терміном повернення.") +
+    due
+  );
 }
 
 export default function Exchanges() {
@@ -45,12 +57,19 @@ export default function Exchanges() {
   const scrollRef = useRef<ScrollView>(null);
   const yById = useRef<Record<number, number>>({});
 
+  const [dueDraft, setDueDraft] = useState<Record<number, string>>({});
+
   const load = async () => {
     const [e, p] = await Promise.all([ExchangeApi.list(), MsgApi.partners()]);
     setIn(e.pending_in);
     setOut(e.pending_out);
     setHist(e.history);
     setPartners(p);
+    const drafts: Record<number, string> = {};
+    for (const row of [...e.pending_in, ...e.pending_out]) {
+      if (row.proposed_due_date) drafts[row.id] = row.proposed_due_date;
+    }
+    setDueDraft((prev) => ({ ...prev, ...drafts }));
   };
 
   useFocusEffect(
@@ -102,21 +121,73 @@ export default function Exchanges() {
   const confirmAccept = (e: Exchange) => {
     const swap = e.kind === "exchange" && !!e.offer_shelf;
     const transmit = !!e.is_transmission;
+    const due = dueDraft[e.id] || e.proposed_due_date || null;
+    const dueHint = !swap && due ? `\nТермін повернення: ${due}.` : "";
     Alert.alert(
       transmit ? "Схвалити передачу?" : swap ? "Прийняти обмін?" : "Прийняти позику?",
       transmit
-        ? `Схвалити передачу «${e.target_shelf.book.title}» → ${e.requester.username}? Книга лишиться у поточного позичальника, доки обидва не підтвердять фізичну передачу в чаті.`
+        ? `Схвалити передачу «${e.target_shelf.book.title}» → ${e.requester.username}? Книга лишиться у поточного позичальника, доки обидва не підтвердять фізичну передачу в чаті.${dueHint}`
         : swap
           ? `Книга «${e.target_shelf.book.title}» перейде до ${e.requester.username}, а «${e.offer_shelf!.book.title}» — до вас.`
-          : `Книгу «${e.target_shelf.book.title}» буде видано в позику користувачу ${e.requester.username}.`,
+          : `Книгу «${e.target_shelf.book.title}» буде видано в позику користувачу ${e.requester.username}.${dueHint}`,
       [
         { text: "Скасувати", style: "cancel" },
         {
           text: transmit ? "Схвалити" : "Прийняти",
           style: "default",
-          onPress: () => run(() => ExchangeApi.accept(e.id)),
+          onPress: () => run(() => ExchangeApi.accept(e.id, !swap ? due : null)),
         },
       ]
+    );
+  };
+
+  const proposeDue = (e: Exchange) => {
+    const due = (dueDraft[e.id] || e.proposed_due_date || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+      Alert.alert("Термін", "Вкажіть дату у форматі РРРР-ММ-ДД.");
+      return;
+    }
+    run(async () => {
+      await ExchangeApi.proposeDue(e.id, due);
+      Alert.alert("Термін", "Пропозицію надіслано іншій стороні.");
+    });
+  };
+
+  const confirmDue = (e: Exchange) => {
+    run(async () => {
+      await ExchangeApi.confirmDue(e.id);
+      Alert.alert("Термін", "Дату погоджено.");
+    });
+  };
+
+  const dueControls = (e: Exchange) => {
+    if (e.offer_shelf || e.kind === "exchange") return null;
+    return (
+      <View style={styles.dueBox}>
+        <Text style={styles.dueLabel}>Термін повернення</Text>
+        <TextInput
+          style={styles.dueInput}
+          value={dueDraft[e.id] ?? e.proposed_due_date ?? ""}
+          onChangeText={(t) => setDueDraft((d) => ({ ...d, [e.id]: t }))}
+          placeholder="РРРР-ММ-ДД"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          keyboardType="numbers-and-punctuation"
+          maxLength={10}
+        />
+        <View style={styles.dueBtns}>
+          {e.can_propose_due !== false ? (
+            <Pressable style={styles.btnGhost} onPress={() => proposeDue(e)}>
+              <Text style={styles.chat}>Запропонувати дату</Text>
+            </Pressable>
+          ) : null}
+          {e.can_confirm_due ? (
+            <Pressable style={styles.btnOk} onPress={() => confirmDue(e)}>
+              <Text style={styles.ok}>Погодити термін</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
     );
   };
 
@@ -167,6 +238,7 @@ export default function Exchanges() {
           <UserNameLink user={e.shelf_owner} style={styles.meta} />
         </View>
         <Text style={styles.cond}>{conditionText(e, asOwner)}</Text>
+        {role !== "hist" ? dueControls(e) : null}
         <View style={styles.row}>
           <Pressable style={styles.btnGhost} onPress={() => openChat(e)}>
             <Text style={styles.chat}>Чат</Text>
@@ -324,6 +396,23 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontWeight: "700", marginTop: 4, fontSize: fs(16) },
   meta: { color: colors.muted, marginTop: 4, fontSize: fs(13) },
   cond: { color: colors.ink, marginTop: 8, lineHeight: fs(18), fontSize: fs(13) },
+  dueBox: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+  },
+  dueLabel: { color: colors.ink, fontWeight: "700", fontSize: fs(12), marginBottom: 4 },
+  dueInput: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    color: colors.ink,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: fs(14),
+  },
+  dueBtns: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   row: {
     flexDirection: "row",
     flexWrap: "wrap",

@@ -45,14 +45,18 @@
                             </h3>
                             {% if book.authors %}<p class="small text-muted mb-1">{{ book.authors }}</p>{% endif %}
                             <p class="small text-muted mb-2">ISBN {{ book.isbn }} · вік {{ book.reader_age_summary }}</p>
-                            <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-0">
+                            {% if g.owners_label %}
+                            <p class="small mb-2"><strong>Власники:</strong> {{ g.owners_label }}</p>
+                            {% endif %}
+                            <div class="table-responsive browse-copy-table-wrap">
+                                <table class="table table-sm align-middle mb-0 browse-copy-table">
                                     <thead>
                                         <tr>
                                             <th class="text-center" style="width: 2.5rem;"></th>
                                             <th>Де зараз</th>
                                             <th>Власник / термін</th>
                                             <th>Ваша книга в обмін</th>
+                                            <th>Повернення до</th>
                                             <th></th>
                                         </tr>
                                     </thead>
@@ -60,14 +64,14 @@
                                         {% for s in g.shelves %}
                                             {% with req_id=s.request_shelf_id|default:s.id %}
                                             <tr {% if s.borrowed_from_id %}class="table-warning"{% endif %}>
-                                                <td class="text-center">
+                                                <td class="text-center" data-label="Обрати">
                                                     {% if req_id %}
                                                     <input type="checkbox" name="target_shelf_ids" value="{{ req_id }}"
                                                            class="form-check-input js-shelf-pick"
                                                            aria-label="Обрати примірник">
                                                     {% endif %}
                                                 </td>
-                                                <td>
+                                                <td data-label="Де зараз">
                                                     {% shelf_user_link s.user %}
                                                     {% if s.copy_id %} <span class="text-muted small">#{{ s.copy_id }}</span>{% endif %}
                                                     {% if s.borrowed_from_id %}
@@ -92,7 +96,7 @@
                                                         {% endif %}
                                                     {% endif %}
                                                 </td>
-                                                <td class="small">
+                                                <td class="small" data-label="Власник / термін">
                                                     {% if s.borrowed_from_id %}
                                                         {% shelf_user_link s.borrowed_from %}
                                                         {% if s.due_date %}
@@ -103,17 +107,22 @@
                                                             </span>
                                                         {% endif %}
                                                         <br><span class="text-muted">Запит = передача з дозволу власника</span>
+                                                    {% elif s.owners_label %}
+                                                        <span title="Власники спільної бібліотеки">{{ s.owners_label }}</span>
                                                     {% else %}
                                                         {% shelf_user_link s.user %}
                                                     {% endif %}
                                                 </td>
-                                                <td>
+                                                <td data-label="Ваша книга в обмін">
                                                     {% if s.borrowed_from_id %}
                                                     {# Передача третій особі — без обміну; select не рендеримо (disabled усе одно лишає options у DOM). #}
                                                     <span class="text-muted small">— запит на передачу (без обміну) —</span>
                                                     <input type="hidden" name="offer_shelf_id_{{ req_id }}" value="">
                                                     {% else %}
-                                                    <select name="offer_shelf_id_{{ req_id }}" class="form-select form-select-sm" style="max-width: 280px;">
+                                                    <select name="offer_shelf_id_{{ req_id }}"
+                                                            class="form-select form-select-sm js-offer-select"
+                                                            data-due-input="proposed_due_date_{{ req_id }}"
+                                                            style="max-width: 280px;">
                                                         <option value="">— позика —</option>
                                                         {% for ms in my_owned_shelves %}
                                                             {% if ms.book_id != s.book_id %}
@@ -123,7 +132,15 @@
                                                     </select>
                                                     {% endif %}
                                                 </td>
-                                                <td class="text-nowrap">
+                                                <td data-label="Повернення до">
+                                                    <input type="date"
+                                                           name="proposed_due_date_{{ req_id }}"
+                                                           id="proposed_due_date_{{ req_id }}"
+                                                           class="form-control form-control-sm js-due-input"
+                                                           style="max-width: 11rem;"
+                                                           title="Запропонований термін повернення (для позики)">
+                                                </td>
+                                                <td class="text-nowrap" data-label="Історія">
                                                     {% if s.copy_id %}
                                                     <a href="{% url 'copy_history' s.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія / черга</a>
                                                     {% endif %}
@@ -154,6 +171,34 @@
 (function () {
     var form = document.getElementById("batch-exchange-form");
     if (!form) return;
+    var loanDays = {{ loan_days|default:14 }};
+
+    function ymd(d) {
+        var m = String(d.getMonth() + 1).padStart(2, "0");
+        var day = String(d.getDate()).padStart(2, "0");
+        return d.getFullYear() + "-" + m + "-" + day;
+    }
+    var today = new Date();
+    var def = new Date(today.getTime());
+    def.setDate(def.getDate() + loanDays);
+    var minStr = ymd(today);
+    var defStr = ymd(def);
+    form.querySelectorAll(".js-due-input").forEach(function (inp) {
+        inp.min = minStr;
+        if (!inp.value) inp.value = defStr;
+    });
+    form.querySelectorAll(".js-offer-select").forEach(function (sel) {
+        var dueId = sel.getAttribute("data-due-input");
+        var due = dueId ? document.getElementById(dueId) : null;
+        function sync() {
+            if (!due) return;
+            var swap = !!(sel.value && String(sel.value).trim());
+            due.disabled = swap;
+            due.style.opacity = swap ? "0.45" : "1";
+        }
+        sel.addEventListener("change", sync);
+        sync();
+    });
     form.addEventListener("submit", function (ev) {
         var any = form.querySelectorAll(".js-shelf-pick:checked").length > 0;
         if (!any) {

@@ -11,7 +11,7 @@ from ..copy_events import log_copy_event
 from ..error_handling import domain_guard
 from ..exceptions import ExchangeForbidden, ExchangeInvalidState, ExchangeNotFound
 from ..models import BookExchangeRequest, CopyEvent, CustomUser, LoanHandoff, Shelf
-from .due import loan_due_date
+from .due import loan_due_date, resolve_loan_due_date
 
 _ACTIVE_HANDOFF = (
     LoanHandoff.Status.AWAITING_GIVE,
@@ -175,6 +175,7 @@ def _move_loan_shelf(
     to_user: CustomUser,
     owner: CustomUser,
     copy_id: int,
+    due_date=None,
 ) -> str:
     """Delete borrower row, create loan for to_user. Returns book title."""
     book_title = borrower_shelf.book.title
@@ -185,7 +186,7 @@ def _move_loan_shelf(
         book_id=book_id,
         copy_id=copy_id,
         borrowed_from_id=owner.id,
-        due_date=loan_due_date(),
+        due_date=due_date or loan_due_date(),
         return_pending=False,
     )
     return book_title
@@ -246,11 +247,15 @@ def complete_loan_handoff_transfer(handoff: LoanHandoff) -> None:
         )
         raise ExchangeInvalidState("Позику вже знято — передачу не завершено.")
 
+    due = None
+    if handoff.exchange_request_id and handoff.exchange_request:
+        due = resolve_loan_due_date(proposed=handoff.exchange_request.proposed_due_date)
     book_title = _move_loan_shelf(
         borrower_shelf=borrower_shelf,
         to_user=requester,
         owner=owner,
         copy_id=copy_id,
+        due_date=due,
     )
     _finalize_completed_handoff(
         handoff,

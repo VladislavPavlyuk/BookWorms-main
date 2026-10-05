@@ -2,6 +2,8 @@ PC:
 rsync -av --delete --exclude .git --exclude date-due-slip --exclude .env \
   ~/BookWorms-main/ admin@192.168.0.213:/share/Container/BookWorms-main/
 
+docker exec -it dds-api python manage.py migrate
+
 NAS:
 ssh admin@192.168.0.213
 
@@ -16,7 +18,8 @@ npx expo run:android --device emulator-5554
 
 cd ~/BookWorms-main/date-due-slip
 ./scripts/run-emulator.sh
-# or: emulator -avd Pixel_8 -gpu swiftshader_indirect
+# or: 
+emulator -avd Pixel_8 -gpu swiftshader_indirect
 
 emulator -avd Pixel_8 -wipe-data
 Or one-shot without editing config:
@@ -36,10 +39,19 @@ docker compose -f docker-compose.test.yml up -d postgres
 docker compose -f docker-compose.test.yml run --rm --build django-test
 sh deploy/qnap/run-repo-tests.sh fastapi
 
+cd /share/Container/BookWorms-main
+sh deploy/qnap/run-repo-tests.sh django
+
+Или без скрипта из того же корня:
+cd /share/Container/BookWorms-main
+docker compose -f docker-compose.test.yml up -d postgres
+docker compose -f docker-compose.test.yml run --rm --build django-test
+
 Release:
 cd /home/vlad/BookWorms-main/date-due-slip/android
 ./gradlew clean assembleRelease
-adb -s <SERIAL> install -r app/build/outputs/apk/release/app-release.apk
+
+adb -s 38210DLJH000NW install -r app/build/outputs/apk/release/app-release.apk
 
 
 

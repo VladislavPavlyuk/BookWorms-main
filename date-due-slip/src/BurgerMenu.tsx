@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from "react";
 import {
+  Alert,
   Modal,
   Pressable,
   StyleSheet,
@@ -20,15 +21,28 @@ type Link = {
 };
 
 const LINKS: Link[] = [
+  { label: "Головна", href: "/(tabs)" },
   { label: "Профіль", href: "/(tabs)/more" },
   { label: "Моя полиця", href: "/(tabs)/shelf" },
+  { label: "Спільна бібліотека", href: "/library" },
   { label: "Реченець", href: "/(tabs)/slips" },
   { label: "Чужі полиці", href: "/(tabs)/browse" },
   { label: "Обміни", href: "/exchanges" },
+  { label: "Мої черги", href: "/queues" },
   { label: "Сповіщення", href: "/notifications", badge: true },
+  { label: "Новий пост", href: "/post/new" },
+  { label: "Контакт", href: "/contact" },
 ];
 
 function pathMatch(pathname: string, href: string) {
+  if (href === "/(tabs)") {
+    return (
+      pathname === "/" ||
+      pathname.endsWith("/(tabs)") ||
+      pathname.endsWith("/(tabs)/") ||
+      pathname.endsWith("/(tabs)/index")
+    );
+  }
   if (href.includes("/more")) {
     return pathname.includes("/more");
   }
@@ -107,7 +121,29 @@ export function BurgerMenu() {
                 <Pressable
                   key={link.href}
                   style={[styles.item, active && styles.itemOn]}
-                  onPress={() => go(link.href)}
+                  onPress={() => {
+                    if (link.href === "/post/new") {
+                      setOpen(false);
+                      Alert.alert("Створити пост", undefined, [
+                        {
+                          text: "Подія",
+                          onPress: () =>
+                            router.push({ pathname: "/post/new", params: { mode: "event" } }),
+                        },
+                        {
+                          text: "Відгук про книгу",
+                          onPress: () =>
+                            router.push({
+                              pathname: "/post/new",
+                              params: { mode: "feedback" },
+                            }),
+                        },
+                        { text: "Скасувати", style: "cancel" },
+                      ]);
+                      return;
+                    }
+                    go(link.href);
+                  }}
                 >
                   <Text style={[styles.itemText, active && styles.itemTextOn]}>{link.label}</Text>
                   {showBadge ? (

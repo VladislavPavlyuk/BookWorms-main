@@ -131,7 +131,11 @@ export default function UserShelf() {
                       )}
                     </>
                   ) : (
-                    <Text style={styles.meta}>власний · вільний</Text>
+                    <Text style={styles.meta}>
+                      {s.owners_label
+                        ? `власники: ${s.owners_label}`
+                        : "власний · вільний"}
+                    </Text>
                   )}
                   <Text style={styles.meta}>{` · ${s.book.reader_age_summary}`}</Text>
                 </View>

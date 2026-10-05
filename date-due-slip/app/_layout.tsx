@@ -67,6 +67,9 @@ export default function Root() {
                   <Stack.Screen name="book/[id]" />
                   <Stack.Screen name="copy/[id]" />
                   <Stack.Screen name="user/[id]" />
+                  <Stack.Screen name="contact" />
+                  <Stack.Screen name="queues" />
+                  <Stack.Screen name="library" />
                 </Stack>
               </AppChrome>
             </Gate>

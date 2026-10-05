@@ -20,6 +20,8 @@ def _create_message(
     *,
     is_system: bool = False,
     related_shelf: Shelf | None = None,
+    library_invite=None,
+    library_action=None,
 ) -> PrivateMessage:
     return PrivateMessage.objects.create(
         sender=sender,
@@ -28,6 +30,8 @@ def _create_message(
         exchange_request=exchange_request,
         is_system=is_system,
         related_shelf=related_shelf,
+        library_invite=library_invite,
+        library_action=library_action,
     )
 
 
@@ -63,8 +67,14 @@ def notify_exchange_request_created(req: BookExchangeRequest) -> PrivateMessage:
             f"Відкрийте чат або розділ «Обміни», щоб відповісти."
         )
     else:
+        due_note = ""
+        if req.proposed_due_date:
+            due_note = (
+                f" Пропонує повернути до {req.proposed_due_date.strftime('%d.%m.%Y')}."
+            )
         body = (
-            f'Запит на позику: {req.requester.username} просить книгу "{book_title}". '
+            f'Запит на позику: {req.requester.username} просить книгу "{book_title}".'
+            f"{due_note} "
             f"Відкрийте чат або «Обміни», щоб прийняти чи відхилити."
         )
     return _create_message(
@@ -90,7 +100,13 @@ def notify_exchange_request_accepted(req: BookExchangeRequest) -> PrivateMessage
     else:
         body = (
             f'Ваш запит на позику прийнято ({req.shelf_owner.username}). '
-            f'Книга "{book_title}" на вашій полиці. Можете написати в чат.'
+            f'Книга "{book_title}" на вашій полиці'
+            + (
+                f" · термін до {req.proposed_due_date.strftime('%d.%m.%Y')}"
+                if req.proposed_due_date
+                else ""
+            )
+            + ". Можете написати в чат."
         )
     return _create_message(
         req.shelf_owner, req.requester, body, exchange_request=req, is_system=True
@@ -135,15 +151,61 @@ def notify_borrow_return_confirmed(
 
 def notify_exchange_request_cancelled(req: BookExchangeRequest) -> PrivateMessage:
     """Запитувач скасував - повідомляємо власника."""
-    req = BookExchangeRequest.objects.select_related("requester", "shelf_owner", "target_shelf__book").get(
-        pk=req.pk
-    )
+    req = BookExchangeRequest.objects.select_related(
+        "requester", "shelf_owner", "target_shelf__book"
+    ).get(pk=req.pk)
     body = (
-        f"Користувач {req.requester.username} скасував запит щодо вашої книги "
+        f'{req.requester.username} скасував запит щодо книги '
         f'"{req.target_shelf.book.title}".'
     )
     return _create_message(
         req.requester, req.shelf_owner, body, exchange_request=req, is_system=True
+    )
+
+
+def notify_exchange_due_proposed(
+    req: BookExchangeRequest, actor: CustomUser
+) -> PrivateMessage:
+    """Хтось запропонував / змінив термін повернення — повідомляємо іншу сторону."""
+    req = BookExchangeRequest.objects.select_related(
+        "requester", "shelf_owner", "target_shelf__book"
+    ).get(pk=req.pk)
+    book_title = req.target_shelf.book.title
+    due = req.proposed_due_date.strftime("%d.%m.%Y") if req.proposed_due_date else "?"
+    if actor.id == req.shelf_owner_id:
+        recipient = req.requester
+        body = (
+            f'{actor.username} пропонує інший термін повернення для «{book_title}»: '
+            f"до {due}. Погодьтесь або запропонуйте свою дату в чаті / «Обміни»."
+        )
+    else:
+        recipient = req.shelf_owner
+        body = (
+            f'{actor.username} пропонує термін повернення для «{book_title}»: '
+            f"до {due}. Погодьтесь або запропонуйте іншу дату."
+        )
+    return _create_message(
+        actor, recipient, body, exchange_request=req, is_system=True
+    )
+
+
+def notify_exchange_due_confirmed(
+    req: BookExchangeRequest, actor: CustomUser
+) -> PrivateMessage:
+    """Сторона погодила поточну пропозицію терміну."""
+    req = BookExchangeRequest.objects.select_related(
+        "requester", "shelf_owner", "target_shelf__book"
+    ).get(pk=req.pk)
+    book_title = req.target_shelf.book.title
+    due = req.proposed_due_date.strftime("%d.%m.%Y") if req.proposed_due_date else "?"
+    recipient = (
+        req.requester if actor.id == req.shelf_owner_id else req.shelf_owner
+    )
+    body = (
+        f'{actor.username} погодив(ла) термін повернення «{book_title}» до {due}.'
+    )
+    return _create_message(
+        actor, recipient, body, exchange_request=req, is_system=True
     )
 
 

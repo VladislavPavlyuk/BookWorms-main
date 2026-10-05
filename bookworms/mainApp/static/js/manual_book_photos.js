@@ -934,6 +934,32 @@
             });
             bsModal.show();
         });
+
+        var galleryBtn = document.getElementById("manualPhotoGallery");
+        var galleryInput = document.getElementById("manualPhotoGalleryInput");
+        if (galleryBtn && galleryInput) {
+            galleryBtn.addEventListener("click", function () {
+                if (files.length >= MAX) {
+                    alert("Максимум " + MAX + " фото.");
+                    return;
+                }
+                galleryInput.value = "";
+                galleryInput.click();
+            });
+            galleryInput.addEventListener("change", function () {
+                var picked = galleryInput.files ? Array.from(galleryInput.files) : [];
+                var added = 0;
+                picked.forEach(function (f) {
+                    if (!f || !(f.type || "").match(/^image\//)) return;
+                    if (addFile(f)) added += 1;
+                });
+                if (!added && picked.length) {
+                    alert(files.length >= MAX ? "Максимум " + MAX + " фото." : "Не вдалося додати зображення.");
+                }
+                galleryInput.value = "";
+            });
+        }
+
         modalEl.addEventListener("shown.bs.modal", function () {
             if (starting) return;
             startCamera();

@@ -37,15 +37,25 @@ class ThreadContext:
     pending_returns: list[Shelf]
     pending_in: QuerySet[BookExchangeRequest]
     pending_out: QuerySet[BookExchangeRequest]
+    library_invites_in: list
+    library_invites_out: list
+    library_actions_in: list
+    library_actions_out: list
 
     def as_web_dict(self) -> dict:
-        """Template context for messages.html (no pending_in/out forms there yet)."""
+        """Template context for messages.html."""
         return {
             "partners": self.partners,
             "partner": self.partner,
             "timeline": self.timeline,
             "handoffs": self.handoffs,
             "pending_returns": self.pending_returns,
+            "pending_in": self.pending_in,
+            "pending_out": self.pending_out,
+            "library_invites_in": self.library_invites_in,
+            "library_invites_out": self.library_invites_out,
+            "library_actions_in": self.library_actions_in,
+            "library_actions_out": self.library_actions_out,
         }
 
 
@@ -55,7 +65,21 @@ def load_timeline(user: CustomUser, partner_id: int, *, limit: int = 250) -> lis
             Q(recipient=user, sender_id=partner_id)
             | Q(sender=user, recipient_id=partner_id)
         )
-        .select_related("sender", "recipient", "exchange_request")
+        .select_related(
+            "sender",
+            "recipient",
+            "exchange_request",
+            "exchange_request__requester",
+            "exchange_request__shelf_owner",
+            "exchange_request__target_shelf__book",
+            "library_invite",
+            "library_invite__library",
+            "library_invite__from_user",
+            "library_invite__to_user",
+            "library_action",
+            "library_action__library",
+            "library_action__initiator",
+        )
         .order_by("-created_at")[:limit]
     )
     return list(reversed(list(recent)))
@@ -90,6 +114,88 @@ def pending_requests_with_partner(
     return pending_in, pending_out
 
 
+def library_invites_with_partner(user: CustomUser, partner_id: int) -> tuple[list, list]:
+    from ..library_service import ensure_personal_library, merge_overlap_preview
+    from ..models import LibraryInvite
+
+    pending = LibraryInvite.Status.PENDING
+    awaiting = LibraryInvite.Status.AWAITING_ISBN
+    incoming = list(
+        LibraryInvite.objects.filter(
+            status=pending, to_user=user, from_user_id=partner_id
+        ).select_related("library", "from_user")
+    )
+    # Pending replies + admin still needs to confirm ISBN counts after invitee accepted.
+    outgoing = list(
+        LibraryInvite.objects.filter(
+            status__in=(pending, awaiting),
+            from_user=user,
+            to_user_id=partner_id,
+        ).select_related("library", "to_user")
+    )
+    in_payload = []
+    for inv in incoming:
+        in_payload.append(
+            {
+                "id": inv.id,
+                "library_name": inv.library.display_name,
+                "from_username": inv.from_user.username,
+                "message": inv.message,
+                "status": inv.status,
+                "overlap": merge_overlap_preview(
+                    inv.library, ensure_personal_library(user)
+                ),
+            }
+        )
+    out_payload = []
+    for inv in outgoing:
+        overlap = []
+        if inv.status == awaiting:
+            try:
+                overlap = merge_overlap_preview(
+                    inv.library, ensure_personal_library(inv.to_user)
+                )
+            except Exception:
+                overlap = []
+        out_payload.append(
+            {
+                "id": inv.id,
+                "library_name": inv.library.display_name,
+                "to_username": inv.to_user.username,
+                "message": inv.message,
+                "status": inv.status,
+                "overlap": overlap,
+            }
+        )
+    return in_payload, out_payload
+
+
+def library_actions_with_partner(user: CustomUser, partner_id: int) -> tuple[list, list]:
+    """Pending library actions between user and partner (admin ↔ initiator)."""
+    from ..library_repo import get_library_repository
+    from ..models import LibraryAction
+
+    repo = get_library_repository()
+    incoming = repo.find_pending_actions_for_admin_from(user.id, partner_id)
+    outgoing = repo.find_pending_actions_by_initiator_to_admin(user.id, partner_id)
+
+    def _row(a: LibraryAction) -> dict:
+        p = a.payload or {}
+        return {
+            "id": a.id,
+            "action_type": a.action_type,
+            "action_type_label": a.get_action_type_display(),
+            "title": p.get("title") or "",
+            "isbn": p.get("isbn") or "",
+            "existing_count": p.get("existing_count") or 0,
+            "count": p.get("count") or 1,
+            "initiator_username": a.initiator.username,
+            "library_name": a.library.display_name,
+        }
+
+    return [_row(a) for a in incoming], [_row(a) for a in outgoing]
+
+
 def build_thread_context(
     user: CustomUser,
     partner: CustomUser,
@@ -97,6 +203,8 @@ def build_thread_context(
 ) -> ThreadContext:
     partner_id = partner.pk
     pending_in, pending_out = pending_requests_with_partner(user, partner_id)
+    lib_in, lib_out = library_invites_with_partner(user, partner_id)
+    act_in, act_out = library_actions_with_partner(user, partner_id)
     return ThreadContext(
         user=user,
         partner=partner,
@@ -106,4 +214,8 @@ def build_thread_context(
         pending_returns=pending_returns_from_partner(user, partner_id),
         pending_in=pending_in,
         pending_out=pending_out,
+        library_invites_in=lib_in,
+        library_invites_out=lib_out,
+        library_actions_in=act_in,
+        library_actions_out=act_out,
     )

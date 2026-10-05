@@ -22,7 +22,7 @@ class MessagingService(IMessagingService):
         partners = self.list_partners(user)
         if not partners.exists():
             raise MessagingNoPartners(
-                "Чат доступний лише після запиту на позику або обмін книги з іншим користувачем."
+                "Чат доступний після запиту на позику/обмін або запиту на об'єднання бібліотек."
             )
         if partner_id not in frozenset(partners.values_list("pk", flat=True)):
             raise MessagingForbidden("Немає спільного запиту з цим користувачем.")

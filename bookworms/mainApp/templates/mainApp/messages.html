@@ -6,7 +6,7 @@
 {% block content %}
 
 <p class="mb-2">Чат з <strong>{% shelf_user_link partner %}</strong></p>
-<p class="text-muted small">Діалог за активною позикою / передачею / чергою. Під час фізичної передачі в чаті беруть участь власник і обидва позичальники.</p>
+<p class="text-muted small">Діалог за активною позикою / передачею / чергою / запитом на об'єднання бібліотек.</p>
 
 {% if pending_returns %}
 <div class="card border-success mb-3 shadow-sm">
@@ -81,6 +81,205 @@
 </div>
 {% endif %}
 
+{% if pending_in or pending_out %}
+<div class="card border-info mb-3 shadow-sm">
+    <div class="card-header bg-info-subtle fw-semibold">Запити на обмін / позику</div>
+    <div class="card-body">
+        {% for r in pending_in %}
+        <div class="mb-3 {% if not forloop.last or pending_out %}border-bottom pb-3{% endif %}">
+            <p class="mb-2">
+                <strong>{% shelf_user_link r.requester %}</strong> хоче
+                «{{ r.target_shelf.book.title }}»
+                {% if r.offer_shelf %}
+                    <br><span class="small text-muted">Пропонує в обмін: «{{ r.offer_shelf.book.title }}»</span>
+                {% else %}
+                    <br><span class="small text-muted">Позика (без книги взамін)</span>
+                    {% if r.proposed_due_date %}
+                    <br><span class="small">
+                        {% if r.due_date_proposer == "owner" %}Власник пропонує{% else %}Пропонує повернути{% endif %}
+                        до <strong>{{ r.proposed_due_date|date:"d.m.Y" }}</strong>
+                        {% if r.due_date_confirmed %}<span class="text-success"> · погоджено</span>{% endif %}
+                    </span>
+                    {% endif %}
+                {% endif %}
+            </p>
+            {% if not r.offer_shelf %}
+            <form method="post" action="{% url 'exchange_accept' r.id %}" class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                {% csrf_token %}
+                <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                <label class="small mb-0" for="due-in-{{ r.id }}">Термін:</label>
+                <input type="date" name="due_date" id="due-in-{{ r.id }}" class="form-control form-control-sm" style="max-width:11rem;"
+                       value="{{ r.proposed_due_date|date:'Y-m-d' }}">
+                <button type="submit" class="btn btn-sm btn-outline-primary"
+                        formaction="{% url 'exchange_propose_due' r.id %}">Запропонувати термін</button>
+                {% if r.proposed_due_date and r.due_date_proposer == "requester" and not r.due_date_confirmed %}
+                <button type="submit" class="btn btn-sm btn-outline-success"
+                        formaction="{% url 'exchange_confirm_due' r.id %}">Погодити цей термін</button>
+                {% endif %}
+                <button type="submit" class="btn btn-sm btn-success">Підтвердити</button>
+            </form>
+            <div class="d-flex flex-wrap gap-2">
+                <form method="post" action="{% url 'exchange_reject' r.id %}" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Відхилити</button>
+                </form>
+            </div>
+            {% else %}
+            <div class="d-flex flex-wrap gap-2">
+                <form method="post" action="{% url 'exchange_accept' r.id %}" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                    <button type="submit" class="btn btn-sm btn-success">Підтвердити</button>
+                </form>
+                <form method="post" action="{% url 'exchange_reject' r.id %}" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Відхилити</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% for r in pending_out %}
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <span class="small">
+                Очікує {% shelf_user_link r.shelf_owner %}:
+                «{{ r.target_shelf.book.title }}»
+                {% if r.proposed_due_date and not r.offer_shelf %}
+                    · до {{ r.proposed_due_date|date:"d.m.Y" }}
+                    {% if r.due_date_proposer == "owner" and not r.due_date_confirmed %}
+                    <span class="text-warning">(власник запропонував — погодьте)</span>
+                    {% endif %}
+                {% endif %}
+            </span>
+            <div class="d-flex flex-wrap gap-2">
+                {% if not r.offer_shelf and r.proposed_due_date and r.due_date_proposer == "owner" and not r.due_date_confirmed %}
+                <form method="post" action="{% url 'exchange_confirm_due' r.id %}" class="d-flex flex-wrap gap-1 m-0 align-items-center">
+                    {% csrf_token %}
+                    <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                    <input type="date" name="due_date" class="form-control form-control-sm" style="max-width:11rem;"
+                           value="{{ r.proposed_due_date|date:'Y-m-d' }}">
+                    <button type="submit" class="btn btn-sm btn-success">Погодити термін</button>
+                    <button type="submit" class="btn btn-sm btn-outline-primary"
+                            formaction="{% url 'exchange_propose_due' r.id %}">Інша дата</button>
+                </form>
+                {% elif not r.offer_shelf %}
+                <form method="post" action="{% url 'exchange_propose_due' r.id %}" class="d-flex gap-1 m-0 align-items-center">
+                    {% csrf_token %}
+                    <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                    <input type="date" name="due_date" class="form-control form-control-sm" style="max-width:11rem;"
+                           value="{{ r.proposed_due_date|date:'Y-m-d' }}">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Інша дата</button>
+                </form>
+                {% endif %}
+                <form method="post" action="{% url 'exchange_cancel' r.id %}" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Скасувати</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if library_actions_in or library_actions_out %}
+<div class="card border-warning mb-3 shadow-sm">
+    <div class="card-header bg-warning-subtle fw-semibold">Запити до бібліотеки</div>
+    <div class="card-body">
+                                        {% for a in library_actions_in %}
+        <div class="mb-3 {% if not forloop.last or library_actions_out %}border-bottom pb-3{% endif %}">
+            <p class="mb-2">
+                <strong>{{ a.action_type_label|default:"Дія бібліотеки" }}</strong>
+                · @{{ a.initiator_username }}
+                {% if a.title %}: {{ a.title }}{% endif %}
+                {% if a.action_type == "add_copy" and a.isbn %}
+                (ISBN {{ a.isbn }}){% if a.existing_count %} — уже {{ a.existing_count }} шт.{% endif %}
+                {% elif a.count and a.count > 1 %}
+                ({{ a.count }} шт.)
+                {% endif %}
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+                <form method="post" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="library_action_resolve" value="1">
+                    <input type="hidden" name="action_id" value="{{ a.id }}">
+                    <input type="hidden" name="approve" value="1">
+                    <button type="submit" class="btn btn-sm btn-success">Підтвердити</button>
+                </form>
+                <form method="post" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="library_action_resolve" value="1">
+                    <input type="hidden" name="action_id" value="{{ a.id }}">
+                    <input type="hidden" name="approve" value="0">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Відхилити</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        {% for a in library_actions_out %}
+        <p class="small text-muted mb-0">
+            Очікує адміна: {{ a.action_type_label|default:"дія" }}{% if a.title %} — {{ a.title }}{% endif %}
+        </p>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if library_invites_in or library_invites_out or merge_overlap %}
+<div class="card border-primary mb-3 shadow-sm">
+    <div class="card-header bg-primary text-white fw-semibold">Об'єднання бібліотек</div>
+    <div class="card-body">
+        {% if merge_overlap and merge_invite_id %}
+        <div class="alert alert-warning mb-3">
+            Спільні ISBN — адмін має вказати <strong>реальну кількість</strong> у «Спільна бібліотека».
+        </div>
+        {% endif %}
+        {% for inv in library_invites_in %}
+        <div class="mb-3 {% if not forloop.last or library_invites_out %}border-bottom pb-3{% endif %}">
+            <p class="mb-2">
+                Запит від <strong>@{{ inv.from_username }}</strong>
+                · {{ inv.library_name }}
+                {% if inv.message %}<br><span class="text-muted small">{{ inv.message }}</span>{% endif %}
+            </p>
+            {% if inv.overlap %}
+            <p class="small text-warning mb-2">
+                Спільних ISBN: {{ inv.overlap|length }} — після згоди адмін підтвердить кількість.
+            </p>
+            {% endif %}
+            <div class="d-flex flex-wrap gap-2">
+                <form method="post" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="library_invite_accept" value="1">
+                    <input type="hidden" name="invite_id" value="{{ inv.id }}">
+                    <button type="submit" class="btn btn-sm btn-success">Підтвердити</button>
+                </form>
+                <form method="post" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="library_invite_reject" value="1">
+                    <input type="hidden" name="invite_id" value="{{ inv.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Відхилити</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        {% for inv in library_invites_out %}
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span class="small">Очікує відповіді @{{ inv.to_username }} · {{ inv.library_name }}</span>
+            <form method="post" class="m-0">
+                {% csrf_token %}
+                <input type="hidden" name="library_invite_cancel" value="1">
+                <input type="hidden" name="invite_id" value="{{ inv.id }}">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Скасувати</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 {% if messages %}
     {% for message in messages %}
         <div class="alert alert-{% if 'error' in message.tags %}danger{% elif 'success' in message.tags %}success{% elif 'warning' in message.tags %}warning{% else %}info{% endif %} alert-dismissible fade show" role="alert">
@@ -109,8 +308,58 @@
                                         {% if m.read_at %}<span class="text-success">· прочитано</span>{% endif %}
                                     </div>
                                     <div class="mb-0">{{ m.body|linebreaksbr }}</div>
-                                    {% if m.exchange_request_id %}
-                                        <div class="small mt-2"><a href="{% url 'exchange_requests' %}">Запити на обмін</a></div>
+                                    {% if m.exchange_request_id and m.exchange_request.status == "pending" and m.exchange_request.shelf_owner_id == user.id %}
+                                        <div class="d-flex flex-wrap gap-2 mt-2">
+                                            <form method="post" action="{% url 'exchange_accept' m.exchange_request_id %}" class="m-0">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                                                <button type="submit" class="btn btn-sm btn-success">Підтвердити</button>
+                                            </form>
+                                            <form method="post" action="{% url 'exchange_reject' m.exchange_request_id %}" class="m-0">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Відхилити</button>
+                                            </form>
+                                        </div>
+                                    {% elif m.exchange_request_id %}
+                                        <div class="small mt-2 text-muted">
+                                            {% if m.exchange_request.status == "pending" %}Очікує відповіді{% else %}{{ m.exchange_request.get_status_display }}{% endif %}
+                                            · <a href="{% url 'exchange_requests' %}">Запити</a>
+                                        </div>
+                                    {% endif %}
+                                    {% if m.library_invite_id and m.library_invite.status == "pending" and m.recipient_id == user.id %}
+                                        <div class="d-flex flex-wrap gap-2 mt-2">
+                                            <form method="post" class="m-0">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="library_invite_accept" value="1">
+                                                <input type="hidden" name="invite_id" value="{{ m.library_invite_id }}">
+                                                <button type="submit" class="btn btn-sm btn-success">Підтвердити</button>
+                                            </form>
+                                            <form method="post" class="m-0">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="library_invite_reject" value="1">
+                                                <input type="hidden" name="invite_id" value="{{ m.library_invite_id }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Відхилити</button>
+                                            </form>
+                                        </div>
+                                    {% endif %}
+                                    {% if m.library_action_id and m.library_action.status == "pending" and m.library_action.library.admin_id == user.id %}
+                                        <div class="d-flex flex-wrap gap-2 mt-2">
+                                            <form method="post" class="m-0">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="library_action_resolve" value="1">
+                                                <input type="hidden" name="action_id" value="{{ m.library_action_id }}">
+                                                <input type="hidden" name="approve" value="1">
+                                                <button type="submit" class="btn btn-sm btn-success">Підтвердити</button>
+                                            </form>
+                                            <form method="post" class="m-0">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="library_action_resolve" value="1">
+                                                <input type="hidden" name="action_id" value="{{ m.library_action_id }}">
+                                                <input type="hidden" name="approve" value="0">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Відхилити</button>
+                                            </form>
+                                        </div>
                                     {% endif %}
                                 </div>
                             </div>
@@ -122,6 +371,27 @@
                                         · {{ m.created_at|date:"d.m.Y H:i" }}
                                     </div>
                                     <div class="mb-0">{{ m.body|linebreaksbr }}</div>
+                                    {% if m.exchange_request_id and m.exchange_request.status == "pending" and m.exchange_request.requester_id == user.id %}
+                                        <div class="small mt-2 opacity-75">Очікує відповіді ·
+                                            <form method="post" action="{% url 'exchange_cancel' m.exchange_request_id %}" class="d-inline">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                                                <button type="submit" class="btn btn-link btn-sm text-white p-0 align-baseline">Скасувати</button>
+                                            </form>
+                                        </div>
+                                    {% elif m.exchange_request_id %}
+                                        <div class="small mt-2 opacity-75">{{ m.exchange_request.get_status_display }}</div>
+                                    {% endif %}
+                                    {% if m.library_invite_id and m.library_invite.status == "pending" %}
+                                        <div class="small mt-2 opacity-75">Очікує відповіді ·
+                                            <form method="post" class="d-inline">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="library_invite_cancel" value="1">
+                                                <input type="hidden" name="invite_id" value="{{ m.library_invite_id }}">
+                                                <button type="submit" class="btn btn-link btn-sm text-white p-0 align-baseline">Скасувати</button>
+                                            </form>
+                                        </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         {% endif %}

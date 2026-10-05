@@ -140,6 +140,12 @@ class FindLoanRowsByCopyIdsTests(ShelfRepositoryTestBase):
 
         self.assertEqual(actualResult, expectedResult)
 
+    def test_find_loan_rows_by_copy_ids_when_empty_ids_returns_empty_dict(self):
+        actualResult = self.repo.find_loan_rows_by_copy_ids([])
+        expectedResult: dict = {}
+
+        self.assertEqual(actualResult, expectedResult)
+
 
 class FindOwnerShelfIdsByCopyIdsTests(ShelfRepositoryTestBase):
     def test_find_owner_shelf_ids_by_copy_ids_when_owner_row_exists_returns_pk(self):
@@ -147,5 +153,11 @@ class FindOwnerShelfIdsByCopyIdsTests(ShelfRepositoryTestBase):
             self.copy.id
         ]
         expectedResult = self.owner_shelf.pk
+
+        self.assertEqual(actualResult, expectedResult)
+
+    def test_find_owner_shelf_ids_by_copy_ids_when_empty_ids_returns_empty_dict(self):
+        actualResult = self.repo.find_owner_shelf_ids_by_copy_ids([])
+        expectedResult: dict = {}
 
         self.assertEqual(actualResult, expectedResult)

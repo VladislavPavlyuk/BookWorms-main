@@ -100,6 +100,7 @@
                         <span class="text-dark">{{ post.likes.count }}</span>
                     </span>
                 {% endif %}
+                {% include "mainApp/includes/share_button.html" with request=request post_id=post.id share_title=post.title share_text=post.text only %}
             </div>
 
             {% if post.author == user %}
@@ -128,8 +129,13 @@
             <h6>Коментарі:</h6>
 
             {% for comment in post.comments.all %}
-                <div class="border rounded p-2 mb-2 bg-light">
-                    <strong>{% shelf_user_link comment.author %}</strong>: {{ comment.text }}
+                <div class="border rounded p-2 mb-2 bg-light d-flex gap-2 align-items-start" id="post-{{ post.id }}-c{{ comment.id }}">
+                    <div class="flex-grow-1 min-w-0">
+                        <strong>{% shelf_user_link comment.author %}</strong>: {{ comment.text }}
+                    </div>
+                    {% with cshare=comment.author.username|add:": "|add:comment.text %}
+                    {% include "mainApp/includes/share_button.html" with request=request post_id=post.id comment_id=comment.id share_title=post.title share_text=cshare only %}
+                    {% endwith %}
                 </div>
             {% empty %}
                 <p class="text-muted small">Коментарів поки немає</p>

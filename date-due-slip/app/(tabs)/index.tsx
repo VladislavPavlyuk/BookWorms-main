@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ApiError, AuthApi, BooksApi, FeedApi, type FeedSearch } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { hasFeedSearch, useFeedSearch } from "../../src/feedSearch";
+import { sharePost } from "../../src/shareContent";
 import { colors, fs, s } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Book, Post } from "../../src/types";
@@ -293,21 +294,38 @@ export default function Feed() {
                   <Text style={styles.body} numberOfLines={landscape ? 6 : 4}>
                     {item.text}
                   </Text>
-                  <Pressable
-                    onPress={() => like(item.id)}
-                    style={styles.likeRow}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Вподобайка ${item.likes_count}`}
-                  >
-                    <Ionicons
-                      name={item.liked_by_me ? "heart" : "heart-outline"}
-                      size={20}
-                      color="#E11D48"
-                    />
-                    <Text style={[styles.like, item.liked_by_me && styles.likeOn]}>
-                      {item.likes_count} · коментарі {item.comments_count}
-                    </Text>
-                  </Pressable>
+                  <View style={styles.actionsRow}>
+                    <Pressable
+                      onPress={(e) => {
+                        e?.stopPropagation?.();
+                        like(item.id);
+                      }}
+                      style={styles.likeRow}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Вподобайка ${item.likes_count}`}
+                    >
+                      <Ionicons
+                        name={item.liked_by_me ? "heart" : "heart-outline"}
+                        size={20}
+                        color="#E11D48"
+                      />
+                      <Text style={[styles.like, item.liked_by_me && styles.likeOn]}>
+                        {item.likes_count} · коментарі {item.comments_count}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={(e) => {
+                        e?.stopPropagation?.();
+                        sharePost(item).catch(() => {});
+                      }}
+                      style={styles.shareBtn}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Поділитися"
+                    >
+                      <Ionicons name="share-social-outline" size={22} color={colors.ink} />
+                    </Pressable>
+                  </View>
                 </View>
               </ScrollView>
             </Pressable>
@@ -549,7 +567,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    marginTop: 0,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginTop: s(10),
+  },
+  shareBtn: {
+    padding: 4,
   },
   empty: { textAlign: "center", color: colors.muted, marginTop: s(24), fontSize: fs(16) },
 });

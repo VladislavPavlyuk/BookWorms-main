@@ -1,4 +1,4 @@
-"""Who may chat with whom (active exchange / loan / handoff / queue)."""
+"""Who may chat with whom (active exchange / loan / handoff / queue / library)."""
 from __future__ import annotations
 
 from django.db.models import Q, QuerySet
@@ -12,12 +12,20 @@ def list_exchange_message_partners(user: CustomUser) -> QuerySet[CustomUser]:
     - pending запити на обмін/позику;
     - активна позика (Shelf.borrowed_from);
     - активна фізична передача (LoanHandoff) — власник + обидва позичальники;
-    - черга на примірник.
+    - черга на примірник;
+    - pending запрошення merge бібліотек;
+    - співучасники спільної бібліотеки.
 
     Після завершення handoff попередній позичальник відпадає; власник лишається
     з новим доки не підтвердить повернення.
     """
-    from ..models import CopyQueueEntry, LoanHandoff
+    from ..models import (
+        CopyQueueEntry,
+        LibraryAction,
+        LibraryInvite,
+        LibraryMembership,
+        LoanHandoff,
+    )
 
     ids: set[int] = set()
     pending = BookExchangeRequest.Status.PENDING
@@ -58,6 +66,30 @@ def list_exchange_message_partners(user: CustomUser) -> QuerySet[CustomUser]:
         user=user,
     ).select_related("copy").only("copy__owner_id"):
         ids.add(e.copy.owner_id)
+
+    for inv in LibraryInvite.objects.filter(
+        status__in=(
+            LibraryInvite.Status.PENDING,
+            LibraryInvite.Status.AWAITING_ISBN,
+        )
+    ).filter(Q(from_user=user) | Q(to_user=user)).only("from_user_id", "to_user_id"):
+        ids.add(inv.from_user_id)
+        ids.add(inv.to_user_id)
+
+    for act in LibraryAction.objects.filter(
+        status=LibraryAction.Status.PENDING,
+    ).filter(Q(initiator=user) | Q(library__admin=user)).select_related("library"):
+        ids.add(act.initiator_id)
+        ids.add(act.library.admin_id)
+
+    my_lib_ids = list(
+        LibraryMembership.objects.filter(user=user).values_list("library_id", flat=True)
+    )
+    if my_lib_ids:
+        for mid in LibraryMembership.objects.filter(
+            library_id__in=my_lib_ids
+        ).values_list("user_id", flat=True):
+            ids.add(mid)
 
     ids.discard(user.pk)
     return CustomUser.objects.filter(pk__in=ids).order_by("username").distinct()

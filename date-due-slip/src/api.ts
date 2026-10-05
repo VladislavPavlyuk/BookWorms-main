@@ -7,6 +7,7 @@ import {
   Comment,
   CopyEvent,
   Exchange,
+  LibrarySnapshot,
   LoanHandoff,
   Message,
   Paginated,
@@ -168,8 +169,24 @@ export const AuthApi = {
       auth: false,
     }),
   me: () => api<User>("/api/auth/me/"),
-  updateMe: (body: { username?: string; biography?: string }) =>
-    api<User>("/api/auth/me/", { method: "PATCH", body }),
+  updateMe: (body: { username?: string; biography?: string } | FormData) =>
+    api<User>("/api/auth/me/", {
+      method: "PATCH",
+      body,
+      formData: body instanceof FormData,
+    }),
+};
+
+export const ContactApi = {
+  config: () =>
+    api<{
+      access_key: string;
+      endpoint: string;
+      max_screenshots: number;
+      max_file_bytes: number;
+      message_max: number;
+      to_hint: string;
+    }>("/api/contact/config/", { auth: false }),
 };
 
 export type FeedSearch = {
@@ -227,13 +244,32 @@ export const ShelfApi = {
       pending_returns: Shelf[];
       lent_out_count?: number;
       price_total_uah?: string;
+      is_shared_library?: boolean;
+      shared_member_count?: number;
+      shared_library_name?: string;
+      i_am_library_admin?: boolean;
     }>("/api/shelf/"),
   refreshPrice: (bookId: number) =>
     api<{ ok: boolean; price_eval: import("./types").BookPriceEval | null }>(
       `/api/books/${bookId}/price/refresh/`,
       { method: "POST" }
     ),
-  addIsbn: (isbn: string) => api<Shelf>("/api/shelf/isbn/", { method: "POST", body: { isbn } }),
+  addIsbn: (isbn: string, confirmExtra = false) =>
+    api<
+      | Shelf
+      | {
+          needs_confirmation?: boolean;
+          pending_approval?: boolean;
+          existing_count?: number;
+          title?: string;
+          isbn?: string;
+          detail?: string;
+          action_id?: number;
+        }
+    >("/api/shelf/isbn/", {
+      method: "POST",
+      body: { isbn, confirm_extra: confirmExtra },
+    }),
   addManual: (body: {
     isbn?: string;
     title?: string;
@@ -243,6 +279,7 @@ export const ShelfApi = {
     cover_url?: string;
     info_url?: string;
     cover_text?: string;
+    confirm_extra?: boolean;
     photos?: { uri: string; name?: string; type?: string }[];
   }) => {
     const photos = body.photos || [];
@@ -259,6 +296,7 @@ export const ShelfApi = {
     if (body.cover_url) fd.append("cover_url", body.cover_url);
     if (body.info_url) fd.append("info_url", body.info_url);
     if (body.cover_text) fd.append("cover_text", body.cover_text);
+    if (body.confirm_extra) fd.append("confirm_extra", "true");
     photos.forEach((p, i) => {
       fd.append("photos", {
         uri: p.uri,
@@ -335,7 +373,16 @@ export const ShelfApi = {
       best_photo_index?: number;
     }>("/api/shelf/recognize-cover/", { method: "POST", body: fd, formData: true });
   },
-  remove: (id: number) => api(`/api/shelf/${id}/`, { method: "DELETE" }),
+  remove: (id: number) =>
+    api<
+      | void
+      | {
+          pending_approval?: boolean;
+          action_id?: number;
+          chat_partner_id?: number;
+          detail?: string;
+        }
+    >(`/api/shelf/${id}/`, { method: "DELETE" }),
   returnBook: (id: number) => api(`/api/shelf/${id}/return/`, { method: "POST" }),
   confirmReturn: (id: number) => api(`/api/shelf/${id}/confirm-return/`, { method: "POST" }),
   readerAge: (id: number, min_readers_age: number, max_readers_age: number) =>
@@ -352,7 +399,39 @@ export const ShelfApi = {
       sale_price?: string | number | null;
       rent_price_per_day?: string | number | null;
     }
-  ) => api<Shelf>(`/api/shelf/${id}/listing/`, { method: "POST", body }),
+  ) =>
+    api<
+      | Shelf
+      | {
+          pending_approval?: boolean;
+          action_id?: number;
+          chat_partner_id?: number;
+          detail?: string;
+        }
+    >(`/api/shelf/${id}/listing/`, { method: "POST", body }),
+  bulk: (body: {
+    action: "delete" | "listing";
+    shelf_ids: number[];
+    is_fee_sharing?: boolean;
+    is_hidden?: boolean;
+    is_for_rent?: boolean;
+    is_for_exchange?: boolean;
+    is_free_of_deposit?: boolean;
+    sale_gift?: string;
+    sale_price?: string | number | null;
+    rent_price_per_day?: string | number | null;
+  }) =>
+    api<{
+      ok?: boolean;
+      pending_approval?: boolean;
+      action_id?: number;
+      chat_partner_id?: number;
+      detail?: string;
+      removed?: number;
+      updated?: number;
+      blocked?: number[];
+      count?: number;
+    }>("/api/shelf/bulk/", { method: "POST", body }),
 };
 
 export const SlipApi = {
@@ -423,15 +502,101 @@ export const QueueApi = {
     }>("/api/queue/mine/"),
 };
 
+export const LibraryApi = {
+  mine: () => api<LibrarySnapshot>("/api/library/"),
+  invite: (username: string, message = "") =>
+    api<{ id: number; to_username: string; to_user_id: number; chat_partner_id: number }>(
+      "/api/library/invite/",
+      {
+        method: "POST",
+        body: { username, message },
+      }
+    ),
+  acceptInvite: (inviteId: number, isbn_counts: Record<string, number> = {}) =>
+    api<{
+      ok?: boolean;
+      library_id?: number;
+      awaiting_admin_isbn?: boolean;
+      needs_isbn_counts?: boolean;
+      overlap?: unknown[];
+      detail?: string;
+      invite_id?: number;
+    }>(`/api/library/invite/${inviteId}/accept/`, {
+      method: "POST",
+      body: { isbn_counts },
+    }),
+  confirmMergeIsbn: (inviteId: number, isbn_counts: Record<string, number>) =>
+    api<{
+      ok?: boolean;
+      library_id?: number;
+      needs_isbn_counts?: boolean;
+      overlap?: unknown[];
+      detail?: string;
+    }>(`/api/library/invite/${inviteId}/confirm-isbn/`, {
+      method: "POST",
+      body: { isbn_counts },
+    }),
+  rejectInvite: (inviteId: number) =>
+    api<{ ok: boolean }>(`/api/library/invite/${inviteId}/reject/`, { method: "POST" }),
+  cancelInvite: (inviteId: number) =>
+    api<{ ok: boolean }>(`/api/library/invite/${inviteId}/cancel/`, { method: "POST" }),
+  resolveAction: (actionId: number, approve: boolean) =>
+    api<{ ok: boolean }>(`/api/library/actions/${actionId}/resolve/`, {
+      method: "POST",
+      body: { approve },
+    }),
+  splitLeave: (copy_ids: number[]) =>
+    api<{ pending_approval?: boolean; action_id?: number; ok?: boolean }>("/api/library/split/", {
+      method: "POST",
+      body: { copy_ids },
+    }),
+  startElection: (reason = "Зміна адміністратора") =>
+    api<Record<string, unknown>>("/api/library/election/start/", {
+      method: "POST",
+      body: { reason },
+    }),
+  voteElection: (electionId: number, candidate_id: number) =>
+    api<Record<string, unknown>>(`/api/library/election/${electionId}/vote/`, {
+      method: "POST",
+      body: { candidate_id },
+    }),
+  finalizeElection: (electionId: number) =>
+    api<Record<string, unknown>>(`/api/library/election/${electionId}/finalize/`, {
+      method: "POST",
+      body: {},
+    }),
+  cancelElection: (electionId: number) =>
+    api<{ ok: boolean }>(`/api/library/election/${electionId}/cancel/`, { method: "POST" }),
+};
+
 export const ExchangeApi = {
   list: () =>
     api<{ pending_in: Exchange[]; pending_out: Exchange[]; history: Exchange[] }>("/api/exchanges/"),
-  create: (target_shelf_id: number, offer_shelf_id?: number | null) =>
+  create: (
+    target_shelf_id: number,
+    offer_shelf_id?: number | null,
+    proposed_due_date?: string | null
+  ) =>
     api<{ created: Exchange[]; errors: string[] }>("/api/exchanges/create/", {
       method: "POST",
-      body: { target_shelf_id, offer_shelf_id: offer_shelf_id || null },
+      body: {
+        target_shelf_id,
+        offer_shelf_id: offer_shelf_id || null,
+        ...(proposed_due_date ? { proposed_due_date } : {}),
+      },
     }),
-  accept: (id: number) => api(`/api/exchanges/${id}/accept/`, { method: "POST" }),
+  accept: (id: number, due_date?: string | null) =>
+    api(`/api/exchanges/${id}/accept/`, {
+      method: "POST",
+      body: due_date ? { due_date } : {},
+    }),
+  proposeDue: (id: number, due_date: string) =>
+    api<Exchange>(`/api/exchanges/${id}/propose-due/`, {
+      method: "POST",
+      body: { due_date },
+    }),
+  confirmDue: (id: number) =>
+    api<Exchange>(`/api/exchanges/${id}/confirm-due/`, { method: "POST", body: {} }),
   reject: (id: number) => api(`/api/exchanges/${id}/reject/`, { method: "POST" }),
   cancel: (id: number) => api(`/api/exchanges/${id}/cancel/`, { method: "POST" }),
 };
@@ -452,6 +617,55 @@ export const MsgApi = {
       pending_out: Exchange[];
       pending_returns: Shelf[];
       handoffs: LoanHandoff[];
+      library_invites_in?: {
+        id: number;
+        library_name: string;
+        from_username: string;
+        message: string;
+        overlap: {
+          isbn: string;
+          title: string;
+          combined: number;
+          target_count: number;
+          source_count: number;
+        }[];
+      }[];
+      library_invites_out?: {
+        id: number;
+        library_name: string;
+        to_username: string;
+        message: string;
+        status?: string;
+        overlap?: {
+          isbn: string;
+          title: string;
+          combined: number;
+          target_count: number;
+          source_count: number;
+        }[];
+      }[];
+      library_actions_in?: {
+        id: number;
+        title: string;
+        isbn: string;
+        existing_count: number;
+        count?: number;
+        action_type?: string;
+        action_type_label?: string;
+        initiator_username: string;
+        library_name: string;
+      }[];
+      library_actions_out?: {
+        id: number;
+        title: string;
+        isbn: string;
+        existing_count: number;
+        count?: number;
+        action_type?: string;
+        action_type_label?: string;
+        initiator_username: string;
+        library_name: string;
+      }[];
     }>(`/api/messages/${id}/`),
   send: (id: number, body: string) =>
     api<Message>(`/api/messages/${id}/`, { method: "POST", body: { body } }),

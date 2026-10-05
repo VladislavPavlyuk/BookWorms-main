@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, BrowseApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { HistoryLink } from "../../src/HistoryLink";
 import { RequestModal } from "../../src/RequestModal";
 import { useAuth } from "../../src/auth";
+import { sharePost } from "../../src/shareContent";
 import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Book, Post, Shelf, User } from "../../src/types";
@@ -125,7 +127,20 @@ export default function BookScreen() {
       {posts.length === 0 ? <Text style={styles.meta}>немає</Text> : null}
       {posts.map((p) => (
         <Pressable key={p.id} style={styles.card} onPress={() => router.push(`/post/${p.id}`)}>
-          <Text style={styles.ptitle}>{p.title}</Text>
+          <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+            <Text style={[styles.ptitle, { flex: 1 }]}>{p.title}</Text>
+            <Pressable
+              onPress={(e) => {
+                e?.stopPropagation?.();
+                sharePost(p).catch(() => {});
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Поділитися"
+            >
+              <Ionicons name="share-social-outline" size={20} color={colors.ink} />
+            </Pressable>
+          </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
             <UserNameLink user={p.author} style={styles.meta} />
             <Text style={styles.meta}>· ♥ {p.likes_count}</Text>

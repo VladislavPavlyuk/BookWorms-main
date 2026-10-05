@@ -8,6 +8,12 @@ from .models import (
     BookPhoto,
     CopyEvent,
     CustomUser,
+    Library,
+    LibraryAction,
+    LibraryAdminElection,
+    LibraryAdminVote,
+    LibraryInvite,
+    LibraryMembership,
     LoanHandoff,
     Post,
     PrivateMessage,
@@ -72,6 +78,8 @@ class BookCopyAdmin(admin.ModelAdmin):
         "id",
         "book",
         "owner",
+        "library",
+        "added_by",
         "is_fee_sharing",
         "is_hidden",
         "is_for_sale",
@@ -91,10 +99,10 @@ class BookCopyAdmin(admin.ModelAdmin):
         "is_as_gift",
         "is_for_exchange",
         "is_free_of_deposit",
+        "created_at",
     )
-    list_filter = ("created_at",)
     search_fields = ("book__title", "book__isbn", "owner__username")
-    raw_id_fields = ("book", "owner")
+    raw_id_fields = ("book", "owner", "library", "added_by")
 
 
 @admin.register(CopyEvent)
@@ -163,3 +171,43 @@ class LoanHandoffAdmin(admin.ModelAdmin):
 class AvatarCollectionAdmin(admin.ModelAdmin):
     list_display = ("name", "image")
     search_fields = ("name",)
+
+@admin.register(Library)
+class LibraryAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "admin", "created_at")
+    search_fields = ("name", "admin__username")
+    raw_id_fields = ("admin",)
+
+
+@admin.register(LibraryMembership)
+class LibraryMembershipAdmin(admin.ModelAdmin):
+    list_display = ("id", "library", "user", "role", "joined_at")
+    list_filter = ("role",)
+    raw_id_fields = ("library", "user")
+
+
+@admin.register(LibraryInvite)
+class LibraryInviteAdmin(admin.ModelAdmin):
+    list_display = ("id", "library", "from_user", "to_user", "status", "created_at")
+    list_filter = ("status",)
+    raw_id_fields = ("library", "from_user", "to_user")
+
+
+@admin.register(LibraryAction)
+class LibraryActionAdmin(admin.ModelAdmin):
+    list_display = ("id", "library", "initiator", "action_type", "status", "created_at")
+    list_filter = ("action_type", "status")
+    raw_id_fields = ("library", "initiator", "resolved_by")
+
+
+@admin.register(LibraryAdminElection)
+class LibraryAdminElectionAdmin(admin.ModelAdmin):
+    list_display = ("id", "library", "status", "started_by", "winner", "created_at")
+    list_filter = ("status",)
+    raw_id_fields = ("library", "started_by", "winner")
+
+
+@admin.register(LibraryAdminVote)
+class LibraryAdminVoteAdmin(admin.ModelAdmin):
+    list_display = ("id", "election", "voter", "candidate", "created_at")
+    raw_id_fields = ("election", "voter", "candidate")

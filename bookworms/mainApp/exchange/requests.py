@@ -16,7 +16,7 @@ from ..exceptions import (
 )
 from ..models import BookCopy, BookExchangeRequest, CopyEvent, CustomUser, Shelf
 from .copies import is_copy_lent_out
-from .due import loan_due_date
+from .due import parse_due_date, resolve_loan_due_date, validate_proposed_due_date
 from .handoff import active_handoff_for_copy, approve_loan_handoff
 
 
@@ -131,19 +131,31 @@ def create_exchange_request(
     *,
     from_queue: bool = False,
     join_queue_if_busy: bool = True,
+    proposed_due_date=None,
 ) -> BookExchangeRequest:
     """
     Створює запит. Помилка — ExchangeError.
     Без offer_shelf: після прийняття - позика; з offer_shelf: повний обмін.
     Lent + позика → запит на передачу третій особі + черга.
+    proposed_due_date — запропонований термін повернення (лише позика / передача).
     """
     lent = _validate_create_request(requester, target_shelf, offer_shelf)
+    due = None
+    if not offer_shelf and proposed_due_date is not None:
+        try:
+            parsed = parse_due_date(proposed_due_date)
+            due = validate_proposed_due_date(parsed) if parsed else None
+        except ValueError as exc:
+            raise ExchangeError(str(exc)) from exc
     req = BookExchangeRequest.objects.create(
         target_shelf=target_shelf,
         shelf_owner=target_shelf.user,
         requester=requester,
         offer_shelf=offer_shelf,
         status=BookExchangeRequest.Status.PENDING,
+        proposed_due_date=due,
+        due_date_proposer=BookExchangeRequest.DueProposer.REQUESTER,
+        due_date_confirmed=False,
     )
     _enqueue_after_create(
         requester,
@@ -164,15 +176,18 @@ def _short_shelf_title(s: Shelf) -> str:
 
 def create_many_exchange_requests(
     requester: CustomUser,
-    lines: list[tuple[Shelf, Shelf | None]],
+    lines: list[tuple[Shelf, Shelf | None, object | None]],
 ) -> tuple[int, list[str]]:
-    """Кілька запитів за одну дію; та сама offer_shelf — лише раз у пакеті."""
+    """Кілька запитів за одну дію; та сама offer_shelf — лише раз у пакеті.
+
+    lines: (target, offer|None, proposed_due_date|None)
+    """
     ok = 0
     errs: list[str] = []
     seen_offer_ids: set[int] = set()
-    filtered: list[tuple[Shelf, Shelf | None]] = []
+    filtered: list[tuple[Shelf, Shelf | None, object | None]] = []
 
-    for target_shelf, offer_shelf in lines:
+    for target_shelf, offer_shelf, proposed_due in lines:
         label = _short_shelf_title(target_shelf)
         if offer_shelf is not None:
             oid = offer_shelf.pk
@@ -182,12 +197,17 @@ def create_many_exchange_requests(
                 )
                 continue
             seen_offer_ids.add(oid)
-        filtered.append((target_shelf, offer_shelf))
+        filtered.append((target_shelf, offer_shelf, proposed_due))
 
-    for target_shelf, offer_shelf in filtered:
+    for target_shelf, offer_shelf, proposed_due in filtered:
         label = _short_shelf_title(target_shelf)
         try:
-            create_exchange_request(requester, target_shelf, offer_shelf)
+            create_exchange_request(
+                requester,
+                target_shelf,
+                offer_shelf,
+                proposed_due_date=proposed_due,
+            )
             ok += 1
         except ExchangeError as exc:
             errs.append(f"'{label}': {exc.message}")
@@ -313,13 +333,22 @@ def _accept_as_loan(
     owner: CustomUser,
     target: Shelf,
     requester: CustomUser,
+    *,
+    due_date=None,
 ) -> None:
+    try:
+        due = resolve_loan_due_date(
+            proposed=req.proposed_due_date,
+            override=parse_due_date(due_date) if due_date is not None else None,
+        )
+    except ValueError as exc:
+        raise ExchangeError(str(exc)) from exc
     Shelf.objects.create(
         user_id=requester.id,
         book_id=target.book_id,
         copy_id=target.copy_id,
         borrowed_from_id=owner.id,
-        due_date=loan_due_date(),
+        due_date=due,
         return_pending=False,
     )
     log_copy_event(
@@ -337,9 +366,15 @@ def _accept_as_loan(
 
 @domain_guard("exchange.accept")
 @transaction.atomic
-def accept_exchange_request(request_id: int, acting_user: CustomUser) -> None:
+def accept_exchange_request(
+    request_id: int,
+    acting_user: CustomUser,
+    *,
+    due_date=None,
+) -> None:
     """
     Власник погоджується: позика / обмін / handoff (якщо примірник уже в позиці).
+    due_date — опційний override терміну (інакше proposed_due_date / дефолт).
     """
     req = _lock_pending_request(request_id)
     if req.shelf_owner_id != acting_user.id:
@@ -360,7 +395,7 @@ def accept_exchange_request(request_id: int, acting_user: CustomUser) -> None:
     if offer:
         _accept_as_swap(req, acting_user, target, requester, offer)
     else:
-        _accept_as_loan(req, acting_user, target, requester)
+        _accept_as_loan(req, acting_user, target, requester, due_date=due_date)
 
     _mark_request_accepted(req)
     get_notifier().notify_exchange_request_accepted(req)
@@ -406,3 +441,75 @@ def cancel_exchange_request(request_id: int, acting_user: CustomUser) -> None:
     get_notifier().notify_exchange_request_cancelled(req)
     if copy_id:
         get_queue().leave_queue(acting_user, copy_id)
+
+
+@domain_guard("exchange.propose_due")
+@transaction.atomic
+def propose_exchange_due_date(
+    request_id: int,
+    acting_user: CustomUser,
+    due_date,
+) -> BookExchangeRequest:
+    """
+    Власник або позичальник пропонує / змінює термін повернення (лише позика/передача).
+    Інша сторона має підтвердити (confirm) або відповісти новою пропозицією.
+    """
+    req = _lock_pending_request(request_id)
+    if req.offer_shelf_id:
+        raise ExchangeInvalidState("Для обміну термін повернення не потрібен.")
+    is_owner = acting_user.id == req.shelf_owner_id
+    is_requester = acting_user.id == req.requester_id
+    if not (is_owner or is_requester):
+        raise ExchangeForbidden("Немає доступу до цього запиту.")
+    try:
+        parsed = parse_due_date(due_date)
+        if parsed is None:
+            raise ExchangeError("Вкажіть дату повернення.")
+        due = validate_proposed_due_date(parsed)
+    except ValueError as exc:
+        raise ExchangeError(str(exc)) from exc
+
+    req.proposed_due_date = due
+    req.due_date_proposer = (
+        BookExchangeRequest.DueProposer.OWNER
+        if is_owner
+        else BookExchangeRequest.DueProposer.REQUESTER
+    )
+    req.due_date_confirmed = False
+    req.save(
+        update_fields=["proposed_due_date", "due_date_proposer", "due_date_confirmed"]
+    )
+    get_notifier().notify_exchange_due_proposed(req, acting_user)
+    return req
+
+
+@domain_guard("exchange.confirm_due")
+@transaction.atomic
+def confirm_exchange_due_date(
+    request_id: int, acting_user: CustomUser
+) -> BookExchangeRequest:
+    """Погодити поточну пропозицію терміну (робить сторона, яка НЕ пропонувала останньою)."""
+    req = _lock_pending_request(request_id)
+    if req.offer_shelf_id:
+        raise ExchangeInvalidState("Для обміну термін повернення не потрібен.")
+    if not req.proposed_due_date:
+        raise ExchangeInvalidState("Немає запропонованої дати для підтвердження.")
+
+    is_owner = acting_user.id == req.shelf_owner_id
+    is_requester = acting_user.id == req.requester_id
+    if not (is_owner or is_requester):
+        raise ExchangeForbidden("Немає доступу до цього запиту.")
+
+    proposer = req.due_date_proposer or BookExchangeRequest.DueProposer.REQUESTER
+    if proposer == BookExchangeRequest.DueProposer.OWNER and not is_requester:
+        raise ExchangeForbidden("Підтвердити пропозицію власника може лише позичальник.")
+    if proposer == BookExchangeRequest.DueProposer.REQUESTER and not is_owner:
+        raise ExchangeForbidden("Підтвердити пропозицію позичальника може лише власник.")
+
+    if req.due_date_confirmed:
+        return req
+
+    req.due_date_confirmed = True
+    req.save(update_fields=["due_date_confirmed"])
+    get_notifier().notify_exchange_due_confirmed(req, acting_user)
+    return req

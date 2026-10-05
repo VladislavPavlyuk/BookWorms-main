@@ -71,8 +71,10 @@ from .handoff import (
 from .requests import (
     accept_exchange_request,
     cancel_exchange_request,
+    confirm_exchange_due_date,
     create_exchange_request,
     create_many_exchange_requests,
+    propose_exchange_due_date,
     reject_exchange_request,
 )
 from .returns import confirm_borrow_return, request_borrow_return
@@ -133,6 +135,7 @@ __all__ = [
     "cancel_exchange_request",
     "cancel_loan_handoff",
     "confirm_borrow_return",
+    "confirm_exchange_due_date",
     "confirm_handoff_give",
     "confirm_handoff_receive",
     "create_exchange_request",
@@ -154,6 +157,7 @@ __all__ = [
     "loan_due_date",
     "my_available_owned",
     "physical_presence_shelves_qs",
+    "propose_exchange_due_date",
     "reject_exchange_request",
     "remove_owned_shelf",
     "request_borrow_return",
