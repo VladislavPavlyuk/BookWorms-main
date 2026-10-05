@@ -27,7 +27,7 @@ A4_PAGE_MARGIN_MM = 5
 A4_WIDTH_MM = 210
 A4_HEIGHT_MM = 297
 LABEL_W_MM = (A4_WIDTH_MM - 2 * A4_PAGE_MARGIN_MM) / A4_COLS  # ≈ 33.33 mm
-LABEL_H_MM = (A4_HEIGHT_MM - 2 * A4_PAGE_MARGIN_MM) / A4_ROWS  # ≈ 47.83 mm
+LABEL_H_MM = (A4_HEIGHT_MM - 3 * A4_PAGE_MARGIN_MM) / A4_ROWS  # ≈ 47.83 mm
 QR_PRINT_MM = 30
 QR_BRAND_TITLE = "www.datedueslip.com"
 # token_urlsafe alphabet (+ legacy early-bind leftovers).
