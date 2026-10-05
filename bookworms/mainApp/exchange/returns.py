@@ -109,9 +109,16 @@ def request_borrow_return(shelf_id: int, borrower: CustomUser) -> None:
 
 @domain_guard("exchange.return_confirm")
 @transaction.atomic
-def confirm_borrow_return(shelf_id: int, lender: CustomUser) -> None:
+def confirm_borrow_return(
+    shelf_id: int, lender: CustomUser, *, qr_payload: str | None = None
+) -> None:
     """Позикодавець підтверджує отримання: знімає позику з полиці позичальника."""
+    from ..copy_qr import require_bound_qr_scan
+
     shelf = _lock_pending_return_shelf(shelf_id, lender)
+    require_bound_qr_scan(
+        shelf.copy, qr_payload, action="повернення до вашої бібліотеки"
+    )
     borrower = shelf.user
     book_title = shelf.book.title
     copy_id = shelf.copy_id

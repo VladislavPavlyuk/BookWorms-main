@@ -152,10 +152,12 @@ class ReturnService(IReturnService):
 
         return m.request_borrow_return(shelf_id, borrower)
 
-    def confirm_return(self, shelf_id: int, lender: CustomUser) -> None:
+    def confirm_return(
+        self, shelf_id: int, lender: CustomUser, *, qr_payload: str | None = None
+    ) -> None:
         from . import returns as m
 
-        return m.confirm_borrow_return(shelf_id, lender)
+        return m.confirm_borrow_return(shelf_id, lender, qr_payload=qr_payload)
 
 
 class CatalogService(ICatalogService):

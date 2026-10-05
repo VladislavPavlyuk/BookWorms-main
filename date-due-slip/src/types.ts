@@ -87,7 +87,9 @@ export type Shelf = {
   is_publicly_listed?: boolean;
   listing_status_display?: string | null;
   library_owners?: User[];
-  owners_label?: string;
+  owners_label?: string | null;
+  /** Bound QR → confirm return/receive must scan the label. */
+  requires_qr_scan?: boolean;
   added_at: string;
 };
 

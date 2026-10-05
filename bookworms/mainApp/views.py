@@ -1435,12 +1435,29 @@ def confirm_return_borrowed_shelf_book(request, shelf_id):
     """Позикодавець підтверджує отримання фізично повернутої книги."""
     if request.method != "POST":
         return redirect("my_library")
+    from .copy_qr import copy_has_bound_qr
+
+    shelf = (
+        Shelf.objects.select_related("copy")
+        .filter(pk=shelf_id, borrowed_from=request.user, return_pending=True)
+        .first()
+    )
+    qr = request.POST.get("qr_payload") or request.POST.get("qr")
+    if shelf and copy_has_bound_qr(shelf.copy) and not qr:
+        from django.urls import reverse
+
+        q = f"{reverse('copy_qr_scan')}?return_shelf_id={shelf_id}"
+        partner_id = request.POST.get("partner_id")
+        if partner_id:
+            q += f"&partner_id={partner_id}"
+        return redirect(q)
     web_exchange(
         request,
         confirm_borrow_return,
         shelf_id,
         request.user,
         success="Повернення підтверджено — позику знято з полиці позичальника.",
+        qr_payload=qr,
     )
     partner_id = request.POST.get("partner_id")
     if partner_id:
@@ -1682,7 +1699,7 @@ def settings_view(request):
 
 @login_required
 def copy_qr_scan(request):
-    """Сканер QR: ідентифікація примірника або підтвердження передачі."""
+    """Сканер QR: ідентифікація примірника, прив’язка, передача або повернення."""
     from .copy_qr import resolve_copy_by_qr
     from .exchange.handoff import handoffs_involving
 
@@ -1691,10 +1708,27 @@ def copy_qr_scan(request):
     attach_copy_id = request.GET.get("attach_copy_id") or request.POST.get(
         "attach_copy_id"
     )
+    return_shelf_id = request.GET.get("return_shelf_id") or request.POST.get(
+        "return_shelf_id"
+    )
     resolved = None
     if request.method == "POST":
         payload = request.POST.get("qr_payload") or request.POST.get("qr") or ""
-        if attach_copy_id and str(attach_copy_id).isdigit():
+        if return_shelf_id and str(return_shelf_id).isdigit():
+            try:
+                confirm_borrow_return(
+                    int(return_shelf_id), request.user, qr_payload=payload
+                )
+                messages.success(
+                    request, "Повернення підтверджено сканом QR."
+                )
+                partner_id = request.POST.get("partner_id")
+                if partner_id:
+                    return redirect("message_thread", partner_id=int(partner_id))
+                return redirect("my_library")
+            except ExchangeError as exc:
+                messages.error(request, exc.message)
+        elif attach_copy_id and str(attach_copy_id).isdigit():
             from .copy_qr import attach_copy_qr
 
             try:
@@ -1747,6 +1781,7 @@ def copy_qr_scan(request):
             "handoff_id": handoff_id or "",
             "action": action,
             "attach_copy_id": attach_copy_id or "",
+            "return_shelf_id": return_shelf_id or "",
             "partner_id": request.GET.get("partner_id")
             or request.POST.get("partner_id")
             or "",
@@ -2083,18 +2118,31 @@ def notifications_inbox(request):
 @require_POST
 def notification_confirm_return(request, message_id: int):
     """Зі сповіщення про повернення — підтвердити позику і позначити лист прочитаним."""
+    from .copy_qr import copy_has_bound_qr
+
     msg = get_object_or_404(PrivateMessage, pk=message_id, recipient=request.user)
     payload = notification_payload(msg)
     shelf_id = payload.get("confirm_return_shelf_id")
     if payload.get("kind") != "return" or not shelf_id:
         messages.error(request, "Це сповіщення не є активним запитом на повернення.")
         return redirect("notifications_inbox")
+    shelf = (
+        Shelf.objects.select_related("copy")
+        .filter(pk=shelf_id, borrowed_from=request.user, return_pending=True)
+        .first()
+    )
+    qr = request.POST.get("qr_payload") or request.POST.get("qr")
+    if shelf and copy_has_bound_qr(shelf.copy) and not qr:
+        from django.urls import reverse
+
+        return redirect(f"{reverse('copy_qr_scan')}?return_shelf_id={shelf_id}")
     ok, _ = web_exchange(
         request,
         confirm_borrow_return,
         shelf_id,
         request.user,
         success="Повернення підтверджено.",
+        qr_payload=qr,
     )
     if ok and msg.read_at is None:
         mark_messages_read_for_user(request.user, [msg.pk])

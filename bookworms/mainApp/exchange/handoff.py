@@ -9,7 +9,12 @@ from .deps import get_notifier, get_queue
 from .. import ops_log
 from ..copy_events import log_copy_event
 from ..error_handling import domain_guard
-from ..exceptions import ExchangeForbidden, ExchangeInvalidState, ExchangeNotFound
+from ..exceptions import (
+    ExchangeConflict,
+    ExchangeForbidden,
+    ExchangeInvalidState,
+    ExchangeNotFound,
+)
 from ..models import BookExchangeRequest, CopyEvent, CustomUser, LoanHandoff, Shelf
 from .due import loan_due_date, resolve_loan_due_date
 
@@ -228,7 +233,7 @@ def _finalize_completed_handoff(
 
 
 def complete_loan_handoff_transfer(handoff: LoanHandoff) -> None:
-    """Зняти позику з from_user і видати to_user (після обох підтверджень)."""
+    """Finalize physical transfer after give + receive (incl. owner→borrower QR loan)."""
     cid = ops_log.new_cid()
     ops_log.info("handoff.complete.start", cid=cid, **ops_log.handoff_snapshot(handoff))
 
@@ -236,6 +241,11 @@ def complete_loan_handoff_transfer(handoff: LoanHandoff) -> None:
     requester = handoff.to_user
     previous_holder = handoff.from_user
     copy_id = handoff.copy_id
+
+    # First loan from owner's library (QR-bound copies): no borrower shelf yet.
+    if previous_holder.id == owner.id:
+        _complete_owner_loan_delivery(handoff, cid=cid)
+        return
 
     borrower_shelf = _borrower_shelf_for_copy(copy_id, user_id=previous_holder.id)
     if not borrower_shelf:
@@ -265,6 +275,60 @@ def complete_loan_handoff_transfer(handoff: LoanHandoff) -> None:
         book_title=book_title,
         cid=cid,
     )
+
+
+def _complete_owner_loan_delivery(handoff: LoanHandoff, *, cid: str) -> None:
+    """Owner hands physical copy to first borrower (bound-QR loan path)."""
+    owner = handoff.owner
+    requester = handoff.to_user
+    copy_id = handoff.copy_id
+    if Shelf.objects.filter(user=requester, copy_id=copy_id).exists():
+        raise ExchangeConflict("У позичальника вже є цей примірник.")
+    owner_shelf = (
+        Shelf.objects.select_for_update(of=("self",))
+        .select_related("book")
+        .filter(user=owner, copy_id=copy_id, borrowed_from__isnull=True)
+        .first()
+    )
+    if not owner_shelf:
+        raise ExchangeInvalidState(
+            "Примірник більше не на полиці власника — передачу не завершено."
+        )
+    due = None
+    if handoff.exchange_request_id and handoff.exchange_request:
+        due = resolve_loan_due_date(proposed=handoff.exchange_request.proposed_due_date)
+    book_title = owner_shelf.book.title
+    Shelf.objects.create(
+        user_id=requester.id,
+        book_id=owner_shelf.book_id,
+        copy_id=copy_id,
+        borrowed_from_id=owner.id,
+        due_date=due,
+        return_pending=False,
+    )
+    req = handoff.exchange_request
+    handoff.status = LoanHandoff.Status.COMPLETED
+    handoff.resolved_at = timezone.now()
+    handoff.from_shelf = None
+    handoff.save(update_fields=["status", "resolved_at", "from_shelf"])
+    log_copy_event(
+        copy_id,
+        CopyEvent.Code.LOANED,
+        actor=owner,
+        holder=requester,
+        legal_owner=owner,
+        previous_holder=owner,
+        counterparty=requester,
+        exchange_request=req,
+    )
+    get_notifier().notify_loan_transmitted(
+        owner, owner, requester, book_title, exchange_request=req
+    )
+    try:
+        get_queue().after_copy_loaned_or_transmitted(copy_id, requester.id)
+    except Exception as exc:
+        ops_log.exception("handoff.complete.queue_fail", exc, cid=cid, copy_id=copy_id)
+    ops_log.info("handoff.complete.ok", cid=cid, **ops_log.handoff_snapshot(handoff))
 
 
 def _assert_can_give(handoff: LoanHandoff, acting_user: CustomUser, cid: str) -> None:

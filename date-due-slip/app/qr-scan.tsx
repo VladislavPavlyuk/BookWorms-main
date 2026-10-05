@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ApiError, CopyApi, HandoffApi } from "../src/api";
+import { ApiError, CopyApi, HandoffApi, ShelfApi } from "../src/api";
 import { CopyQrScanModal } from "../src/CopyQrScanModal";
 import { colors, btnRadius } from "../src/theme";
 
@@ -11,12 +11,14 @@ export default function QrScanScreen() {
     handoff_id?: string;
     action?: string;
     attach_copy_id?: string;
+    return_shelf_id?: string;
   }>();
   const [open, setOpen] = useState(true);
   const handoffId = params.handoff_id ? Number(params.handoff_id) : null;
   const action =
     params.action === "give" || params.action === "receive" ? params.action : null;
   const attachCopyId = params.attach_copy_id ? Number(params.attach_copy_id) : null;
+  const returnShelfId = params.return_shelf_id ? Number(params.return_shelf_id) : null;
 
   const onScan = async (payload: string) => {
     setOpen(false);
@@ -25,6 +27,12 @@ export default function QrScanScreen() {
         await CopyApi.attachQr(attachCopyId, payload);
         Alert.alert("QR", "Наклейку прив’язано.");
         router.replace(`/copy/${attachCopyId}`);
+        return;
+      }
+      if (returnShelfId) {
+        await ShelfApi.confirmReturn(returnShelfId, payload);
+        Alert.alert("Повернення", "Підтверджено сканом QR.");
+        router.back();
         return;
       }
       if (handoffId && action) {
@@ -47,16 +55,18 @@ export default function QrScanScreen() {
     }
   };
 
+  const meta = attachCopyId
+    ? `Прив’язка наклейки до #${attachCopyId}`
+    : returnShelfId
+      ? "Підтвердження повернення до вашої бібліотеки — скан QR"
+      : handoffId
+        ? `Підтвердження передачі #${handoffId} (${action})`
+        : "Ідентифікація примірника за наклейкою";
+
   return (
     <View style={styles.root}>
       <Text style={styles.h}>Скан QR примірника</Text>
-      <Text style={styles.meta}>
-        {attachCopyId
-          ? `Прив’язка наклейки до #${attachCopyId}`
-          : handoffId
-            ? `Підтвердження передачі #${handoffId} (${action})`
-            : "Ідентифікація примірника за наклейкою 2×2 см"}
-      </Text>
+      <Text style={styles.meta}>{meta}</Text>
       <Pressable style={styles.btn} onPress={() => setOpen(true)}>
         <Text style={styles.btnText}>Відкрити камеру</Text>
       </Pressable>

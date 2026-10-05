@@ -543,11 +543,20 @@ export default function ShelfScreen() {
 
   const confirm = async (s: Shelf) => {
     try {
+      if (s.requires_qr_scan) {
+        router.push(`/qr-scan?return_shelf_id=${s.id}`);
+        return;
+      }
       await ShelfApi.confirmReturn(s.id);
       Alert.alert("Повернення", "Підтверджено.");
       await load();
     } catch (e) {
-      Alert.alert("Повернення", e instanceof ApiError ? e.message : String(e));
+      const msg = e instanceof ApiError ? e.message : String(e);
+      if (/Відскануйте QR|QR-наклейк/i.test(msg)) {
+        router.push(`/qr-scan?return_shelf_id=${s.id}`);
+        return;
+      }
+      Alert.alert("Повернення", msg);
     }
   };
 

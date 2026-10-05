@@ -384,7 +384,11 @@ export const ShelfApi = {
         }
     >(`/api/shelf/${id}/`, { method: "DELETE" }),
   returnBook: (id: number) => api(`/api/shelf/${id}/return/`, { method: "POST" }),
-  confirmReturn: (id: number) => api(`/api/shelf/${id}/confirm-return/`, { method: "POST" }),
+  confirmReturn: (id: number, qr_payload?: string) =>
+    api(`/api/shelf/${id}/confirm-return/`, {
+      method: "POST",
+      body: qr_payload ? { qr_payload } : {},
+    }),
   readerAge: (id: number, min_readers_age: number, max_readers_age: number) =>
     api<Book>(`/api/shelf/${id}/reader-age/`, { method: "POST", body: { min_readers_age, max_readers_age } }),
   updateListing: (

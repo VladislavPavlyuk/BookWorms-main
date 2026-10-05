@@ -965,7 +965,8 @@ def shelf_return(request, shelf_id):
 
 @api_view(["POST"])
 def shelf_confirm_return(request, shelf_id):
-    confirm_borrow_return(shelf_id, request.user)
+    qr = request.data.get("qr_payload") or request.data.get("qr")
+    confirm_borrow_return(shelf_id, request.user, qr_payload=qr)
     return Response({"ok": True})
 
 

@@ -106,7 +106,9 @@ class IReturnService(ABC):
     def request_return(self, shelf_id: int, borrower: CustomUser) -> None: ...
 
     @abstractmethod
-    def confirm_return(self, shelf_id: int, lender: CustomUser) -> None: ...
+    def confirm_return(
+        self, shelf_id: int, lender: CustomUser, *, qr_payload: str | None = None
+    ) -> None: ...
 
 
 class ICatalogService(ABC):

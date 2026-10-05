@@ -21,7 +21,9 @@
             <form method="post" action="{% url 'confirm_return_borrowed_shelf_book' row.id %}" class="m-0">
                 {% csrf_token %}
                 <input type="hidden" name="partner_id" value="{{ partner.id }}">
-                <button type="submit" class="btn btn-success btn-sm">Підтвердити повернення</button>
+                <button type="submit" class="btn btn-success btn-sm">
+                  {% if row.copy.qr_token and row.copy.qr_attached_at %}Скан QR → повернуто{% else %}Підтвердити повернення{% endif %}
+                </button>
             </form>
         </div>
         {% endfor %}

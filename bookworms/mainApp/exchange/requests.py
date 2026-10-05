@@ -17,7 +17,11 @@ from ..exceptions import (
 from ..models import BookCopy, BookExchangeRequest, CopyEvent, CustomUser, Shelf
 from .copies import is_copy_lent_out
 from .due import parse_due_date, resolve_loan_due_date, validate_proposed_due_date
-from .handoff import active_handoff_for_copy, approve_loan_handoff
+from .handoff import (
+    active_handoff_for_copy,
+    approve_loan_handoff,
+    _create_handoff_record,
+)
 
 
 def _validate_create_request(
@@ -283,6 +287,16 @@ def _accept_as_swap(
     requester: CustomUser,
     offer: Shelf,
 ) -> None:
+    # Bound QR on either copy → cannot teleport ownership; need physical scan flow.
+    for shelf, label in ((target, "цільовий"), (offer, "запропонований")):
+        c = getattr(shelf, "copy", None)
+        if c and c.qr_token and c.qr_attached_at:
+            raise ExchangeInvalidState(
+                f"У {label} примірника є прив’язаний QR. "
+                "Обмін з миттєвою зміною бібліотеки недоступний — "
+                "використайте позику з фізичною передачею (скан QR)."
+            )
+
     if (
         Shelf.objects.filter(user=owner, copy_id=offer.copy_id)
         .exclude(pk=offer.pk)
@@ -336,6 +350,42 @@ def _accept_as_loan(
     *,
     due_date=None,
 ) -> None:
+    copy = getattr(target, "copy", None)
+    # Bound QR → physical give/receive into the next library (no teleport).
+    if copy and copy.qr_token and copy.qr_attached_at:
+        if active_handoff_for_copy(target.copy_id):
+            raise ExchangeConflict(
+                "Для цього примірника вже є активна фізична передача."
+            )
+        if due_date is not None:
+            try:
+                parsed = parse_due_date(due_date)
+                if parsed is not None:
+                    req.proposed_due_date = validate_proposed_due_date(parsed)
+                    req.save(update_fields=["proposed_due_date"])
+            except (ValueError, ExchangeError):
+                pass
+        handoff = _create_handoff_record(
+            copy_id=target.copy_id,
+            owner=owner,
+            from_user=owner,
+            to_user=requester,
+            req=req,
+            from_shelf=target,
+        )
+        log_copy_event(
+            target.copy_id,
+            CopyEvent.Code.HANDOFF_APPROVED,
+            actor=owner,
+            holder=owner,
+            legal_owner=owner,
+            previous_holder=owner,
+            counterparty=requester,
+            exchange_request=req,
+        )
+        get_notifier().notify_handoff_approved(handoff)
+        return
+
     try:
         due = resolve_loan_due_date(
             proposed=req.proposed_due_date,

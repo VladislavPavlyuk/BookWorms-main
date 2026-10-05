@@ -300,10 +300,14 @@ export default function Chat() {
               </Text>
               <Pressable
                 onPress={() =>
-                  runAction(() => ShelfApi.confirmReturn(s.id), "Повернення")
+                  s.requires_qr_scan
+                    ? router.push(`/qr-scan?return_shelf_id=${s.id}`)
+                    : runAction(() => ShelfApi.confirmReturn(s.id), "Повернення")
                 }
               >
-                <Text style={styles.accept}>Підтвердити</Text>
+                <Text style={styles.accept}>
+                  {s.requires_qr_scan ? "Скан QR → повернуто" : "Підтвердити"}
+                </Text>
               </Pressable>
             </View>
           ))}

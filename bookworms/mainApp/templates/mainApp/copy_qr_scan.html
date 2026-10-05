@@ -7,6 +7,7 @@
 <p class="text-muted small mb-3">
   Відскануйте наклейку 2×2&nbsp;см, щоб відкрити картку примірника
   {% if attach_copy_id %}або прив’язати її до #{{ attach_copy_id }}{% endif %}
+  {% if return_shelf_id %}або підтвердити повернення до вашої бібліотеки{% endif %}
   {% if handoff_id %}або підтвердити передачу #{{ handoff_id }} ({{ action }}){% endif %}.
 </p>
 
@@ -25,6 +26,7 @@
   {% if handoff_id %}<input type="hidden" name="handoff_id" value="{{ handoff_id }}">{% endif %}
   {% if action %}<input type="hidden" name="action" value="{{ action }}">{% endif %}
   {% if attach_copy_id %}<input type="hidden" name="attach_copy_id" value="{{ attach_copy_id }}">{% endif %}
+  {% if return_shelf_id %}<input type="hidden" name="return_shelf_id" value="{{ return_shelf_id }}">{% endif %}
   <label class="form-label" for="qr_payload">Або вставте код вручну</label>
   <div class="input-group" style="max-width:28rem">
     <input type="text" class="form-control" name="qr_payload" id="qr_payload" placeholder="BW1.…">

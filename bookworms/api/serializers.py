@@ -201,6 +201,7 @@ class ShelfSerializer(serializers.ModelSerializer):
     listing_status_display = serializers.SerializerMethodField()
     library_owners = serializers.SerializerMethodField()
     owners_label = serializers.SerializerMethodField()
+    requires_qr_scan = serializers.SerializerMethodField()
 
     class Meta:
         model = Shelf
@@ -237,6 +238,7 @@ class ShelfSerializer(serializers.ModelSerializer):
             "listing_status_display",
             "library_owners",
             "owners_label",
+            "requires_qr_scan",
             "added_at",
         )
 
@@ -325,6 +327,11 @@ class ShelfSerializer(serializers.ModelSerializer):
             return " + ".join(u.username for u in owners)
         legal = obj.borrowed_from if obj.borrowed_from_id else obj.user
         return legal.username if legal else ""
+
+    def get_requires_qr_scan(self, obj):
+        """Bound QR → receive/return into next library must scan the label."""
+        c = self._copy(obj)
+        return bool(c and c.qr_token and c.qr_attached_at)
 
     def get_price_eval(self, obj):
         # Only expose on the owner's library endpoint (my_shelf / refresh).

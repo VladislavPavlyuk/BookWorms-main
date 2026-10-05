@@ -283,18 +283,35 @@ def assert_qr_matches_copy(copy: BookCopy, payload: str | None) -> None:
         raise ExchangeInvalidState("QR не відповідає цьому примірнику.")
 
 
+def copy_has_bound_qr(copy: BookCopy | None) -> bool:
+    """True after late-bind (glue + scan)."""
+    return bool(copy and copy.qr_token and copy.qr_attached_at)
+
+
+def require_bound_qr_scan(
+    copy: BookCopy | None,
+    payload: str | None,
+    *,
+    action: str = "підтвердження",
+) -> None:
+    """
+    Rule: if the instance has a bound QR, the next library's receiving party
+    must scan that label to confirm receive / return (and handoff give/receive).
+    """
+    if not copy_has_bound_qr(copy):
+        if payload and copy and copy.qr_token:
+            assert_qr_matches_copy(copy, payload)
+        return
+    if not payload:
+        raise ExchangeInvalidState(
+            f"Відскануйте QR-наклейку примірника для підтвердження ({action})."
+        )
+    assert_qr_matches_copy(copy, payload)
+
+
 def require_qr_for_handoff(handoff: LoanHandoff, payload: str | None) -> None:
     """If label is attached, physical give/receive must scan that QR."""
-    copy = handoff.copy
-    if copy.qr_attached_at:
-        if not payload:
-            raise ExchangeInvalidState(
-                "Відскануйте QR-наклейку примірника для підтвердження."
-            )
-        assert_qr_matches_copy(copy, payload)
-    elif payload:
-        if copy.qr_token:
-            assert_qr_matches_copy(copy, payload)
+    require_bound_qr_scan(handoff.copy, payload, action="передачі")
 
 
 def qr_png_data_uri(payload: str, *, box_size: int = 8, border: int = 1) -> str:

@@ -128,7 +128,9 @@
                             {% if s.return_pending %}
                             <form method="post" action="{% url 'confirm_return_borrowed_shelf_book' s.id %}" class="d-inline m-0">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-success">Підтвердити повернення</button>
+                                <button type="submit" class="btn btn-sm btn-success">
+                                  {% if s.copy.qr_token and s.copy.qr_attached_at %}Скан QR → повернуто{% else %}Підтвердити повернення{% endif %}
+                                </button>
                             </form>
                             {% endif %}
                         </div>

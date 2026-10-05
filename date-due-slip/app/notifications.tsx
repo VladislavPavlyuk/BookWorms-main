@@ -93,7 +93,12 @@ export default function NotificationsScreen() {
       await load();
       await refreshBadge();
     } catch (e) {
-      Alert.alert("Повернення", e instanceof ApiError ? e.message : String(e));
+      const msg = e instanceof ApiError ? e.message : String(e);
+      if (/Відскануйте QR|QR-наклейк/i.test(msg)) {
+        router.push(`/qr-scan?return_shelf_id=${shelfId}`);
+        return;
+      }
+      Alert.alert("Повернення", msg);
     }
   };
 
