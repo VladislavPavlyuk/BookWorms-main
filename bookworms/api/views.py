@@ -25,6 +25,8 @@ from mainApp.exchange_service import (
     ensure_shelves_have_copies,
     get_or_create_book_from_payload,
     is_copy_lent_out,
+    offerable_shelves_from_requester,
+    pick_offer_by_owner,
     propose_exchange_due_date,
     reject_exchange_request,
     remove_owned_shelf,
@@ -82,6 +84,7 @@ from .serializers import (
     MeSerializer,
     MeUpdateSerializer,
     MessageSerializer,
+    PickOfferSerializer,
     PostSerializer,
     PostWriteSerializer,
     ReaderAgeSerializer,
@@ -1234,8 +1237,10 @@ def exchange_create(request):
             continue
         offer = None
         oid = row.get("offer_shelf_id")
+        offer_open = bool(row.get("offer_open"))
         if is_copy_lent_out(target.copy_id) or target.borrowed_from_id:
             oid = None
+            offer_open = False
         if oid:
             from mainApp.exchange import get_shelf_query_service
 
@@ -1247,12 +1252,14 @@ def exchange_create(request):
                     f'"{target.book.title[:45]}": книгу для обміну не знайдено серед вільних.'
                 )
                 continue
+            offer_open = False
         try:
             req = create_exchange_request(
                 request.user,
                 target,
                 offer,
                 proposed_due_date=row.get("proposed_due_date"),
+                offer_open=offer_open,
             )
             created.append(req)
         except ExchangeError as exc:
@@ -1270,6 +1277,41 @@ def exchange_create(request):
 def _exchange_action(request, request_id, fn, **kwargs):
     fn(request_id, request.user, **kwargs)
     return Response({"ok": True})
+
+
+@api_view(["GET"])
+def exchange_offerable_view(request, request_id):
+    """Книги з полиці запитувача, які власник може обрати для обміну."""
+    req = (
+        BookExchangeRequest.objects.filter(pk=request_id)
+        .select_related("target_shelf", "requester", "shelf_owner")
+        .first()
+    )
+    if not req:
+        return _error("Запит не знайдено.", 404)
+    if request.user.id != req.shelf_owner_id:
+        return _error("Обрати книгу може лише власник.", 403)
+    if not req.offer_open or req.offer_shelf_id or req.status != BookExchangeRequest.Status.PENDING:
+        return _error("Запит не відкритий для вибору книги.", 400)
+    shelves = offerable_shelves_from_requester(req)
+    return Response(
+        ShelfSerializer(shelves, many=True, context={"request": request}).data
+    )
+
+
+@api_view(["POST"])
+def exchange_pick_offer_view(request, request_id):
+    ser = PickOfferSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+    try:
+        req = pick_offer_by_owner(
+            request_id, request.user, ser.validated_data["offer_shelf_id"]
+        )
+    except ExchangeError as exc:
+        return _error(exc.message, getattr(exc, "status", 400) or 400)
+    return Response(
+        ExchangeRequestSerializer(req, context={"request": request}).data
+    )
 
 
 @api_view(["POST"])

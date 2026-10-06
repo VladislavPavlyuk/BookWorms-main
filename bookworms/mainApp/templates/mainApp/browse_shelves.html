@@ -124,6 +124,7 @@
                                                             data-due-input="proposed_due_date_{{ req_id }}"
                                                             style="max-width: 280px;">
                                                         <option value="">— позика —</option>
+                                                        <option value="__open__">— власник обере з моєї полиці —</option>
                                                         {% for ms in my_owned_shelves %}
                                                             {% if ms.book_id != s.book_id %}
                                                                 <option value="{{ ms.id }}">{{ ms.book.title|truncatechars:40 }}</option>
@@ -192,7 +193,8 @@
         var due = dueId ? document.getElementById(dueId) : null;
         function sync() {
             if (!due) return;
-            var swap = !!(sel.value && String(sel.value).trim());
+            var v = String(sel.value || "").trim();
+            var swap = !!(v && v !== "__open__");
             due.disabled = swap;
             due.style.opacity = swap ? "0.45" : "1";
         }

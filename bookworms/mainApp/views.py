@@ -59,6 +59,8 @@ from .exchange_service import (
     create_many_exchange_requests,
     get_or_create_book_from_payload,
     is_copy_lent_out,
+    offerable_shelves_from_requester,
+    pick_offer_by_owner,
     propose_exchange_due_date,
     reject_exchange_request,
     remove_owned_shelf,
@@ -1809,7 +1811,7 @@ def create_exchange(request):
         return redirect("browse_shelves")
 
     seen: set[int] = set()
-    lines: list[tuple[Shelf, Shelf | None]] = []
+    lines: list[tuple[Shelf, Shelf | None, object | None, bool]] = []
     preflight: list[str] = []
     for tid_str in raw_ids:
         try:
@@ -1830,9 +1832,13 @@ def create_exchange(request):
             continue
 
         offer_shelf = None
+        offer_open = False
         raw_offer = request.POST.get(f"offer_shelf_id_{tid}", "") or ""
         # Позичений примірник / передача — лише borrow/transmit, без обміну
         if is_copy_lent_out(target_shelf.copy_id) or target_shelf.borrowed_from_id:
+            raw_offer = ""
+        if raw_offer.strip() == "__open__":
+            offer_open = True
             raw_offer = ""
         if raw_offer.strip():
             try:
@@ -1857,7 +1863,7 @@ def create_exchange(request):
             if raw_due:
                 proposed_due = raw_due
 
-        lines.append((target_shelf, offer_shelf, proposed_due))
+        lines.append((target_shelf, offer_shelf, proposed_due, offer_open))
 
     if not lines:
         for e in preflight[:err_cap]:
@@ -1943,15 +1949,49 @@ def exchange_requests(request):
             "offer_shelf__copy",
         )[:50]
     )
+    pending_in_list = list(pending_in)
+    for r in pending_in_list:
+        if r.offer_open and not r.offer_shelf_id:
+            r.offerable_shelves = offerable_shelves_from_requester(r)
+        else:
+            r.offerable_shelves = []
     return render(
         request,
         "mainApp/exchange_requests.html",
         {
-            "pending_in": pending_in,
+            "pending_in": pending_in_list,
             "pending_out": pending_out,
             "history": history,
         },
     )
+
+
+@login_required
+def exchange_pick_offer(request, request_id):
+    """Власник обирає книгу з полиці запитувача (offer_open)."""
+    if request.method != "POST":
+        return redirect("exchange_requests")
+    raw = request.POST.get("offer_shelf_id") or ""
+    try:
+        oid = int(raw)
+    except (TypeError, ValueError):
+        messages.error(request, "Оберіть книгу для обміну.")
+        return redirect("exchange_requests")
+    try:
+        pick_offer_by_owner(request_id, request.user, oid)
+        messages.success(
+            request,
+            "Книгу для обміну обрано. Можете прийняти обмін або ще змінити відповідь.",
+        )
+    except ExchangeError as exc:
+        messages.error(request, exc.message)
+    partner_id = request.POST.get("partner_id")
+    if partner_id:
+        try:
+            return redirect("message_thread", partner_id=int(partner_id))
+        except (TypeError, ValueError):
+            pass
+    return redirect("exchange_requests")
 
 
 @login_required

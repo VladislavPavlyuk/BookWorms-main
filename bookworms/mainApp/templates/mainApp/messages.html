@@ -106,6 +106,11 @@
                 «{{ r.target_shelf.book.title }}»
                 {% if r.offer_shelf %}
                     <br><span class="small text-muted">Пропонує в обмін: «{{ r.offer_shelf.book.title }}»</span>
+                {% elif r.offer_open %}
+                    <br><span class="small text-muted">Пропонує обмін — оберіть книгу з його полиці (або прийміть як позику)</span>
+                    {% if r.proposed_due_date %}
+                    <br><span class="small">Запасний термін позики до <strong>{{ r.proposed_due_date|date:"d.m.Y" }}</strong></span>
+                    {% endif %}
                 {% else %}
                     <br><span class="small text-muted">Позика (без книги взамін)</span>
                     {% if r.proposed_due_date %}
@@ -117,6 +122,19 @@
                     {% endif %}
                 {% endif %}
             </p>
+            {% if r.offer_open and not r.offer_shelf and r.offerable_shelves %}
+            <form method="post" action="{% url 'exchange_pick_offer' r.id %}" class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                {% csrf_token %}
+                <input type="hidden" name="partner_id" value="{{ partner.id }}">
+                <select name="offer_shelf_id" class="form-select form-select-sm" style="max-width:280px;" required>
+                    <option value="">— книга запитувача —</option>
+                    {% for os in r.offerable_shelves %}
+                        <option value="{{ os.id }}">{{ os.book.title|truncatechars:40 }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-primary">Обрати для обміну</button>
+            </form>
+            {% endif %}
             {% if not r.offer_shelf %}
             <form method="post" action="{% url 'exchange_accept' r.id %}" class="d-flex flex-wrap gap-2 align-items-center mb-2">
                 {% csrf_token %}
@@ -130,7 +148,7 @@
                 <button type="submit" class="btn btn-sm btn-outline-success"
                         formaction="{% url 'exchange_confirm_due' r.id %}">Погодити цей термін</button>
                 {% endif %}
-                <button type="submit" class="btn btn-sm btn-success">Підтвердити</button>
+                <button type="submit" class="btn btn-sm btn-success">{% if r.offer_open %}Прийняти як позику{% else %}Підтвердити{% endif %}</button>
             </form>
             <div class="d-flex flex-wrap gap-2">
                 <form method="post" action="{% url 'exchange_reject' r.id %}" class="m-0">
@@ -144,7 +162,7 @@
                 <form method="post" action="{% url 'exchange_accept' r.id %}" class="m-0">
                     {% csrf_token %}
                     <input type="hidden" name="partner_id" value="{{ partner.id }}">
-                    <button type="submit" class="btn btn-sm btn-success">Підтвердити</button>
+                    <button type="submit" class="btn btn-sm btn-success">Підтвердити обмін</button>
                 </form>
                 <form method="post" action="{% url 'exchange_reject' r.id %}" class="m-0">
                     {% csrf_token %}

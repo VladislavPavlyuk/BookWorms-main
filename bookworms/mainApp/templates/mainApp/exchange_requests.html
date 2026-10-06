@@ -24,6 +24,14 @@
                 "<a href="{% url 'copy_history' r.target_shelf.copy_id %}" class="link-primary text-decoration-none">{{ r.target_shelf.book.title }}</a>"
                 {% if r.offer_shelf %}
                     <br><span class="small text-muted">Пропонує в обмін: "<a href="{% url 'copy_history' r.offer_shelf.copy_id %}" class="link-primary text-decoration-none">{{ r.offer_shelf.book.title }}</a>"</span>
+                {% elif r.offer_open %}
+                    <br><span class="small text-muted">Пропонує <strong>обмін</strong>: оберіть книгу з полиці запитувача (або прийміть як позику)</span>
+                    {% if r.proposed_due_date %}
+                    <br><span class="small">
+                        Запасний термін позики до <strong>{{ r.proposed_due_date|date:"d.m.Y" }}</strong>
+                        {% if r.due_date_confirmed %}<span class="text-success"> · погоджено</span>{% endif %}
+                    </span>
+                    {% endif %}
                 {% else %}
                     <br><span class="small text-muted">Без книги взамін - <strong>позика</strong> (після згоди позичальник зможе лише повернути книгу)</span>
                     {% if r.proposed_due_date %}
@@ -33,6 +41,20 @@
                         {% if r.due_date_confirmed %}<span class="text-success"> · погоджено</span>{% endif %}
                     </span>
                     {% endif %}
+                {% endif %}
+                {% if r.offer_open and not r.offer_shelf and r.offerable_shelves %}
+                <form method="post" action="{% url 'exchange_pick_offer' r.id %}" class="mt-2 d-flex flex-wrap gap-2 align-items-center">
+                    {% csrf_token %}
+                    <select name="offer_shelf_id" class="form-select form-select-sm" style="max-width:280px;" required>
+                        <option value="">— обрати книгу запитувача —</option>
+                        {% for os in r.offerable_shelves %}
+                            <option value="{{ os.id }}">{{ os.book.title|truncatechars:45 }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-outline-primary btn-sm">Обрати для обміну</button>
+                </form>
+                {% elif r.offer_open and not r.offer_shelf %}
+                <p class="small text-muted mt-2 mb-0">У запитувача зараз немає вільних книг для обміну — можна прийняти як позику або відхилити.</p>
                 {% endif %}
                 <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
                     {% if not r.offer_shelf %}
@@ -47,12 +69,12 @@
                         <button type="submit" class="btn btn-outline-success btn-sm"
                                 formaction="{% url 'exchange_confirm_due' r.id %}">Погодити термін</button>
                         {% endif %}
-                        <button type="submit" class="btn btn-success btn-sm">Прийняти</button>
+                        <button type="submit" class="btn btn-success btn-sm">{% if r.offer_open %}Прийняти як позику{% else %}Прийняти{% endif %}</button>
                     </form>
                     {% else %}
                     <form method="post" action="{% url 'exchange_accept' r.id %}">
                         {% csrf_token %}
-                        <button type="submit" class="btn btn-success btn-sm">Прийняти</button>
+                        <button type="submit" class="btn btn-success btn-sm">Прийняти обмін</button>
                     </form>
                     {% endif %}
                     <form method="post" action="{% url 'exchange_reject' r.id %}">
@@ -77,6 +99,14 @@
                 "<a href="{% url 'copy_history' r.target_shelf.copy_id %}" class="link-primary text-decoration-none">{{ r.target_shelf.book.title }}</a>"
                 {% if r.offer_shelf %}
                     <br><span class="small text-muted">Ваш обмін: "<a href="{% url 'copy_history' r.offer_shelf.copy_id %}" class="link-primary text-decoration-none">{{ r.offer_shelf.book.title }}</a>" (повна передача)</span>
+                {% elif r.offer_open %}
+                    <br><span class="small text-muted">Обмін: власник може обрати книгу з вашої полиці (або прийняти як позику)</span>
+                    {% if r.proposed_due_date %}
+                    <br><span class="small">
+                        Запасний термін позики до <strong>{{ r.proposed_due_date|date:"d.m.Y" }}</strong>
+                        {% if r.due_date_confirmed %}<span class="text-success"> · погоджено</span>{% endif %}
+                    </span>
+                    {% endif %}
                 {% else %}
                     <br><span class="small text-muted">Позика (без вашої книги взамін)</span>
                     {% if r.proposed_due_date %}

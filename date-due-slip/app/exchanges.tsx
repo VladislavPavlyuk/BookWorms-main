@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,7 +16,7 @@ import { useAuth } from "../src/auth";
 import { exchangeChatPartnerId } from "../src/chat";
 import { colors, fs, s, btnRadius } from "../src/theme";
 import { UserNameLink } from "../src/UserNameLink";
-import type { Exchange, User } from "../src/types";
+import type { Exchange, Shelf, User } from "../src/types";
 
 function conditionText(e: Exchange, asOwner: boolean): string {
   const due =
@@ -28,6 +29,13 @@ function conditionText(e: Exchange, asOwner: boolean): string {
     return asOwner
       ? `Обмін: пропонує «${e.offer_shelf.book.title}» замість вашої книги (повна передача).`
       : `Обмін: ви пропонуєте «${e.offer_shelf.book.title}» (повна передача).`;
+  }
+  if (e.offer_open && !e.offer_shelf) {
+    return (
+      (asOwner
+        ? "Обмін: запитувач пропонує обрати книгу з його полиці (або прийняти як позику)."
+        : "Обмін: власник може обрати книгу з вашої полиці (або прийняти як позику).") + due
+    );
   }
   if (e.is_transmission) {
     return (
@@ -58,6 +66,9 @@ export default function Exchanges() {
   const yById = useRef<Record<number, number>>({});
 
   const [dueDraft, setDueDraft] = useState<Record<number, string>>({});
+  const [pickFor, setPickFor] = useState<number | null>(null);
+  const [offerable, setOfferable] = useState<Shelf[]>([]);
+  const [pickBusy, setPickBusy] = useState(false);
 
   const load = async () => {
     const [e, p] = await Promise.all([ExchangeApi.list(), MsgApi.partners()]);
@@ -119,12 +130,18 @@ export default function Exchanges() {
   };
 
   const confirmAccept = (e: Exchange) => {
-    const swap = e.kind === "exchange" && !!e.offer_shelf;
+    const swap = !!e.offer_shelf;
     const transmit = !!e.is_transmission;
     const due = dueDraft[e.id] || e.proposed_due_date || null;
     const dueHint = !swap && due ? `\nТермін повернення: ${due}.` : "";
     Alert.alert(
-      transmit ? "Схвалити передачу?" : swap ? "Прийняти обмін?" : "Прийняти позику?",
+      transmit
+        ? "Схвалити передачу?"
+        : swap
+          ? "Прийняти обмін?"
+          : e.offer_open
+            ? "Прийняти як позику?"
+            : "Прийняти позику?",
       transmit
         ? `Схвалити передачу «${e.target_shelf.book.title}» → ${e.requester.username}? Книга лишиться у поточного позичальника, доки обидва не підтвердять фізичну передачу в чаті.${dueHint}`
         : swap
@@ -139,6 +156,33 @@ export default function Exchanges() {
         },
       ]
     );
+  };
+
+  const openPickOffer = async (e: Exchange) => {
+    setPickBusy(true);
+    try {
+      const shelves = await ExchangeApi.offerable(e.id);
+      if (!shelves.length) {
+        Alert.alert("Обмін", "У запитувача зараз немає вільних книг для обміну.");
+        return;
+      }
+      setOfferable(shelves);
+      setPickFor(e.id);
+    } catch (err) {
+      Alert.alert("Обмін", err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setPickBusy(false);
+    }
+  };
+
+  const pickOffer = (shelfId: number) => {
+    if (pickFor == null) return;
+    const id = pickFor;
+    setPickFor(null);
+    run(async () => {
+      await ExchangeApi.pickOffer(id, shelfId);
+      Alert.alert("Обмін", "Книгу обрано. Можете прийняти обмін.");
+    });
   };
 
   const proposeDue = (e: Exchange) => {
@@ -226,9 +270,11 @@ export default function Exchanges() {
         <Text style={styles.kind}>
           {e.is_transmission
             ? "ПЕРЕДАЧА"
-            : e.kind === "borrow"
-              ? "ПОЗИКА"
-              : "ОБМІН"}{" "}
+            : e.offer_shelf || e.kind === "exchange"
+              ? "ОБМІН"
+              : e.offer_open
+                ? "ПОЗИКА / ОБМІН"
+                : "ПОЗИКА"}{" "}
           · {e.status}
         </Text>
         <Text style={styles.title}>{e.target_shelf.book.title}</Text>
@@ -278,8 +324,21 @@ export default function Exchanges() {
             role="in"
             actions={
               <>
+                {e.can_pick_offer ? (
+                  <Pressable
+                    style={styles.btnGhost}
+                    onPress={() => openPickOffer(e)}
+                    disabled={pickBusy}
+                  >
+                    <Text style={styles.chat}>
+                      {pickBusy ? "…" : "Обрати з його полиці"}
+                    </Text>
+                  </Pressable>
+                ) : null}
                 <Pressable style={styles.btnOk} onPress={() => confirmAccept(e)}>
-                  <Text style={styles.ok}>Прийняти</Text>
+                  <Text style={styles.ok}>
+                    {e.offer_open && !e.offer_shelf ? "Як позику" : "Прийняти"}
+                  </Text>
                 </Pressable>
                 <Pressable style={styles.btnGhost} onPress={() => confirmReject(e)}>
                   <Text style={styles.no}>Відхилити</Text>
@@ -344,6 +403,33 @@ export default function Exchanges() {
       ) : (
         hist.map((e) => <Card key={e.id} e={e} role="hist" />)
       )}
+
+      <Modal
+        visible={pickFor != null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickFor(null)}
+      >
+        <View style={styles.pickBackdrop}>
+          <View style={styles.pickSheet}>
+            <Text style={styles.h}>Книга з полиці запитувача</Text>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {offerable.map((s) => (
+                <Pressable
+                  key={s.id}
+                  style={styles.pickOpt}
+                  onPress={() => pickOffer(s.id)}
+                >
+                  <Text style={styles.title}>{s.book.title}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable style={styles.btnGhost} onPress={() => setPickFor(null)}>
+              <Text style={styles.no}>Скасувати</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -439,4 +525,21 @@ const styles = StyleSheet.create({
   chat: { color: colors.ink, fontWeight: "800", fontSize: fs(14) },
   ok: { color: "#fff", fontWeight: "800", fontSize: fs(14) },
   no: { color: colors.stamp, fontWeight: "800", fontSize: fs(14) },
+  pickBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-end",
+  },
+  pickSheet: {
+    backgroundColor: colors.paper,
+    padding: s(16),
+    maxHeight: "70%",
+  },
+  pickOpt: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: s(12),
+    marginBottom: 8,
+    backgroundColor: colors.white,
+  },
 });

@@ -46,6 +46,7 @@ from .views import (
     create_exchange,
     exchange_requests,
     exchange_accept,
+    exchange_pick_offer,
     exchange_propose_due,
     exchange_confirm_due,
     exchange_reject,
@@ -133,6 +134,11 @@ urlpatterns = [
     path('library/exchange/new/', create_exchange, name='create_exchange'),
     path('library/exchange/', exchange_requests, name='exchange_requests'),
     path('library/exchange/<int:request_id>/accept/', exchange_accept, name='exchange_accept'),
+    path(
+        'library/exchange/<int:request_id>/pick-offer/',
+        exchange_pick_offer,
+        name='exchange_pick_offer',
+    ),
     path(
         'library/exchange/<int:request_id>/propose-due/',
         exchange_propose_due,

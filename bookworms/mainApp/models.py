@@ -822,6 +822,15 @@ class BookExchangeRequest(models.Model):
         related_name="offered_in_exchange_requests",
         verbose_name="Книга з вашої полиці в обмін (необов'язково)",
     )
+    offer_open = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="Власник може обрати книгу з полиці запитувача",
+        help_text=(
+            "True = позичальник пропонує обмін і дозволяє власнику вибрати "
+            "примірник зі своєї (запитувача) полиці в діалозі."
+        ),
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

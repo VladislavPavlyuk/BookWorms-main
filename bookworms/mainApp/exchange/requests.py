@@ -136,13 +136,21 @@ def create_exchange_request(
     from_queue: bool = False,
     join_queue_if_busy: bool = True,
     proposed_due_date=None,
+    offer_open: bool = False,
 ) -> BookExchangeRequest:
     """
     Створює запит. Помилка — ExchangeError.
     Без offer_shelf: після прийняття - позика; з offer_shelf: повний обмін.
+    offer_open=True (і без offer_shelf): власник може вибрати книгу з полиці запитувача.
     Lent + позика → запит на передачу третій особі + черга.
     proposed_due_date — запропонований термін повернення (лише позика / передача).
     """
+    if offer_shelf is not None:
+        offer_open = False
+    if offer_open and is_copy_lent_out(target_shelf.copy_id):
+        raise ExchangeInvalidState(
+            "Поки примірник у позиці — лише запит на передачу (без відкритого обміну)."
+        )
     lent = _validate_create_request(requester, target_shelf, offer_shelf)
     due = None
     if not offer_shelf and proposed_due_date is not None:
@@ -156,6 +164,7 @@ def create_exchange_request(
         shelf_owner=target_shelf.user,
         requester=requester,
         offer_shelf=offer_shelf,
+        offer_open=bool(offer_open),
         status=BookExchangeRequest.Status.PENDING,
         proposed_due_date=due,
         due_date_proposer=BookExchangeRequest.DueProposer.REQUESTER,
@@ -180,18 +189,18 @@ def _short_shelf_title(s: Shelf) -> str:
 
 def create_many_exchange_requests(
     requester: CustomUser,
-    lines: list[tuple[Shelf, Shelf | None, object | None]],
+    lines: list[tuple[Shelf, Shelf | None, object | None, bool]],
 ) -> tuple[int, list[str]]:
     """Кілька запитів за одну дію; та сама offer_shelf — лише раз у пакеті.
 
-    lines: (target, offer|None, proposed_due_date|None)
+    lines: (target, offer|None, proposed_due_date|None, offer_open)
     """
     ok = 0
     errs: list[str] = []
     seen_offer_ids: set[int] = set()
-    filtered: list[tuple[Shelf, Shelf | None, object | None]] = []
+    filtered: list[tuple[Shelf, Shelf | None, object | None, bool]] = []
 
-    for target_shelf, offer_shelf, proposed_due in lines:
+    for target_shelf, offer_shelf, proposed_due, offer_open in lines:
         label = _short_shelf_title(target_shelf)
         if offer_shelf is not None:
             oid = offer_shelf.pk
@@ -201,9 +210,10 @@ def create_many_exchange_requests(
                 )
                 continue
             seen_offer_ids.add(oid)
-        filtered.append((target_shelf, offer_shelf, proposed_due))
+            offer_open = False
+        filtered.append((target_shelf, offer_shelf, proposed_due, bool(offer_open)))
 
-    for target_shelf, offer_shelf, proposed_due in filtered:
+    for target_shelf, offer_shelf, proposed_due, offer_open in filtered:
         label = _short_shelf_title(target_shelf)
         try:
             create_exchange_request(
@@ -211,11 +221,81 @@ def create_many_exchange_requests(
                 target_shelf,
                 offer_shelf,
                 proposed_due_date=proposed_due,
+                offer_open=offer_open,
             )
             ok += 1
         except ExchangeError as exc:
             errs.append(f"'{label}': {exc.message}")
     return ok, errs
+
+
+def offerable_shelves_from_requester(req: BookExchangeRequest) -> list[Shelf]:
+    """Free owned shelves of the requester that the owner may pick for exchange."""
+    qs = (
+        Shelf.objects.filter(user_id=req.requester_id, borrowed_from__isnull=True)
+        .select_related("book", "copy", "user")
+        .order_by("book__title", "id")
+    )
+    out: list[Shelf] = []
+    for s in qs:
+        if s.copy_id and s.copy_id == req.target_shelf.copy_id:
+            continue
+        if s.copy_id and is_copy_lent_out(s.copy_id):
+            continue
+        out.append(s)
+    return out
+
+
+@domain_guard("exchange.pick_offer")
+@transaction.atomic
+def pick_offer_by_owner(
+    request_id: int, acting_user: CustomUser, offer_shelf_id: int
+) -> BookExchangeRequest:
+    """
+    Власник цільової книги обирає примірник з полиці запитувача (offer_open).
+    Після цього запит стає обміном (offer_shelf заповнено).
+    """
+    try:
+        req = (
+            BookExchangeRequest.objects.select_for_update(of=("self",))
+            .select_related("target_shelf", "requester", "shelf_owner")
+            .get(pk=request_id, status=BookExchangeRequest.Status.PENDING)
+        )
+    except BookExchangeRequest.DoesNotExist as exc:
+        raise ExchangeNotFound("Запит не знайдено.") from exc
+
+    if acting_user.id != req.shelf_owner_id:
+        raise ExchangeForbidden("Обрати книгу для обміну може лише власник.")
+    if not req.offer_open:
+        raise ExchangeInvalidState(
+            "Запитувач не відкрив вибір книги зі своєї полиці."
+        )
+    if req.offer_shelf_id:
+        raise ExchangeConflict("Книгу для обміну вже обрано.")
+
+    offer = (
+        Shelf.objects.select_for_update(of=("self",))
+        .select_related("book", "copy")
+        .filter(pk=offer_shelf_id, user_id=req.requester_id)
+        .first()
+    )
+    if not offer:
+        raise ExchangeNotFound("Книгу на полиці запитувача не знайдено.")
+    _validate_offer_shelf(req.requester, req.target_shelf, offer)
+
+    req.offer_shelf = offer
+    # Clear due-date (swap has no loan term).
+    req.proposed_due_date = None
+    req.due_date_confirmed = False
+    req.save(
+        update_fields=[
+            "offer_shelf",
+            "proposed_due_date",
+            "due_date_confirmed",
+        ]
+    )
+    get_notifier().notify_exchange_offer_picked(req)
+    return req
 
 
 def _lock_pending_request(request_id: int) -> BookExchangeRequest:

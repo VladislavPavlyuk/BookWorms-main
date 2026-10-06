@@ -3,6 +3,7 @@ import {
   Alert,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -96,6 +97,8 @@ export default function Chat() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [dueDraft, setDueDraft] = useState<Record<number, string>>({});
+  const [pickFor, setPickFor] = useState<number | null>(null);
+  const [offerable, setOfferable] = useState<Shelf[]>([]);
   const [handoffScan, setHandoffScan] = useState<{
     id: number;
     action: "give" | "receive";
@@ -198,11 +201,17 @@ export default function Chat() {
 
   const acceptReq = (e: Exchange) => {
     const transmit = !!e.is_transmission;
-    const swap = e.kind === "exchange" && !!e.offer_shelf;
+    const swap = !!e.offer_shelf;
     const due = dueDraft[e.id] || e.proposed_due_date || null;
     const dueHint = !swap && due ? `\nТермін повернення: ${due}.` : "";
     Alert.alert(
-      transmit ? "Схвалити передачу?" : e.kind === "exchange" ? "Прийняти обмін?" : "Прийняти позику?",
+      transmit
+        ? "Схвалити передачу?"
+        : swap
+          ? "Прийняти обмін?"
+          : e.offer_open
+            ? "Прийняти як позику?"
+            : "Прийняти позику?",
       transmit
         ? `Схвалити передачу «${e.target_shelf.book.title}» → ${e.requester.username}? Книга лишиться у поточного позичальника, доки обидва не підтвердять фізичну передачу в чаті.${dueHint}`
         : `Підтвердити запит щодо «${e.target_shelf.book.title}»?${dueHint}`,
@@ -215,6 +224,30 @@ export default function Chat() {
         },
       ]
     );
+  };
+
+  const openPickOffer = async (e: Exchange) => {
+    try {
+      const shelves = await ExchangeApi.offerable(e.id);
+      if (!shelves.length) {
+        Alert.alert("Обмін", "У запитувача зараз немає вільних книг для обміну.");
+        return;
+      }
+      setOfferable(shelves);
+      setPickFor(e.id);
+    } catch (err) {
+      Alert.alert("Обмін", err instanceof ApiError ? err.message : String(err));
+    }
+  };
+
+  const pickOffer = (shelfId: number) => {
+    if (pickFor == null) return;
+    const id = pickFor;
+    setPickFor(null);
+    runAction(async () => {
+      await ExchangeApi.pickOffer(id, shelfId);
+      Alert.alert("Обмін", "Книгу обрано. Можете прийняти обмін.");
+    }, "Обміни");
   };
 
   const proposeDue = (e: Exchange) => {
@@ -492,9 +525,15 @@ export default function Chat() {
           {pendingIn.map((e) => (
             <View key={e.id} style={styles.actionRow}>
               <Text style={styles.actionText} numberOfLines={3}>
-                {e.is_transmission ? "Передача: " : e.kind === "exchange" ? "Обмін: " : "Позика: "}
+                {e.is_transmission
+                  ? "Передача: "
+                  : e.offer_shelf || e.kind === "exchange"
+                    ? "Обмін: "
+                    : e.offer_open
+                      ? "Позика/обмін: "
+                      : "Позика: "}
                 {e.target_shelf.book.title}
-                {e.proposed_due_date && e.kind !== "exchange"
+                {e.proposed_due_date && !e.offer_shelf
                   ? ` · до ${e.proposed_due_date}${
                       e.due_date_proposer === "owner" ? " (від вас)" : ""
                     }${e.due_date_confirmed ? " · погоджено" : ""}`
@@ -502,9 +541,18 @@ export default function Chat() {
               </Text>
               {dueControls(e)}
               <View style={styles.actionBtns}>
+                {e.can_pick_offer ? (
+                  <Pressable onPress={() => openPickOffer(e)}>
+                    <Text style={styles.accept}>Обрати з його полиці</Text>
+                  </Pressable>
+                ) : null}
                 <Pressable onPress={() => acceptReq(e)}>
                   <Text style={styles.accept}>
-                    {e.is_transmission ? "Схвалити" : "Прийняти"}
+                    {e.is_transmission
+                      ? "Схвалити"
+                      : e.offer_open && !e.offer_shelf
+                        ? "Як позику"
+                        : "Прийняти"}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -593,6 +641,20 @@ export default function Chat() {
               <Text style={[styles.msg, mine && styles.msgMine]}>{item.body}</Text>
               {item.exchange_request_detail?.can_accept ? (
                 <View style={styles.actionBtns}>
+                  {item.exchange_request_detail.can_pick_offer ? (
+                    <Pressable
+                      onPress={() =>
+                        openPickOffer({
+                          id: item.exchange_request_detail!.id,
+                          can_pick_offer: true,
+                          offer_open: true,
+                          offer_shelf: null,
+                        } as Exchange)
+                      }
+                    >
+                      <Text style={styles.accept}>Обрати з його полиці</Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable
                     onPress={() => {
                       const d = item.exchange_request_detail!;
@@ -610,7 +672,9 @@ export default function Chat() {
                     <Text style={styles.accept}>
                       {item.exchange_request_detail.is_transmission
                         ? "Схвалити"
-                        : "Підтвердити"}
+                        : item.exchange_request_detail.can_pick_offer
+                          ? "Як позику"
+                          : "Підтвердити"}
                     </Text>
                   </Pressable>
                   <Pressable
@@ -753,6 +817,33 @@ export default function Chat() {
           <Ionicons name="send" size={22} color={colors.stamp} />
         </Pressable>
       </View>
+
+      <Modal
+        visible={pickFor != null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickFor(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: colors.paper, padding: 16, maxHeight: "70%" }}>
+            <Text style={styles.actionTitle}>Книга з полиці запитувача</Text>
+            <ScrollView style={{ maxHeight: 280 }}>
+              {offerable.map((s) => (
+                <Pressable
+                  key={s.id}
+                  style={{ borderWidth: 1, borderColor: colors.line, padding: 12, marginBottom: 8, backgroundColor: colors.white }}
+                  onPress={() => pickOffer(s.id)}
+                >
+                  <Text style={styles.accept}>{s.book.title}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable onPress={() => setPickFor(null)}>
+              <Text style={styles.reject}>Скасувати</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <CopyQrScanModal
         visible={!!handoffScan}

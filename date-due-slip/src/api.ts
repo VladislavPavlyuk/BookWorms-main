@@ -636,15 +636,23 @@ export const ExchangeApi = {
   create: (
     target_shelf_id: number,
     offer_shelf_id?: number | null,
-    proposed_due_date?: string | null
+    proposed_due_date?: string | null,
+    offer_open?: boolean
   ) =>
     api<{ created: Exchange[]; errors: string[] }>("/api/exchanges/create/", {
       method: "POST",
       body: {
         target_shelf_id,
         offer_shelf_id: offer_shelf_id || null,
+        offer_open: !!offer_open && !offer_shelf_id,
         ...(proposed_due_date ? { proposed_due_date } : {}),
       },
+    }),
+  offerable: (id: number) => api<Shelf[]>(`/api/exchanges/${id}/offerable/`),
+  pickOffer: (id: number, offer_shelf_id: number) =>
+    api<Exchange>(`/api/exchanges/${id}/pick-offer/`, {
+      method: "POST",
+      body: { offer_shelf_id },
     }),
   accept: (id: number, due_date?: string | null) =>
     api(`/api/exchanges/${id}/accept/`, {

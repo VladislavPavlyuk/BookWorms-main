@@ -35,7 +35,7 @@ class ThreadContext:
     timeline: list[PrivateMessage]
     handoffs: list[LoanHandoff]
     pending_returns: list[Shelf]
-    pending_in: QuerySet[BookExchangeRequest]
+    pending_in: list[BookExchangeRequest]
     pending_out: QuerySet[BookExchangeRequest]
     library_invites_in: list
     library_invites_out: list
@@ -201,8 +201,17 @@ def build_thread_context(
     partner: CustomUser,
     partners: QuerySet[CustomUser],
 ) -> ThreadContext:
+    from ..exchange.requests import offerable_shelves_from_requester
+
     partner_id = partner.pk
-    pending_in, pending_out = pending_requests_with_partner(user, partner_id)
+    pending_in_qs, pending_out = pending_requests_with_partner(user, partner_id)
+    pending_in: list[BookExchangeRequest] = []
+    for r in pending_in_qs:
+        if r.offer_open and not r.offer_shelf_id:
+            r.offerable_shelves = offerable_shelves_from_requester(r)
+        else:
+            r.offerable_shelves = []
+        pending_in.append(r)
     lib_in, lib_out = library_invites_with_partner(user, partner_id)
     act_in, act_out = library_actions_with_partner(user, partner_id)
     return ThreadContext(

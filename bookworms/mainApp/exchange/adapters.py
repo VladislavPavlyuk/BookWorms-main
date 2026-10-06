@@ -25,6 +25,9 @@ class MessageServiceNotifier(AbstractExchangeNotifier):
     def notify_exchange_request_cancelled(self, req: BookExchangeRequest):
         return message_service.notify_exchange_request_cancelled(req)
 
+    def notify_exchange_offer_picked(self, req: BookExchangeRequest):
+        return message_service.notify_exchange_offer_picked(req)
+
     def notify_exchange_due_proposed(self, req: BookExchangeRequest, actor: CustomUser):
         return message_service.notify_exchange_due_proposed(req, actor)
 

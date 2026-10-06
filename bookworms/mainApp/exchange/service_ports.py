@@ -23,14 +23,23 @@ class IRequestService(ABC):
         from_queue: bool = False,
         join_queue_if_busy: bool = True,
         proposed_due_date=None,
+        offer_open: bool = False,
     ) -> BookExchangeRequest: ...
 
     @abstractmethod
     def create_many(
         self,
         requester: CustomUser,
-        lines: list[tuple[Shelf, Shelf | None, object | None]],
+        lines: list[tuple[Shelf, Shelf | None, object | None, bool]],
     ) -> tuple[int, list[str]]: ...
+
+    @abstractmethod
+    def pick_offer(
+        self, request_id: int, acting_user: CustomUser, offer_shelf_id: int
+    ) -> BookExchangeRequest: ...
+
+    @abstractmethod
+    def offerable_from_requester(self, req: BookExchangeRequest) -> list[Shelf]: ...
 
     @abstractmethod
     def accept(

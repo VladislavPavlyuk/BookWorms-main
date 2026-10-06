@@ -74,6 +74,8 @@ from .requests import (
     confirm_exchange_due_date,
     create_exchange_request,
     create_many_exchange_requests,
+    offerable_shelves_from_requester,
+    pick_offer_by_owner,
     propose_exchange_due_date,
     reject_exchange_request,
 )
@@ -156,7 +158,9 @@ __all__ = [
     "load_browse_catalog",
     "loan_due_date",
     "my_available_owned",
+    "offerable_shelves_from_requester",
     "physical_presence_shelves_qs",
+    "pick_offer_by_owner",
     "propose_exchange_due_date",
     "reject_exchange_request",
     "remove_owned_shelf",

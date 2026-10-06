@@ -46,6 +46,8 @@ urlpatterns = [
     path("exchanges/", views.exchange_list),
     path("exchanges/create/", views.exchange_create),
     path("exchanges/<int:request_id>/accept/", views.exchange_accept_view),
+    path("exchanges/<int:request_id>/offerable/", views.exchange_offerable_view),
+    path("exchanges/<int:request_id>/pick-offer/", views.exchange_pick_offer_view),
     path("exchanges/<int:request_id>/propose-due/", views.exchange_propose_due_view),
     path("exchanges/<int:request_id>/confirm-due/", views.exchange_confirm_due_view),
     path("exchanges/<int:request_id>/reject/", views.exchange_reject_view),

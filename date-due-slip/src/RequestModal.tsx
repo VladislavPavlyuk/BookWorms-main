@@ -22,6 +22,9 @@ type Props = {
   onDone?: () => void;
 };
 
+/** Mode: borrow | let owner pick from my library | offer a specific shelf id. */
+type Mode = "borrow" | "open" | number;
+
 function ymd(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -42,7 +45,7 @@ export function RequestModal({
   onClose,
   onDone,
 }: Props) {
-  const [offerId, setOfferId] = useState<number | null>(null);
+  const [mode, setMode] = useState<Mode>("borrow");
   const [busy, setBusy] = useState(false);
   const today = useMemo(() => ymd(new Date()), []);
   const defaultDue = useMemo(() => ymd(addDays(new Date(), loanDays)), [loanDays]);
@@ -53,21 +56,21 @@ export function RequestModal({
     (target.is_lent_out || target.lent_to || target.borrowed_from)
   );
   const targetShelfId = target?.request_shelf_id ?? target?.id ?? null;
-  const isBorrow = offerId === null;
+  const isBorrowLike = mode === "borrow" || mode === "open";
 
   useEffect(() => {
-    setOfferId(null);
+    setMode("borrow");
     setDueDate(defaultDue);
   }, [target?.id, target?.request_shelf_id, defaultDue]);
 
   if (!target || targetShelfId == null) return null;
 
   const submit = async () => {
-    if (lent && offerId != null) {
+    if (lent && mode !== "borrow") {
       Alert.alert("Запит", "Поки примірник у позиці — лише запит на передачу (без обміну).");
       return;
     }
-    if (isBorrow) {
+    if (isBorrowLike) {
       const raw = dueDate.trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
         Alert.alert("Термін", "Вкажіть дату повернення у форматі РРРР-ММ-ДД.");
@@ -80,10 +83,13 @@ export function RequestModal({
     }
     setBusy(true);
     try {
+      const offerId = typeof mode === "number" ? mode : null;
+      const offerOpen = mode === "open";
       const res = await ExchangeApi.create(
         targetShelfId,
         offerId,
-        isBorrow ? dueDate.trim() : null
+        isBorrowLike ? dueDate.trim() : null,
+        offerOpen
       );
       if (res.errors?.length) {
         Alert.alert("Запит", res.errors.join("\n"));
@@ -92,13 +98,15 @@ export function RequestModal({
           "Запит",
           lent
             ? "Запит на передачу надіслано власнику."
-            : offerId
-              ? "Запит на обмін надіслано."
-              : `Запит на позику надіслано (до ${dueDate.trim()}).`
+            : offerOpen
+              ? "Запит надіслано: власник може обрати книгу з вашої полиці."
+              : offerId
+                ? "Запит на обмін надіслано."
+                : `Запит на позику надіслано (до ${dueDate.trim()}).`
         );
         onDone?.();
         onClose();
-        setOfferId(null);
+        setMode("borrow");
       }
     } catch (e) {
       Alert.alert("Запит", e instanceof ApiError ? e.message : String(e));
@@ -134,8 +142,8 @@ export function RequestModal({
 
           <Text style={styles.sec}>Тип</Text>
           <Pressable
-            style={[styles.opt, offerId === null && styles.optOn]}
-            onPress={() => setOfferId(null)}
+            style={[styles.opt, mode === "borrow" && styles.optOn]}
+            onPress={() => setMode("borrow")}
           >
             <Text style={styles.optText}>
               {lent ? "Запит на передачу (з дозволу власника)" : "Лише позика (без обміну)"}
@@ -144,16 +152,25 @@ export function RequestModal({
 
           {!lent ? (
             <>
-              <Text style={styles.sec}>Або обмін — ваша книга</Text>
-              <ScrollView style={{ maxHeight: 180 }}>
+              <Pressable
+                style={[styles.opt, mode === "open" && styles.optOn]}
+                onPress={() => setMode("open")}
+              >
+                <Text style={styles.optText}>
+                  Обмін: власник обере книгу з моєї полиці
+                </Text>
+              </Pressable>
+
+              <Text style={styles.sec}>Або обмін — конкретна ваша книга</Text>
+              <ScrollView style={{ maxHeight: 160 }}>
                 {myOwned.length === 0 ? (
                   <Text style={styles.meta}>Немає власних книг для обміну</Text>
                 ) : (
                   myOwned.map((s) => (
                     <Pressable
                       key={s.id}
-                      style={[styles.opt, offerId === s.id && styles.optOn]}
-                      onPress={() => setOfferId(s.id)}
+                      style={[styles.opt, mode === s.id && styles.optOn]}
+                      onPress={() => setMode(s.id)}
                     >
                       <Text style={styles.optText}>{s.book.title}</Text>
                     </Pressable>
@@ -163,9 +180,11 @@ export function RequestModal({
             </>
           ) : null}
 
-          {isBorrow ? (
+          {isBorrowLike ? (
             <>
-              <Text style={styles.sec}>Повернення до</Text>
+              <Text style={styles.sec}>
+                {mode === "open" ? "Запасний термін позики (якщо не оберуть обмін)" : "Повернення до"}
+              </Text>
               <Text style={styles.hint}>
                 Запропонуйте термін (за замовчуванням {loanDays} дн.). Власник може прийняти,
                 підтвердити або запропонувати іншу дату.

@@ -170,8 +170,10 @@ export type Exchange = {
   shelf_owner: User;
   target_shelf: Shelf;
   offer_shelf: Shelf | null;
+  /** Requester allows owner to pick a book from requester's library. */
+  offer_open?: boolean;
   status: string;
-  kind: "borrow" | "exchange";
+  kind: "borrow" | "exchange" | "borrow_open_exchange";
   /** Pending borrow while copy is lent — accepting transmits to requester. */
   is_transmission?: boolean;
   /** Requester's proposed return date (YYYY-MM-DD) for borrow/transmit. */
@@ -180,6 +182,7 @@ export type Exchange = {
   due_date_confirmed?: boolean;
   can_propose_due?: boolean;
   can_confirm_due?: boolean;
+  can_pick_offer?: boolean;
   created_at: string;
   resolved_at: string | null;
 };
@@ -223,7 +226,8 @@ export type Message = {
   exchange_request_detail: {
     id: number;
     status: string;
-    kind: "exchange" | "loan";
+    kind: "exchange" | "loan" | "borrow_open_exchange";
+    offer_open?: boolean;
     is_transmission: boolean;
     book_title: string;
     proposed_due_date?: string | null;
@@ -232,6 +236,7 @@ export type Message = {
     can_accept: boolean;
     can_reject: boolean;
     can_cancel: boolean;
+    can_pick_offer?: boolean;
     can_propose_due?: boolean;
     can_confirm_due?: boolean;
   } | null;

@@ -598,6 +598,7 @@ class ExchangeRequestSerializer(serializers.ModelSerializer):
     is_transmission = serializers.SerializerMethodField()
     can_propose_due = serializers.SerializerMethodField()
     can_confirm_due = serializers.SerializerMethodField()
+    can_pick_offer = serializers.SerializerMethodField()
 
     class Meta:
         model = BookExchangeRequest
@@ -607,6 +608,7 @@ class ExchangeRequestSerializer(serializers.ModelSerializer):
             "shelf_owner",
             "target_shelf",
             "offer_shelf",
+            "offer_open",
             "status",
             "kind",
             "is_transmission",
@@ -615,12 +617,17 @@ class ExchangeRequestSerializer(serializers.ModelSerializer):
             "due_date_confirmed",
             "can_propose_due",
             "can_confirm_due",
+            "can_pick_offer",
             "created_at",
             "resolved_at",
         )
 
     def get_kind(self, obj):
-        return "exchange" if obj.offer_shelf_id else "borrow"
+        if obj.offer_shelf_id:
+            return "exchange"
+        if getattr(obj, "offer_open", False):
+            return "borrow_open_exchange"
+        return "borrow"
 
     def get_is_transmission(self, obj):
         """Pending borrow while copy is currently lent → owner would transmit to requester."""
@@ -664,11 +671,27 @@ class ExchangeRequestSerializer(serializers.ModelSerializer):
             return user.id == obj.requester_id
         return user.id == obj.shelf_owner_id
 
+    def get_can_pick_offer(self, obj):
+        user = self._viewer()
+        return bool(
+            user
+            and user.is_authenticated
+            and obj.status == BookExchangeRequest.Status.PENDING
+            and getattr(obj, "offer_open", False)
+            and not obj.offer_shelf_id
+            and user.id == obj.shelf_owner_id
+        )
+
 
 class CreateExchangeSerializer(serializers.Serializer):
     target_shelf_id = serializers.IntegerField()
     offer_shelf_id = serializers.IntegerField(required=False, allow_null=True)
     proposed_due_date = serializers.DateField(required=False, allow_null=True)
+    offer_open = serializers.BooleanField(required=False, default=False)
+
+
+class PickOfferSerializer(serializers.Serializer):
+    offer_shelf_id = serializers.IntegerField()
 
 
 class BookBrowseGroupSerializer(serializers.Serializer):
@@ -742,10 +765,19 @@ class MessageSerializer(serializers.ModelSerializer):
             title = req.target_shelf.book.title
         except Exception:
             pass
+        offer_open = bool(getattr(req, "offer_open", False)) and not req.offer_shelf_id
+        can_pick_offer = bool(can_accept and offer_open)
+        if req.offer_shelf_id:
+            kind = "exchange"
+        elif offer_open:
+            kind = "borrow_open_exchange"
+        else:
+            kind = "loan"
         return {
             "id": req.id,
             "status": req.status,
-            "kind": "exchange" if req.offer_shelf_id else "loan",
+            "kind": kind,
+            "offer_open": bool(getattr(req, "offer_open", False)),
             "is_transmission": bool(
                 getattr(req, "is_transmission", False)
                 or (
@@ -762,6 +794,7 @@ class MessageSerializer(serializers.ModelSerializer):
             "can_accept": can_accept,
             "can_reject": can_reject,
             "can_cancel": can_cancel,
+            "can_pick_offer": can_pick_offer,
             "can_propose_due": bool(
                 pending
                 and user

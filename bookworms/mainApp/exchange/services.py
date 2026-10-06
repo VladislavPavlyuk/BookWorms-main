@@ -28,6 +28,7 @@ class RequestService(IRequestService):
         from_queue: bool = False,
         join_queue_if_busy: bool = True,
         proposed_due_date=None,
+        offer_open: bool = False,
     ) -> BookExchangeRequest:
         from . import requests as m
 
@@ -38,16 +39,29 @@ class RequestService(IRequestService):
             from_queue=from_queue,
             join_queue_if_busy=join_queue_if_busy,
             proposed_due_date=proposed_due_date,
+            offer_open=offer_open,
         )
 
     def create_many(
         self,
         requester: CustomUser,
-        lines: list[tuple[Shelf, Shelf | None, object | None]],
+        lines: list[tuple[Shelf, Shelf | None, object | None, bool]],
     ) -> tuple[int, list[str]]:
         from . import requests as m
 
         return m.create_many_exchange_requests(requester, lines)
+
+    def pick_offer(
+        self, request_id: int, acting_user: CustomUser, offer_shelf_id: int
+    ) -> BookExchangeRequest:
+        from . import requests as m
+
+        return m.pick_offer_by_owner(request_id, acting_user, offer_shelf_id)
+
+    def offerable_from_requester(self, req: BookExchangeRequest) -> list[Shelf]:
+        from . import requests as m
+
+        return m.offerable_shelves_from_requester(req)
 
     def accept(
         self, request_id: int, acting_user: CustomUser, *, due_date=None

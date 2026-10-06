@@ -66,6 +66,17 @@ def notify_exchange_request_created(req: BookExchangeRequest) -> PrivateMessage:
             f'замість вашої "{book_title}". '
             f"Відкрийте чат або розділ «Обміни», щоб відповісти."
         )
+    elif getattr(req, "offer_open", False):
+        due_note = ""
+        if req.proposed_due_date:
+            due_note = (
+                f" Або позика до {req.proposed_due_date.strftime('%d.%m.%Y')}."
+            )
+        body = (
+            f'{req.requester.username} просить "{book_title}" і пропонує обмін: '
+            f"оберіть книгу з його полиці в чаті / «Обміни», "
+            f"або прийміть як позику / відхиліть.{due_note}"
+        )
     else:
         due_note = ""
         if req.proposed_due_date:
@@ -80,6 +91,28 @@ def notify_exchange_request_created(req: BookExchangeRequest) -> PrivateMessage:
     return _create_message(
         req.requester,
         req.shelf_owner,
+        body,
+        exchange_request=req,
+        is_system=True,
+    )
+
+
+def notify_exchange_offer_picked(req: BookExchangeRequest) -> PrivateMessage:
+    """Власник обрав книгу з полиці запитувача — повідомляємо запитувача."""
+    req = BookExchangeRequest.objects.select_related(
+        "requester",
+        "shelf_owner",
+        "target_shelf__book",
+        "offer_shelf__book",
+    ).get(pk=req.pk)
+    offer_title = req.offer_shelf.book.title if req.offer_shelf_id else "?"
+    body = (
+        f'{req.shelf_owner.username} обрав(ла) вашу «{offer_title}» для обміну '
+        f'на «{req.target_shelf.book.title}». Очікуйте прийняття або відповіді в чаті.'
+    )
+    return _create_message(
+        req.shelf_owner,
+        req.requester,
         body,
         exchange_request=req,
         is_system=True,
