@@ -406,6 +406,30 @@
                         </span>
                     </a>
                 </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle{% if un == 'settings' or un == 'shared_library' or un == 'copy_qr_print' or un == 'copy_qr_scan' %} active{% endif %}"
+                       href="#"
+                       id="navSettingsMenu"
+                       role="button"
+                       data-bs-toggle="dropdown"
+                       aria-expanded="false">
+                        Налаштування
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navSettingsMenu">
+                        <li>
+                            <a class="dropdown-item{% if un == 'shared_library' %} active{% endif %}"
+                               href="{% url 'shared_library' %}">Спільна бібліотека</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item{% if un == 'settings' or un == 'copy_qr_print' %} active{% endif %}"
+                               href="{% url 'settings' %}">Сервіси / QR</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link{% if un == 'contact_developers' %} active{% endif %}"
+                       href="{% url 'contact_developers' %}">Контакт</a>
+                </li>
                 {% endif %}
 
             </ul>
@@ -431,32 +455,6 @@
                     {% else %}
                         {% shelf_user_link user css_class="nav-link text-white" %}
                     {% endif %}
-                </li>
-
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle{% if un == 'settings' or un == 'shared_library' or un == 'copy_qr_print' or un == 'copy_qr_scan' %} active{% endif %}"
-                       href="#"
-                       id="navSettingsMenu"
-                       role="button"
-                       data-bs-toggle="dropdown"
-                       aria-expanded="false">
-                        Налаштування
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="navSettingsMenu">
-                        <li>
-                            <a class="dropdown-item{% if un == 'shared_library' %} active{% endif %}"
-                               href="{% url 'shared_library' %}">Спільна бібліотека</a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item{% if un == 'settings' or un == 'copy_qr_print' %} active{% endif %}"
-                               href="{% url 'settings' %}">Сервіси / QR</a>
-                        </li>
-                    </ul>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link{% if un == 'contact_developers' %} active{% endif %}"
-                       href="{% url 'contact_developers' %}">Контакт</a>
                 </li>
 
                 <li class="nav-item">
@@ -610,7 +608,7 @@
 {% block body_modals %}{% endblock %}
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="{% static 'js/script.js' %}?v=share-1"></script>
+<script src="{% static 'js/script.js' %}?v=notif-sound-1"></script>
 {% block extra_js %}{% endblock %}
 
 </body>

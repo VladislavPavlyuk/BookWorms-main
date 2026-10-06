@@ -22,7 +22,6 @@ type Link = {
 
 const LINKS: Link[] = [
   { label: "Головна", href: "/(tabs)" },
-  { label: "Профіль", href: "/(tabs)/more" },
   { label: "Моя полиця", href: "/(tabs)/shelf" },
   { label: "Спільна бібліотека", href: "/library" },
   { label: "Реченець", href: "/(tabs)/slips" },
@@ -30,9 +29,10 @@ const LINKS: Link[] = [
   { label: "Обміни", href: "/exchanges" },
   { label: "Мої черги", href: "/queues" },
   { label: "Сповіщення", href: "/notifications", badge: true },
-  { label: "Новий пост", href: "/post/new" },
   { label: "Налаштування", href: "/settings" },
   { label: "Контакт", href: "/contact" },
+  { label: "Новий пост", href: "/post/new" },
+  { label: "Профіль", href: "/(tabs)/more" },
 ];
 
 function pathMatch(pathname: string, href: string) {

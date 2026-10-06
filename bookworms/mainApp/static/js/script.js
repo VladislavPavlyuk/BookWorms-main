@@ -269,6 +269,9 @@
 
         function playNotify() {
             try {
+                if (localStorage.getItem("dds_notif_sound") === "0") return;
+            } catch (e) { /* ignore */ }
+            try {
                 var a = ensureAudio();
                 a.currentTime = 0;
                 var p = a.play();

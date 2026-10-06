@@ -1,13 +1,44 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import {
+  isNotifySoundEnabled,
+  setNotifySoundEnabled,
+} from "../src/notifySound";
 import { colors, btnRadius } from "../src/theme";
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const [soundOn, setSoundOn] = useState(true);
+
+  useEffect(() => {
+    isNotifySoundEnabled().then(setSoundOn);
+  }, []);
+
   return (
     <View style={styles.root}>
       <Text style={styles.h}>Налаштування</Text>
       <Text style={styles.meta}>Сервіси облікового запису Date Due Slip.</Text>
+
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.cardTitle}>Звук сповіщень</Text>
+            <Text style={styles.cardBody}>
+              Вібрація при нових непрочитаних сповіщеннях.
+            </Text>
+          </View>
+          <Switch
+            value={soundOn}
+            onValueChange={(v) => {
+              setSoundOn(v);
+              setNotifySoundEnabled(v);
+            }}
+            trackColor={{ false: colors.line, true: colors.stampOk }}
+            thumbColor={colors.white}
+          />
+        </View>
+      </View>
 
       <Pressable
         style={styles.card}
@@ -37,9 +68,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     padding: 16,
     borderRadius: btnRadius,
-    marginBottom: 24,
+    marginBottom: 16,
   },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  rowText: { flex: 1, minWidth: 0 },
   cardTitle: { fontWeight: "800", color: colors.ink, fontSize: 16, marginBottom: 6 },
   cardBody: { color: colors.muted, lineHeight: 20, fontSize: 13 },
-  link: { color: colors.stamp, fontWeight: "700" },
+  link: { color: colors.stamp, fontWeight: "700", marginTop: 8 },
 });
