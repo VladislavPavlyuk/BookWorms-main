@@ -634,9 +634,20 @@ input[type="button"].btn {
     min-width: var(--nav-ctrl);
     min-height: var(--nav-ctrl);
     padding: 0;
-    display: inline-flex;
+    display: none; /* wide: links visible — no burger */
     align-items: center;
     justify-content: center;
+}
+
+@media (max-width: 991.98px) {
+    .site-navbar .navbar-toggler {
+        display: inline-flex; /* adaptive only */
+        padding: 0 !important;
+        width: var(--nav-ctrl) !important;
+        height: var(--nav-ctrl) !important;
+        min-height: var(--nav-ctrl) !important;
+        min-width: var(--nav-ctrl) !important;
+    }
 }
 
 .site-navbar .navbar-toggler-icon {

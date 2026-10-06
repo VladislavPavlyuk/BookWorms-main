@@ -222,11 +222,14 @@ class CustomRegisterView(CreateView):
         return ctx
 
     def form_valid(self, form):
+        from django.http import HttpResponseRedirect
+
         purge_expired_unactivated_users()
         user = form.save(commit=False)
         user.is_active = False
         user.email_confirmed = False
         user.save()
+        self.object = user
 
         url = activation_url_for(user, self.request)
         payload = activation_payload(user, url)
@@ -242,7 +245,7 @@ class CustomRegisterView(CreateView):
             self.request.session["web3forms_sent_server"] = False
             self.request.session["web3forms_server_error"] = str(e)
 
-        return super().form_valid(form)
+        return HttpResponseRedirect(self.get_success_url())
 
 
 def activate(request, uidb64, token):

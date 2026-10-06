@@ -1,10 +1,25 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
 from .models import AvatarCollection
 from django.core.exceptions import ValidationError
 
 User = get_user_model()
+
+
+def _apply_avatar_choice(user, choice: AvatarCollection | None) -> None:
+    """Copy selected collection image into user.avatar (no file browse)."""
+    if not choice or not choice.image:
+        return
+    choice.image.open("rb")
+    try:
+        data = choice.image.read()
+    finally:
+        choice.image.close()
+    name = choice.image.name.rsplit("/", 1)[-1] or f"avatar_{choice.pk}.png"
+    user.avatar.save(name, ContentFile(data), save=False)
+
 
 class UserLoginForm(AuthenticationForm):
     username = forms.CharField(
@@ -36,35 +51,34 @@ class UserRegisterForm(UserCreationForm):
     avatar_choice = forms.ModelChoiceField(
         queryset=AvatarCollection.objects.all(),
         required=False,
-        widget=forms.RadioSelect(attrs={'class': 'btn-check'}),
-        label="Або оберіть готовий аватар"
+        empty_label=None,
+        widget=forms.RadioSelect(attrs={"class": "avatar-pick__radio"}),
+        label="Оберіть аватар",
     )
 
-    # Добавляем поле email явно, чтобы сделать его обязательным
     email = forms.EmailField(
         required=True,
         label="Електронна пошта",
-        widget=forms.EmailInput(attrs={'placeholder': 'example@mail.com'})
+        widget=forms.EmailInput(attrs={"placeholder": "example@mail.com"}),
     )
 
     class Meta:
         model = User
-        fields = ("username", "email", "biography", "avatar")
+        fields = ("username", "email", "biography")
         labels = {
-            'username': "Логін",
-            'biography': "Про себе",
-            'avatar': "Аватар",
+            "username": "Логін",
+            "biography": "Про себе",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if 'password1' in self.fields:
-            self.fields['password1'].label = "Пароль"
+        if "password1" in self.fields:
+            self.fields["password1"].label = "Пароль"
             self.fields["password1"].widget.attrs["autocomplete"] = "new-password"
             self.fields["password1"].widget.attrs["lang"] = "uk"
-        if 'password2' in self.fields:
-            self.fields['password2'].label = "Повторіть пароль"
+        if "password2" in self.fields:
+            self.fields["password2"].label = "Повторіть пароль"
             self.fields["password2"].widget.attrs["autocomplete"] = "new-password"
             self.fields["password2"].widget.attrs["lang"] = "uk"
         if "username" in self.fields:
@@ -72,41 +86,60 @@ class UserRegisterForm(UserCreationForm):
         if "email" in self.fields:
             self.fields["email"].widget.attrs["lang"] = "uk"
 
-        for field in self.fields.values():
-            field.widget.attrs['class'] = 'form-control'
+        for name, field in self.fields.items():
+            if name == "avatar_choice":
+                continue
+            field.widget.attrs["class"] = "form-control"
 
     def clean_email(self):
-        email = self.cleaned_data.get('email')
+        email = self.cleaned_data.get("email")
         if User.objects.filter(email=email).exists():
             raise ValidationError("Ця електронна адреса вже використовується.")
         return email
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        _apply_avatar_choice(user, self.cleaned_data.get("avatar_choice"))
+        if commit:
+            user.save()
+        return user
+
 
 class UserUpdateForm(forms.ModelForm):
     avatar_choice = forms.ModelChoiceField(
         queryset=AvatarCollection.objects.all(),
         required=False,
-        widget=forms.RadioSelect(attrs={'class': 'btn-check'}),
-        label="Або оберіть готовий аватар"
+        empty_label=None,
+        widget=forms.RadioSelect(attrs={"class": "avatar-pick__radio"}),
+        label="Оберіть аватар",
     )
 
     class Meta:
         model = User
-        fields = ['username', 'biography', 'avatar']
+        fields = ["username", "biography"]
         labels = {
-            'username': 'Логін',
-            'biography': 'Про себе',
-            'avatar': 'Аватар'
+            "username": "Логін",
+            "biography": "Про себе",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        for field in self.fields.values():
-            field.widget.attrs['class'] = 'form-control'
+        for name, field in self.fields.items():
+            if name == "avatar_choice":
+                continue
+            field.widget.attrs["class"] = "form-control"
         if "username" in self.fields:
             self.fields["username"].widget.attrs["lang"] = "uk"
 
-
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        choice = self.cleaned_data.get("avatar_choice")
+        if choice:
+            _apply_avatar_choice(user, choice)
+        if commit:
+            user.save()
+        return user
 class AddIsbnForm(forms.Form):
     """Поле ISBN для сторінки "Моя полиця"; вікові групи задаються окремо на картці книги."""
     isbn = forms.CharField(

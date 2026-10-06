@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container mt-5">
     <div class="row justify-content-center">
-        <div class="col-md-6">
+        <div class="col-md-8 col-lg-7">
             <div class="card shadow">
                 <div class="card-header bg-primary text-white">
                     <h3 class="mb-0 text-center">Реєстрація у Реченець</h3>
@@ -15,10 +15,39 @@
                         Якщо цього не зробити, акаунт буде <strong>автоматично видалено</strong>
                         з бази — доведеться реєструватися знову.
                     </div>
-                    <form method="post" enctype="multipart/form-data">
+                    <form method="post">
                         {% csrf_token %}
 
                         {% for field in form %}
+                            {% if field.name == 'avatar_choice' %}
+                            <fieldset class="mb-4">
+                                <legend class="form-label font-weight-bold fs-6">{{ field.label }}</legend>
+                                {% with avatars=field.field.queryset %}
+                                {% if avatars %}
+                                <div class="avatar-pick">
+                                    {% for avatar in avatars %}
+                                    <label class="avatar-pick__item" title="{{ avatar.name }}">
+                                        <input type="radio"
+                                               name="{{ field.html_name }}"
+                                               value="{{ avatar.pk }}"
+                                               class="avatar-pick__radio"
+                                               {% if field.value|stringformat:"s" == avatar.pk|stringformat:"s" %}checked{% endif %}>
+                                        <img src="{{ avatar.image.url }}"
+                                             alt="{{ avatar.name }}"
+                                             width="72" height="72"
+                                             class="avatar-pick__img rounded-circle">
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <p class="text-muted small mb-0">Колекція аватарів ще не завантажена.</p>
+                                {% endif %}
+                                {% endwith %}
+                                {% if field.errors %}
+                                <div class="text-danger small">{{ field.errors|striptags }}</div>
+                                {% endif %}
+                            </fieldset>
+                            {% else %}
                             <div class="mb-3">
                                 <label class="form-label font-weight-bold" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                 {% if field.html_name == 'password' or field.html_name == 'password1' or field.html_name == 'password2' %}
@@ -45,6 +74,7 @@
                                     <div class="form-text text-muted small">{{ field.help_text|safe }}</div>
                                 {% endif %}
                             </div>
+                            {% endif %}
                         {% endfor %}
 
                         <div class="d-grid gap-2 mt-4">
@@ -59,4 +89,21 @@
         </div>
     </div>
 </div>
+<style>
+.avatar-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 0.65rem;
+}
+.avatar-pick__item { position: relative; margin: 0; cursor: pointer; display: block; }
+.avatar-pick__radio { position: absolute; opacity: 0; pointer-events: none; }
+.avatar-pick__img {
+  width: 72px; height: 72px; object-fit: cover;
+  border: 3px solid transparent; background: #eee;
+}
+.avatar-pick__item:has(.avatar-pick__radio:checked) .avatar-pick__img {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #0d6efd;
+}
+</style>
 {% endblock %}

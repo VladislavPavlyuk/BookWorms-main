@@ -19,6 +19,10 @@ PY
 
 echo "entrypoint: migrate..." >&2
 python manage.py migrate --noinput
+
+echo "entrypoint: sync avatar collection..." >&2
+python manage.py sync_avatar_collection || echo "entrypoint: sync_avatar_collection failed (non-fatal)" >&2
+
 if [ -n "${OCR_SPACE_API_KEY:-}" ]; then
   echo "entrypoint: OCR_SPACE_API_KEY=set" >&2
 else

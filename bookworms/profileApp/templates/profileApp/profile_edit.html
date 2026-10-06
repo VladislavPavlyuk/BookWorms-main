@@ -1,11 +1,93 @@
 {% extends "mainApp/base.html" %}
 
-{% block content %}
+{% block title %}Редагувати профіль{% endblock %}
 
-<form method="post" enctype="multipart/form-data">
+{% block content %}
+<h1 class="h3 mb-3">Редагувати профіль</h1>
+
+<form method="post" class="profile-edit-form">
     {% csrf_token %}
-    {{ form.as_p }}
+
+    <div class="mb-3">
+        <label class="form-label" for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+        {{ form.username }}
+        {% if form.username.errors %}<div class="text-danger small">{{ form.username.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="{{ form.biography.id_for_label }}">{{ form.biography.label }}</label>
+        {{ form.biography }}
+        {% if form.biography.errors %}<div class="text-danger small">{{ form.biography.errors }}</div>{% endif %}
+    </div>
+
+    <fieldset class="mb-4">
+        <legend class="form-label fs-6">{{ form.avatar_choice.label }}</legend>
+        {% if user.avatar %}
+        <p class="small text-muted mb-2">Поточний:
+            <img src="{{ user.avatar.url }}" alt="" width="48" height="48" class="rounded-circle border">
+        </p>
+        {% endif %}
+        {% with avatars=form.avatar_choice.field.queryset %}
+        {% if avatars %}
+        <div class="avatar-pick">
+            {% for avatar in avatars %}
+            <label class="avatar-pick__item" title="{{ avatar.name }}">
+                <input type="radio"
+                       name="{{ form.avatar_choice.html_name }}"
+                       value="{{ avatar.pk }}"
+                       class="avatar-pick__radio"
+                       {% if form.avatar_choice.value|stringformat:"s" == avatar.pk|stringformat:"s" %}checked{% endif %}>
+                <img src="{{ avatar.image.url }}"
+                     alt="{{ avatar.name }}"
+                     width="72" height="72"
+                     class="avatar-pick__img rounded-circle">
+            </label>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0">Колекція аватарів порожня — запустіть
+            <code>python manage.py sync_avatar_collection</code>.</p>
+        {% endif %}
+        {% endwith %}
+        {% if form.avatar_choice.errors %}<div class="text-danger small">{{ form.avatar_choice.errors }}</div>{% endif %}
+    </fieldset>
+
     <button type="submit" class="btn btn-primary">Зберегти</button>
+    <a href="{% url 'profile_app:profile' %}" class="btn btn-outline-secondary">Скасувати</a>
 </form>
 
+<style>
+.avatar-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 0.65rem;
+  max-width: 42rem;
+}
+.avatar-pick__item {
+  position: relative;
+  margin: 0;
+  cursor: pointer;
+  display: block;
+}
+.avatar-pick__radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.avatar-pick__img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border: 3px solid transparent;
+  background: #eee;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.avatar-pick__item:has(.avatar-pick__radio:checked) .avatar-pick__img {
+  border-color: #1a2433;
+  box-shadow: 0 0 0 2px #f4f0e6, 0 0 0 4px #1a2433;
+}
+.avatar-pick__item:hover .avatar-pick__img {
+  border-color: rgba(26, 36, 51, 0.45);
+}
+</style>
 {% endblock %}

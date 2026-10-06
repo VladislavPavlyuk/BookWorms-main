@@ -18,6 +18,7 @@ class AvatarCollection(models.Model):
     class Meta:
         verbose_name = "Аватар з колекції"
         verbose_name_plural = "Колекція аватарів"
+        ordering = ["name", "id"]
 
 class CustomUser(AbstractUser):
     biography = models.CharField(max_length=500, blank=True, verbose_name="Про себе")

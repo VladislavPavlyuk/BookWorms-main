@@ -51,6 +51,12 @@
         background: transparent !important;
         border-color: transparent !important;
         box-shadow: none !important;
+        display: none !important; /* desktop: hide unless adaptive mq below */
+      }
+      @media (max-width: 991.98px) {
+        .site-navbar .navbar-toggler {
+          display: inline-flex !important;
+        }
       }
       .site-navbar #nav-notif-link,
       .site-navbar #nav-notif-link.active {
@@ -367,7 +373,7 @@
                     </ul>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link{% if un == 'my_library' or un == 'shared_library' %} active{% endif %}"
+                    <a class="nav-link{% if un == 'my_library' %} active{% endif %}"
                        href="{% url 'my_library' %}">Моя полиця</a>
                 </li>
                 <li class="nav-item">
@@ -422,9 +428,25 @@
                     {% endif %}
                 </li>
 
-                <li class="nav-item">
-                    <a class="nav-link{% if un == 'settings' %} active{% endif %}"
-                       href="{% url 'settings' %}">Налаштування</a>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle{% if un == 'settings' or un == 'shared_library' or un == 'copy_qr_print' or un == 'copy_qr_scan' %} active{% endif %}"
+                       href="#"
+                       id="navSettingsMenu"
+                       role="button"
+                       data-bs-toggle="dropdown"
+                       aria-expanded="false">
+                        Налаштування
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="navSettingsMenu">
+                        <li>
+                            <a class="dropdown-item{% if un == 'shared_library' %} active{% endif %}"
+                               href="{% url 'shared_library' %}">Спільна бібліотека</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item{% if un == 'settings' or un == 'copy_qr_print' %} active{% endif %}"
+                               href="{% url 'settings' %}">Сервіси / QR</a>
+                        </li>
+                    </ul>
                 </li>
 
                 <li class="nav-item">

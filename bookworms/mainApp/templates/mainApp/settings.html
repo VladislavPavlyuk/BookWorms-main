@@ -9,6 +9,16 @@
 </p>
 
 <div class="list-group shadow-sm" style="max-width: 36rem;">
+    <a href="{% url 'shared_library' %}"
+       class="list-group-item list-group-item-action d-flex justify-content-between align-items-start gap-3">
+        <div>
+            <div class="fw-semibold">Спільна бібліотека</div>
+            <div class="small text-muted mt-1">
+                Об’єднання полиць за кодом, голосування за адміна, поділ примірників.
+            </div>
+        </div>
+        <span class="badge text-bg-secondary align-self-center">merge</span>
+    </a>
     <a href="{% url 'copy_qr_print' %}?from=settings"
        class="list-group-item list-group-item-action d-flex justify-content-between align-items-start gap-3">
         <div>
