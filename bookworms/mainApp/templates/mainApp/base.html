@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}?v=due-4">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=contact-send-fab-1">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=profile-edit-fab-1">
     <style id="chrome-transparent">
       .site-navbar .navbar-brand,
       .site-navbar .navbar-brand.active {
@@ -164,7 +164,8 @@
         }
         .create-post-fab__cam,
         .create-post-fab__mail,
-        .create-post-fab__send {
+        .create-post-fab__send,
+        .create-post-fab__edit {
           width: 26px !important;
           height: 26px !important;
         }
@@ -579,8 +580,8 @@
         </svg>
     </button>
 </div>
-  {% elif un == 'browse_shelves' or un == 'message_thread' or un == 'contact_developers' %}
-{# No Create Post FAB: browse mail FAB; chat clear; contact has send FAB #}
+  {% elif un == 'browse_shelves' or un == 'message_thread' or un == 'contact_developers' or ns == 'profile_app' and un == 'profile' %}
+{# No Create Post FAB: browse/contact send; chat clear; profile has edit FAB #}
   {% else %}
 <div class="dropdown dropup create-post-fab">
     <button class="create-post-fab__btn"

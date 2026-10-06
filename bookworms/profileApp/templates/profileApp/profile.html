@@ -7,10 +7,23 @@
 
 <p><strong>Ім'я:</strong> {% shelf_user_link user %}</p>
 <p><strong>Про себе:</strong> {{ user.biography }}</p>
-<a href="{% url 'profile_app:edit_profile' %}" class="btn btn-primary">Редагувати профіль</a>
 
 {% if user.avatar %}
-    <img src="{{ user.avatar.url }}" width="150">
+    <img src="{{ user.avatar.url }}" width="150" alt="">
 {% endif %}
 
+{% endblock %}
+
+{% block body_modals %}
+{# Same corner as Create Post #}
+<div class="create-post-fab">
+    <a href="{% url 'profile_app:edit_profile' %}"
+       class="create-post-fab__btn"
+       title="Редагувати профіль"
+       aria-label="Редагувати профіль">
+        <svg class="create-post-fab__edit" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+        </svg>
+    </a>
+</div>
 {% endblock %}
