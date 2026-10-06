@@ -98,7 +98,9 @@
     }
 
     function initIsbnScan() {
-        var openBtn = document.getElementById("isbnScanOpen");
+        var openBtns = Array.prototype.slice.call(
+            document.querySelectorAll(".js-isbn-scan-open, #isbnScanOpen")
+        );
         var modalEl = document.getElementById("isbnScanModal");
         var statusEl = document.getElementById("isbnScanStatus");
         var video = document.getElementById("isbnScanVideo");
@@ -110,7 +112,7 @@
             document.getElementById("addIsbnForm") ||
             (isbnInput && isbnInput.closest("form"));
 
-        if (!openBtn || !modalEl || !video || !isbnInput) {
+        if (!openBtns.length || !modalEl || !video || !isbnInput) {
             console.warn("[isbn-scan] missing DOM nodes, abort init");
             return;
         }
@@ -453,7 +455,7 @@
                 });
         }
 
-        openBtn.addEventListener("click", function () {
+        function openScanModal() {
             // Unlock AudioContext on user gesture so shutter can play later
             try {
                 playCameraClick._ctx =
@@ -475,6 +477,10 @@
                 keyboard: true,
             });
             bsModal.show();
+        }
+
+        openBtns.forEach(function (btn) {
+            btn.addEventListener("click", openScanModal);
         });
 
         modalEl.addEventListener("shown.bs.modal", function () {

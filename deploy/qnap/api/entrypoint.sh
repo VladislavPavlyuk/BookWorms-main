@@ -42,6 +42,8 @@ rm -f \
   /app/staticfiles/js/script.js.gz \
   /app/staticfiles/js/manual_book_photos.js \
   /app/staticfiles/js/manual_book_photos.js.gz \
+  /app/staticfiles/css/style.css \
+  /app/staticfiles/css/style.css.gz \
   2>/dev/null || true
 python manage.py collectstatic --noinput
 

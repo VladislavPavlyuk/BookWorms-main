@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}?v=due-4">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=share-1">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=scan-fab-1">
     <style id="chrome-transparent">
       .site-navbar .navbar-brand,
       .site-navbar .navbar-brand.active {
@@ -161,6 +161,10 @@
         }
         .create-post-fab__plus {
           font-size: 1.85rem !important;
+        }
+        .create-post-fab__cam {
+          width: 26px !important;
+          height: 26px !important;
         }
         .site-content { font-size: 18px !important; }
         .btn, .site-content .btn {
@@ -564,6 +568,18 @@
 </main>
 
 {% if user.is_authenticated %}
+  {% if un == 'my_library' %}
+<div class="create-post-fab">
+    <button type="button"
+            class="create-post-fab__btn js-isbn-scan-open"
+            title="Сканувати ISBN"
+            aria-label="Сканувати ISBN камерою">
+        <svg class="create-post-fab__cam" width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M9 2 7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3.17L15 2H9zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6z"/>
+        </svg>
+    </button>
+</div>
+  {% else %}
 <div class="dropdown dropup create-post-fab">
     <button class="create-post-fab__btn"
             type="button"
@@ -583,6 +599,7 @@
         </li>
     </ul>
 </div>
+  {% endif %}
 {% endif %}
 
 {% endwith %}

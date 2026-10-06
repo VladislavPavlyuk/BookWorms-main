@@ -794,6 +794,13 @@ input[type="button"].btn {
     pointer-events: none;
 }
 
+.create-post-fab__cam {
+    display: block;
+    color: #fff;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+    pointer-events: none;
+}
+
 .create-post-fab__btn:hover,
 .create-post-fab__btn:focus {
     color: #fff;
