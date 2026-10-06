@@ -15,8 +15,9 @@
                         Якщо цього не зробити, акаунт буде <strong>автоматично видалено</strong>
                         з бази — доведеться реєструватися знову.
                     </div>
-                    <form method="post">
+                    <form method="post" id="registerForm" data-check-url="{% url 'register_check_availability' %}">
                         {% csrf_token %}
+                        <input type="hidden" name="username_confirmed" id="id_username_confirmed" value="">
 
                         {% for field in form %}
                             {% if field.name == 'avatar_choice' %}
@@ -48,7 +49,7 @@
                                 {% endif %}
                             </fieldset>
                             {% else %}
-                            <div class="mb-3">
+                            <div class="mb-3"{% if field.name == 'username' or field.name == 'email' %} data-live-field="{{ field.name }}"{% endif %}>
                                 <label class="form-label font-weight-bold" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                 {% if field.html_name == 'password' or field.html_name == 'password1' or field.html_name == 'password2' %}
                                 <div class="input-group password-toggle">
@@ -65,6 +66,12 @@
                                 {% else %}
                                 {{ field }}
                                 {% endif %}
+                                {% if field.name == 'username' or field.name == 'email' %}
+                                <div class="form-text small mt-1 js-live-status" id="live-status-{{ field.name }}" aria-live="polite"></div>
+                                {% endif %}
+                                {% if field.name == 'username' %}
+                                <div class="js-username-suggestions mt-2" id="usernameSuggestions" hidden></div>
+                                {% endif %}
                                 {% if field.errors %}
                                     <div class="text-danger small">
                                         {{ field.errors|striptags }}
@@ -78,7 +85,7 @@
                         {% endfor %}
 
                         <div class="d-grid gap-2 mt-4">
-                            <button type="submit" class="btn btn-success btn-lg">Зареєструватися</button>
+                            <button type="submit" class="btn btn-success btn-lg" id="registerSubmitBtn">Зареєструватися</button>
                         </div>
                     </form>
                 </div>
@@ -105,5 +112,226 @@
   border-color: #0d6efd;
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px #0d6efd;
 }
+.reg-suggest {
+  display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+}
+.reg-suggest__label { width: 100%; color: #6b5344; margin-bottom: 0.15rem; }
+.reg-suggest__btn {
+  border: 1px solid #c9b48a;
+  background: #fffbf3;
+  color: #2a1f14;
+  border-radius: 999px;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.reg-suggest__btn:hover,
+.reg-suggest__btn:focus-visible {
+  background: #f3e6c9;
+  border-color: #c23b22;
+  outline: none;
+}
+.reg-suggest__btn.is-picked {
+  background: #2f6b4f;
+  border-color: #2f6b4f;
+  color: #fff;
+}
+.js-live-status.is-ok { color: #2f6b4f; }
+.js-live-status.is-bad { color: #c23b22; }
+.js-live-status.is-wait { color: #6b5344; }
 </style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.getElementById("registerForm");
+  if (!form) return;
+  var checkUrl = form.getAttribute("data-check-url");
+  var userInput = form.querySelector("#id_username");
+  var emailInput = form.querySelector("#id_email");
+  var confirmed = document.getElementById("id_username_confirmed");
+  var userStatus = document.getElementById("live-status-username");
+  var emailStatus = document.getElementById("live-status-email");
+  var suggestBox = document.getElementById("usernameSuggestions");
+  var submitBtn = document.getElementById("registerSubmitBtn");
+  var timer = null;
+  var lastKey = "";
+  var state = { usernameOk: null, emailOk: null, usernameTaken: false };
+
+  function setStatus(el, text, kind) {
+    if (!el) return;
+    el.textContent = text || "";
+    el.classList.remove("is-ok", "is-bad", "is-wait");
+    if (kind) el.classList.add("is-" + kind);
+  }
+
+  function clearSuggestions() {
+    if (!suggestBox) return;
+    suggestBox.hidden = true;
+    suggestBox.innerHTML = "";
+  }
+
+  function renderSuggestions(list) {
+    if (!suggestBox) return;
+    clearSuggestions();
+    if (!list || !list.length) return;
+    var wrap = document.createElement("div");
+    wrap.className = "reg-suggest";
+    var lab = document.createElement("div");
+    lab.className = "reg-suggest__label small";
+    lab.textContent = "Логін зайнятий. Підтвердіть унікальний варіант:";
+    wrap.appendChild(lab);
+    list.forEach(function (name) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "reg-suggest__btn";
+      btn.textContent = name;
+      btn.addEventListener("click", function () {
+        if (!userInput) return;
+        userInput.value = name;
+        if (confirmed) confirmed.value = name;
+        wrap.querySelectorAll(".reg-suggest__btn").forEach(function (b) {
+          b.classList.toggle("is-picked", b === btn);
+        });
+        setStatus(userStatus, "Підтверджено: " + name, "ok");
+        state.usernameOk = true;
+        state.usernameTaken = false;
+        syncSubmit();
+        // Re-check so UI reflects free login
+        scheduleCheck();
+      });
+      wrap.appendChild(btn);
+    });
+    suggestBox.appendChild(wrap);
+    suggestBox.hidden = false;
+  }
+
+  function syncSubmit() {
+    if (!submitBtn) return;
+    var block =
+      (state.emailOk === false) ||
+      (state.usernameTaken && !(confirmed && confirmed.value));
+    submitBtn.disabled = !!block;
+  }
+
+  function scheduleCheck() {
+    if (timer) clearTimeout(timer);
+    setStatus(userStatus, userInput && userInput.value.trim() ? "Перевірка…" : "", userInput && userInput.value.trim() ? "wait" : null);
+    if (emailInput && emailInput.value.trim()) setStatus(emailStatus, "Перевірка…", "wait");
+    timer = setTimeout(runCheck, 380);
+  }
+
+  function runCheck() {
+    if (!checkUrl) return;
+    var u = userInput ? userInput.value.trim() : "";
+    var e = emailInput ? emailInput.value.trim() : "";
+    var key = u + "\0" + e;
+    if (key === lastKey && key === "\0") return;
+    lastKey = key;
+    if (!u && !e) {
+      setStatus(userStatus, "", null);
+      setStatus(emailStatus, "", null);
+      clearSuggestions();
+      state = { usernameOk: null, emailOk: null, usernameTaken: false };
+      syncSubmit();
+      return;
+    }
+    var url = checkUrl + "?username=" + encodeURIComponent(u) + "&email=" + encodeURIComponent(e);
+    fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (confirmed && confirmed.value && userInput && userInput.value.trim() !== confirmed.value) {
+          confirmed.value = "";
+        }
+        if (u) {
+          if (data.username_taken) {
+            state.usernameTaken = true;
+            state.usernameOk = false;
+            if (confirmed && confirmed.value && confirmed.value === u) {
+              setStatus(userStatus, "Підтверджено: " + u, "ok");
+              state.usernameOk = true;
+              state.usernameTaken = false;
+              clearSuggestions();
+            } else {
+              setStatus(userStatus, "Логін уже зайнятий.", "bad");
+              if (!data.email_taken) renderSuggestions(data.suggestions || []);
+              else clearSuggestions();
+            }
+          } else if (data.username_available) {
+            state.usernameTaken = false;
+            state.usernameOk = true;
+            setStatus(userStatus, "Логін вільний.", "ok");
+            clearSuggestions();
+            if (confirmed) confirmed.value = u;
+          } else {
+            setStatus(userStatus, "", null);
+            clearSuggestions();
+          }
+        } else {
+          setStatus(userStatus, "", null);
+          clearSuggestions();
+          state.usernameOk = null;
+          state.usernameTaken = false;
+        }
+        if (e) {
+          if (data.email_taken) {
+            state.emailOk = false;
+            setStatus(emailStatus, "Email уже використовується.", "bad");
+            clearSuggestions();
+          } else if (data.email_available) {
+            state.emailOk = true;
+            setStatus(emailStatus, "Email вільний.", "ok");
+            if (data.username_taken && !(confirmed && confirmed.value === u)) {
+              renderSuggestions(data.suggestions || []);
+            }
+          } else {
+            setStatus(emailStatus, "", null);
+            state.emailOk = null;
+          }
+        } else {
+          setStatus(emailStatus, "", null);
+          state.emailOk = null;
+        }
+        syncSubmit();
+      })
+      .catch(function () {
+        setStatus(userStatus, "", null);
+        setStatus(emailStatus, "", null);
+      });
+  }
+
+  if (userInput) {
+    userInput.addEventListener("input", function () {
+      if (confirmed) confirmed.value = "";
+      scheduleCheck();
+    });
+    userInput.addEventListener("blur", runCheck);
+  }
+  if (emailInput) {
+    emailInput.addEventListener("input", scheduleCheck);
+    emailInput.addEventListener("blur", runCheck);
+  }
+
+  form.addEventListener("submit", function (ev) {
+    if (state.emailOk === false) {
+      ev.preventDefault();
+      setStatus(emailStatus, "Email уже використовується.", "bad");
+      return;
+    }
+    if (state.usernameTaken && !(confirmed && confirmed.value && userInput && userInput.value.trim() === confirmed.value)) {
+      ev.preventDefault();
+      setStatus(userStatus, "Підтвердіть унікальний логін зі списку.", "bad");
+      return;
+    }
+  });
+
+  // Initial (e.g. after validation error redisplay)
+  if ((userInput && userInput.value) || (emailInput && emailInput.value)) {
+    runCheck();
+  }
+})();
+</script>
 {% endblock %}

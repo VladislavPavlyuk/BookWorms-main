@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -9,6 +9,7 @@ import {
   Share,
   StyleSheet,
   Text,
+  View,
 } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { AuthApi, setTokens } from "../../src/api";
@@ -26,8 +27,119 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [biography, setBiography] = useState("");
   const [busy, setBusy] = useState(false);
+  const [userStatus, setUserStatus] = useState("");
+  const [emailStatus, setEmailStatus] = useState("");
+  const [userOk, setUserOk] = useState<boolean | null>(null);
+  const [emailOk, setEmailOk] = useState<boolean | null>(null);
+  const [userTaken, setUserTaken] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [confirmed, setConfirmed] = useState("");
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+    const u = username.trim();
+    const e = email.trim();
+    if (!u && !e) {
+      setUserStatus("");
+      setEmailStatus("");
+      setUserOk(null);
+      setEmailOk(null);
+      setUserTaken(false);
+      setSuggestions([]);
+      return;
+    }
+    if (u) setUserStatus("Перевірка…");
+    if (e) setEmailStatus("Перевірка…");
+    timer.current = setTimeout(async () => {
+      try {
+        const data = await AuthApi.checkAvailability(u, e);
+        if (u) {
+          if (data.username_taken) {
+            if (confirmed && confirmed === u) {
+              setUserTaken(false);
+              setUserOk(true);
+              setUserStatus(`Підтверджено: ${u}`);
+              setSuggestions([]);
+            } else {
+              setUserTaken(true);
+              setUserOk(false);
+              setUserStatus("Логін уже зайнятий.");
+              setSuggestions(!data.email_taken ? data.suggestions || [] : []);
+            }
+          } else if (data.username_available) {
+            setUserTaken(false);
+            setUserOk(true);
+            setUserStatus("Логін вільний.");
+            setSuggestions([]);
+            setConfirmed(u);
+          } else {
+            setUserStatus("");
+            setSuggestions([]);
+          }
+        } else {
+          setUserStatus("");
+          setUserOk(null);
+          setUserTaken(false);
+          setSuggestions([]);
+        }
+        if (e) {
+          if (data.email_taken) {
+            setEmailOk(false);
+            setEmailStatus("Email уже використовується.");
+            setSuggestions([]);
+          } else if (data.email_available) {
+            setEmailOk(true);
+            setEmailStatus("Email вільний.");
+            if (data.username_taken && confirmed !== u) {
+              setSuggestions(data.suggestions || []);
+            }
+          } else {
+            setEmailStatus("");
+            setEmailOk(null);
+          }
+        } else {
+          setEmailStatus("");
+          setEmailOk(null);
+        }
+      } catch {
+        setUserStatus("");
+        setEmailStatus("");
+      }
+    }, 400);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [username, email, confirmed]);
+
+  const pickSuggestion = (name: string) => {
+    setUsername(name);
+    setConfirmed(name);
+    setUserTaken(false);
+    setUserOk(true);
+    setUserStatus(`Підтверджено: ${name}`);
+    setSuggestions([]);
+  };
+
+  const canSubmit =
+    !!username.trim() &&
+    !!email.trim() &&
+    !!password &&
+    emailOk !== false &&
+    !(userTaken && confirmed !== username.trim());
 
   const onSubmit = async () => {
+    if (!canSubmit) {
+      Alert.alert(
+        "Реєстрація",
+        userTaken && confirmed !== username.trim()
+          ? "Підтвердіть унікальний логін зі списку."
+          : emailOk === false
+            ? "Email уже використовується."
+            : "Заповніть логін, email і пароль."
+      );
+      return;
+    }
     setBusy(true);
     try {
       const data = await AuthApi.register(username.trim(), email.trim(), password, biography);
@@ -38,7 +150,6 @@ export default function Register() {
         return;
       }
 
-      // Free Web3Forms блокує RN fetch як server-side — лише системний браузер.
       if (data.web3forms_browser_url) {
         try {
           await Linking.openURL(data.web3forms_browser_url);
@@ -116,8 +227,34 @@ export default function Register() {
           textContentType="username"
           style={styles.input}
           value={username}
-          onChangeText={setUsername}
+          onChangeText={(t) => {
+            setUsername(t);
+            setConfirmed("");
+          }}
         />
+        {userStatus ? (
+          <Text style={[styles.live, userOk === false && styles.liveBad, userOk && styles.liveOk]}>
+            {userStatus}
+          </Text>
+        ) : null}
+        {suggestions.length > 0 ? (
+          <View style={styles.suggestBox}>
+            <Text style={styles.suggestLabel}>Підтвердіть унікальний логін:</Text>
+            <View style={styles.suggestRow}>
+              {suggestions.map((name) => (
+                <Pressable
+                  key={name}
+                  style={[styles.chip, confirmed === name && styles.chipOn]}
+                  onPress={() => pickSuggestion(name)}
+                >
+                  <Text style={[styles.chipText, confirmed === name && styles.chipTextOn]}>
+                    {name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
         <CyrillicTextInput
           placeholder="Email"
           placeholderTextColor={colors.muted}
@@ -128,6 +265,13 @@ export default function Register() {
           value={email}
           onChangeText={setEmail}
         />
+        {emailStatus ? (
+          <Text
+            style={[styles.live, emailOk === false && styles.liveBad, emailOk && styles.liveOk]}
+          >
+            {emailStatus}
+          </Text>
+        ) : null}
         <PasswordField
           placeholder="Пароль (мін. 8)"
           placeholderTextColor={colors.muted}
@@ -144,7 +288,11 @@ export default function Register() {
           autoCapitalize="sentences"
           keyboardType="default"
         />
-        <Pressable style={styles.btn} onPress={onSubmit} disabled={busy}>
+        <Pressable
+          style={[styles.btn, (!canSubmit || busy) && { opacity: 0.5 }]}
+          onPress={onSubmit}
+          disabled={busy || !canSubmit}
+        >
           <Text style={styles.btnText}>{busy ? "…" : "Зареєструватись"}</Text>
         </Pressable>
         <Link href="/(auth)/login" style={styles.link}>
@@ -170,11 +318,34 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     color: colors.ink,
     paddingVertical: s(12),
-    marginBottom: s(16),
+    marginBottom: s(8),
     fontSize: fs(16),
     minHeight: s(48),
   },
-  btn: { backgroundColor: colors.stamp, padding: s(14), marginTop: s(8), minHeight: s(54), borderRadius: btnRadius },
+  live: { color: colors.muted, fontSize: fs(13), marginBottom: s(10) },
+  liveOk: { color: colors.stampOk },
+  liveBad: { color: colors.stamp },
+  suggestBox: { marginBottom: s(12) },
+  suggestLabel: { color: colors.muted, fontSize: fs(13), marginBottom: s(8) },
+  suggestRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    paddingVertical: s(8),
+    paddingHorizontal: s(12),
+    borderRadius: btnRadius,
+  },
+  chipOn: { backgroundColor: colors.stampOk, borderColor: colors.stampOk },
+  chipText: { color: colors.ink, fontWeight: "700", fontSize: fs(13) },
+  chipTextOn: { color: colors.white },
+  btn: {
+    backgroundColor: colors.stamp,
+    padding: s(14),
+    marginTop: s(8),
+    minHeight: s(54),
+    borderRadius: btnRadius,
+  },
   btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(18) },
   link: { color: colors.muted, textAlign: "center", marginTop: s(18), fontSize: fs(16) },
 });

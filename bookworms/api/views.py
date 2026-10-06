@@ -197,6 +197,21 @@ def health(request):
     return Response(payload)
 
 
+@api_view(["GET", "POST"])
+@permission_classes([AllowAny])
+def check_registration_availability(request):
+    """Live check: username/email free; suggest ``base_XXXX`` (16-bit hex) if login taken."""
+    from mainApp.registration_availability import check_registration_availability as check
+
+    purge_expired_unactivated_users()
+    src = request.data if request.method == "POST" else request.query_params
+    payload = check(
+        username=(src.get("username") or "").strip(),
+        email=(src.get("email") or "").strip(),
+    )
+    return Response(payload)
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register(request):

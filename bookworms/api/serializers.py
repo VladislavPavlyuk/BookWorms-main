@@ -56,13 +56,28 @@ class RegisterSerializer(serializers.Serializer):
     biography = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate_username(self, value):
-        if User.objects.filter(username__iexact=value).exists():
-            raise serializers.ValidationError("Цей логін уже зайнятий.")
+        from mainApp.registration_availability import suggest_usernames, username_taken
+
+        value = (value or "").strip()
+        if username_taken(value):
+            suggestions = suggest_usernames(value)
+            detail = "Цей логін уже зайнятий."
+            if suggestions:
+                detail = (
+                    "Цей логін уже зайнятий. Оберіть запропонований унікальний логін "
+                    f"(напр. {suggestions[0]})."
+                )
+            raise serializers.ValidationError(detail)
         return value
 
     def validate_email(self, value):
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("Ця електронна адреса вже використовується.")
+        from mainApp.registration_availability import email_taken
+
+        value = (value or "").strip()
+        if email_taken(value):
+            raise serializers.ValidationError(
+                "Ця електронна адреса вже використовується."
+            )
         return value
 
     def validate_password(self, value):

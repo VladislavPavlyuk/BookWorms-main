@@ -248,6 +248,18 @@ class CustomRegisterView(CreateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
+@require_GET
+def register_check_availability(request):
+    """JSON for register page live checks (AllowAny)."""
+    from .registration_availability import check_registration_availability
+
+    purge_expired_unactivated_users()
+    payload = check_registration_availability(
+        username=(request.GET.get("username") or "").strip(),
+        email=(request.GET.get("email") or "").strip(),
+    )
+    return JsonResponse(payload)
+
 def activate(request, uidb64, token):
     purge_expired_unactivated_users()
     User = get_user_model()

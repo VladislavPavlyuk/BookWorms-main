@@ -92,10 +92,27 @@ class UserRegisterForm(UserCreationForm):
             field.widget.attrs["class"] = "form-control"
 
     def clean_email(self):
-        email = self.cleaned_data.get("email")
-        if User.objects.filter(email=email).exists():
+        from .registration_availability import email_taken
+
+        email = (self.cleaned_data.get("email") or "").strip()
+        if email_taken(email):
             raise ValidationError("Ця електронна адреса вже використовується.")
         return email
+
+    def clean_username(self):
+        from .registration_availability import suggest_usernames, username_taken
+
+        username = (self.cleaned_data.get("username") or "").strip()
+        if username_taken(username):
+            suggestions = suggest_usernames(username)
+            msg = "Цей логін уже зайнятий."
+            if suggestions:
+                msg += (
+                    " Оберіть і підтвердіть запропонований унікальний логін "
+                    f"(напр. {suggestions[0]})."
+                )
+            raise ValidationError(msg)
+        return username
 
     def save(self, commit=True):
         user = super().save(commit=False)

@@ -168,6 +168,21 @@ export const AuthApi = {
       body: { username, email, password, biography },
       auth: false,
     }),
+  checkAvailability: (username: string, email: string) => {
+    const q = new URLSearchParams();
+    if (username) q.set("username", username);
+    if (email) q.set("email", email);
+    return api<{
+      username: string;
+      email: string;
+      username_available: boolean | null;
+      email_available: boolean | null;
+      username_taken: boolean;
+      email_taken: boolean;
+      suggestions: string[];
+      message_uk: string;
+    }>(`/api/auth/check-availability/?${q.toString()}`, { auth: false });
+  },
   me: () => api<User>("/api/auth/me/"),
   updateMe: (body: { username?: string; biography?: string } | FormData) =>
     api<User>("/api/auth/me/", {

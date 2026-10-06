@@ -16,6 +16,7 @@ from .views import (
     notifications_unread_count_view,
     CustomLoginView,
     CustomRegisterView,
+    register_check_availability,
     create_post,
     delete_post,
     edit_post,
@@ -188,6 +189,11 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='logout'),
     path('login/', CustomLoginView.as_view(), name='login'),
     path('register/', CustomRegisterView.as_view(), name='register'),
+    path(
+        'register/check-availability/',
+        register_check_availability,
+        name='register_check_availability',
+    ),
     path('register/confirm-email/', confirm_email_view, name='confirm_email'),
     path(
         'register/send-web3forms/<str:token>/',
