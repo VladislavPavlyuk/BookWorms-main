@@ -102,36 +102,34 @@
 {% if snap.library.i_am_admin %}
 <div class="card mb-4">
     <div class="card-body">
-        <h2 class="h5">Об’єднати бібліотеку</h2>
-        <p class="small text-muted">Оберіть користувача — запит піде в чат, де він підтвердить або відхилить.</p>
-        <form method="post" class="row g-2 align-items-end">
+        <h2 class="h5">Код об’єднання бібліотеки</h2>
+        <p class="small text-muted">
+            Згенеруйте 4-цифровий код і передайте його іншому користувачу.
+            Код дійсний <strong>5 хвилин</strong>.
+        </p>
+        {% if snap.active_merge_code %}
+        <div class="alert alert-success d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div>
+                <div class="small text-muted mb-1">Активний код</div>
+                <div class="display-6 fw-bold font-monospace letter-spacing">{{ snap.active_merge_code.code }}</div>
+                <div class="small">залишилось ~{{ snap.active_merge_code.seconds_left }} с</div>
+            </div>
+            <form method="post" class="m-0">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="generate_merge_code">
+                <button type="submit" class="btn btn-outline-primary">Новий код</button>
+            </form>
+        </div>
+        {% else %}
+        <form method="post">
             {% csrf_token %}
-            <input type="hidden" name="action" value="invite">
-            <div class="col-md-5">
-                <label class="form-label">Користувач</label>
-                <select name="username" class="form-select" required>
-                    <option value="" disabled selected>— оберіть —</option>
-                    {% for c in snap.merge_candidates %}
-                    <option value="{{ c.username }}" {% if c.invite_pending %}disabled{% endif %}>
-                        @{{ c.username }}{% if c.invite_pending %} (очікує){% endif %}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Повідомлення (необов’язково)</label>
-                <input name="message" class="form-control" maxlength="300">
-            </div>
-            <div class="col-md-3">
-                <button type="submit" class="btn btn-primary w-100">Merge</button>
-            </div>
+            <input type="hidden" name="action" value="generate_merge_code">
+            <button type="submit" class="btn btn-primary">Згенерувати код</button>
         </form>
-        {% if not snap.merge_candidates %}
-        <p class="small text-muted mt-2 mb-0">Немає доступних користувачів для об’єднання.</p>
         {% endif %}
         {% if snap.invites_out %}
         <hr>
-        <h3 class="h6">Очікують відповіді</h3>
+        <h3 class="h6">Очікують (ISBN / завершення)</h3>
         <ul class="list-unstyled mb-0">
             {% for i in snap.invites_out %}
             <li class="d-flex justify-content-between align-items-center border-bottom py-2 gap-2">
@@ -154,6 +152,44 @@
     </div>
 </div>
 {% endif %}
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">Об’єднати бібліотеку за кодом</h2>
+        <p class="small text-muted mb-3">
+            Якщо вам передали код адміністратора іншої бібліотеки — натисніть кнопку й введіть його.
+        </p>
+        <button type="button" class="btn btn-primary" id="merge-library-reveal">
+            Merge Library
+        </button>
+        <form method="post" class="row g-2 align-items-end mt-3 d-none" id="redeem-merge-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="redeem_merge_code">
+            <div class="col-md-4">
+                <label class="form-label" for="merge_code_input">Код об’єднання</label>
+                <input name="merge_code" id="merge_code_input" class="form-control font-monospace"
+                       inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4"
+                       placeholder="••••" autocomplete="one-time-code" required>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-success w-100">Підтвердити код</button>
+            </div>
+        </form>
+        <script>
+        (function () {
+            var btn = document.getElementById("merge-library-reveal");
+            var form = document.getElementById("redeem-merge-form");
+            var input = document.getElementById("merge_code_input");
+            if (!btn || !form) return;
+            btn.addEventListener("click", function () {
+                form.classList.remove("d-none");
+                btn.classList.add("d-none");
+                if (input) input.focus();
+            });
+        })();
+        </script>
+    </div>
+</div>
 
 {% if snap.awaiting_isbn_merges %}
 <div class="card mb-4 border-danger">

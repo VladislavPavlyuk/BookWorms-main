@@ -3,7 +3,10 @@
 """
 from __future__ import annotations
 
+import re
+import secrets
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 from django.db import transaction
@@ -20,9 +23,13 @@ from .models import (
     LibraryAdminVote,
     LibraryInvite,
     LibraryMembership,
+    LibraryMergeCode,
     PrivateMessage,
     Shelf,
 )
+
+MERGE_CODE_TTL = timedelta(minutes=5)
+_MERGE_CODE_RE = re.compile(r"^\d{4}$")
 
 
 class LibraryError(ExchangeError):
@@ -250,58 +257,120 @@ def merge_candidates(admin: CustomUser) -> list[dict]:
     return out
 
 
+def _active_merge_code_for_library(lib: Library) -> LibraryMergeCode | None:
+    now = timezone.now()
+    return (
+        LibraryMergeCode.objects.filter(
+            library=lib,
+            used_at__isnull=True,
+            expires_at__gt=now,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def serialize_merge_code(mc: LibraryMergeCode | None) -> dict[str, Any] | None:
+    if not mc or not mc.is_active:
+        return None
+    seconds = max(0, int((mc.expires_at - timezone.now()).total_seconds()))
+    return {
+        "code": mc.code,
+        "expires_at": mc.expires_at.isoformat(),
+        "seconds_left": seconds,
+        "ttl_seconds": int(MERGE_CODE_TTL.total_seconds()),
+    }
+
+
+@transaction.atomic
+def generate_merge_code(admin: CustomUser) -> LibraryMergeCode:
+    """Адмін генерує 4-цифровий код об'єднання (дійсний 5 хв)."""
+    lib = user_library(admin)
+    if lib.admin_id != admin.id:
+        raise LibraryError("Лише адміністратор може згенерувати код об'єднання.")
+
+    now = timezone.now()
+    LibraryMergeCode.objects.filter(
+        library=lib, used_at__isnull=True, expires_at__gt=now
+    ).update(expires_at=now)
+
+    code = None
+    for _ in range(64):
+        candidate = f"{secrets.randbelow(10000):04d}"
+        if LibraryMergeCode.objects.filter(
+            code=candidate, used_at__isnull=True, expires_at__gt=now
+        ).exists():
+            continue
+        code = candidate
+        break
+    if code is None:
+        raise LibraryError("Не вдалося згенерувати унікальний код. Спробуйте ще раз.")
+
+    return LibraryMergeCode.objects.create(
+        library=lib,
+        created_by=admin,
+        code=code,
+        expires_at=now + MERGE_CODE_TTL,
+    )
+
+
+@transaction.atomic
+def redeem_merge_code(
+    user: CustomUser, code: str
+) -> Library | AwaitAdminIsbn:
+    """
+    Інший користувач вводить код → старт merge (як accept запрошення).
+    При спільних ISBN адмін підтверджує кількість окремо.
+    """
+    raw = (code or "").strip()
+    if not _MERGE_CODE_RE.fullmatch(raw):
+        raise LibraryError("Код об'єднання має бути рівно 4 цифри.")
+
+    now = timezone.now()
+    mc = (
+        LibraryMergeCode.objects.select_for_update(of=("self",))
+        .select_related("library", "library__admin", "created_by")
+        .filter(code=raw, used_at__isnull=True, expires_at__gt=now)
+        .first()
+    )
+    if not mc:
+        raise LibraryError("Код недійсний або прострочений.")
+
+    target = mc.library
+    if target.admin_id == user.id:
+        raise LibraryError("Не можна об'єднати бібліотеку з самою собою.")
+    if LibraryMembership.objects.filter(user=user, library=target).exists():
+        raise LibraryError("Ви вже в цій бібліотеці.")
+
+    ensure_personal_library(user)
+    source = user_library(user)
+    if source.id == target.id:
+        raise LibraryError("Ви вже в цій бібліотеці.")
+
+    inv = LibraryInvite.objects.create(
+        library=target,
+        from_user=target.admin,
+        to_user=user,
+        message="Код об'єднання",
+    )
+    mc.used_at = now
+    mc.used_by = user
+    mc.invite = inv
+    mc.save(update_fields=["used_at", "used_by", "invite"])
+
+    return accept_invite(user, inv.id)
+
+
 @transaction.atomic
 def invite_to_library(
     admin: CustomUser,
     to_username: str,
     message: str = "",
 ) -> LibraryInvite:
-    lib = user_library(admin)
-    if lib.admin_id != admin.id:
-        raise LibraryError("Лише адміністратор може запрошувати до бібліотеки.")
-    to_user = CustomUser.objects.filter(username__iexact=to_username.strip()).first()
-    if not to_user:
-        raise LibraryError("Користувача не знайдено.")
-    if to_user.id == admin.id:
-        raise LibraryError("Не можна запросити себе.")
-    ensure_personal_library(to_user)
-    if LibraryMembership.objects.filter(user=to_user, library=lib).exists():
-        raise LibraryError("Користувач уже в цій бібліотеці.")
-    pending = LibraryInvite.objects.filter(
-        library=lib,
-        to_user=to_user,
-        status=LibraryInvite.Status.PENDING,
-    ).first()
-    if pending:
-        if not PrivateMessage.objects.filter(
-            library_invite=pending, sender=admin, recipient=to_user
-        ).exists():
-            note = (message or pending.message or "").strip()
-            body = (
-                f"Запит на об'єднання бібліотек із «{lib.display_name}» "
-                f"(адмін @{admin.username})."
-            )
-            if note:
-                body = f"{body}\n\n{note}"
-            body += "\n\nПідтвердіть або відхиліть у цьому чаті."
-            _notify(to_user, body, actor=admin, library_invite=pending)
-        return pending
-    inv = LibraryInvite.objects.create(
-        library=lib,
-        from_user=admin,
-        to_user=to_user,
-        message=(message or "")[:300],
+    """Застаріло: merge лише через код. Залишено для сумісності API."""
+    raise LibraryError(
+        "Об'єднання бібліотек лише за кодом: згенеруйте код у «Спільна бібліотека»."
     )
-    note = (message or "").strip()
-    body = (
-        f"Запит на об'єднання бібліотек із «{lib.display_name}» "
-        f"(адмін @{admin.username})."
-    )
-    if note:
-        body = f"{body}\n\n{note}"
-    body += "\n\nПідтвердіть або відхиліть у цьому чаті."
-    _notify(to_user, body, actor=admin, library_invite=inv)
-    return inv
 
 
 @transaction.atomic
@@ -1488,5 +1557,10 @@ def library_snapshot(user: CustomUser) -> dict[str, Any]:
         ],
         "election": election,
         "splittable_copies": splittable_copies_for(user, lib),
-        "merge_candidates": merge_candidates(user) if lib.admin_id == user.id else [],
+        "merge_candidates": [],
+        "active_merge_code": (
+            serialize_merge_code(_active_merge_code_for_library(lib))
+            if lib.admin_id == user.id
+            else None
+        ),
     }

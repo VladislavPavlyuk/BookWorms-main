@@ -855,6 +855,7 @@ def my_library(request):
 def shared_library(request):
     """Спільна бібліотека: merge/split, голосування за адміна, approve дій."""
     from .library_service import (
+        AwaitAdminIsbn,
         LibraryError,
         accept_invite,
         admin_confirm_merge_isbn,
@@ -862,8 +863,9 @@ def shared_library(request):
         cancel_invite,
         cast_admin_vote,
         finalize_admin_election,
-        invite_to_library,
+        generate_merge_code,
         library_snapshot,
+        redeem_merge_code,
         reject_invite,
         request_split_leave,
         resolve_action,
@@ -873,17 +875,27 @@ def shared_library(request):
     if request.method == "POST":
         action = request.POST.get("action")
         try:
-            if action == "invite":
-                inv = invite_to_library(
-                    request.user,
-                    request.POST.get("username") or "",
-                    request.POST.get("message") or "",
-                )
+            if action == "generate_merge_code":
+                mc = generate_merge_code(request.user)
                 messages.success(
                     request,
-                    "Запит на об'єднання надіслано в чат.",
+                    f"Код об'єднання: {mc.code} (дійсний 5 хв).",
                 )
-                return redirect("message_thread", partner_id=inv.to_user_id)
+            elif action == "redeem_merge_code":
+                result = redeem_merge_code(
+                    request.user, request.POST.get("merge_code") or ""
+                )
+                if isinstance(result, AwaitAdminIsbn):
+                    messages.info(
+                        request,
+                        "Код прийнято. Адміністратор має підтвердити кількість "
+                        "спільних ISBN.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        "Бібліотеки об'єднано. За потреби проголосуйте за адміністратора.",
+                    )
             elif action == "cancel_invite":
                 cancel_invite(request.user, int(request.POST.get("invite_id")))
                 messages.info(request, "Запрошення скасовано.")
@@ -891,8 +903,6 @@ def shared_library(request):
                 reject_invite(request.user, int(request.POST.get("invite_id")))
                 messages.info(request, "Запрошення відхилено.")
             elif action == "accept_invite":
-                from .library_service import AwaitAdminIsbn
-
                 result = accept_invite(
                     request.user,
                     int(request.POST.get("invite_id")),

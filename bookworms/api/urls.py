@@ -62,6 +62,8 @@ urlpatterns = [
     path("notifications/mark-read/", views.notifications_mark_read),
     path("library/", views.library_mine),
     path("library/invite/", views.library_invite),
+    path("library/merge-code/generate/", views.library_merge_code_generate),
+    path("library/merge-code/redeem/", views.library_merge_code_redeem),
     path("library/invite/<int:invite_id>/cancel/", views.library_invite_cancel),
     path("library/invite/<int:invite_id>/reject/", views.library_invite_reject),
     path("library/invite/<int:invite_id>/accept/", views.library_invite_accept),

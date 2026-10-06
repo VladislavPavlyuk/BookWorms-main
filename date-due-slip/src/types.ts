@@ -337,6 +337,12 @@ export type LibrarySnapshot = {
     overlap: LibraryOverlap[];
   }[];
   merge_candidates?: { id: number; username: string; invite_pending: boolean }[];
+  active_merge_code?: {
+    code: string;
+    expires_at: string;
+    seconds_left: number;
+    ttl_seconds: number;
+  } | null;
   pending_actions: {
     id: number;
     action_type: string;

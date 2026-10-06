@@ -20,9 +20,9 @@ function emptyIsbnEdits(rows: LibraryOverlap[]): Record<string, string> {
 export default function SharedLibraryScreen() {
   const router = useRouter();
   const [snap, setSnap] = useState<LibrarySnapshot | null>(null);
-  const [username, setUsername] = useState("");
-  const [inviteMsg, setInviteMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showRedeem, setShowRedeem] = useState(false);
+  const [mergeCode, setMergeCode] = useState("");
   const [mergeInviteId, setMergeInviteId] = useState<number | null>(null);
   const [mergeOverlap, setMergeOverlap] = useState<LibraryOverlap[]>([]);
   const [isbnEdits, setIsbnEdits] = useState<Record<string, string>>({});
@@ -41,18 +41,43 @@ export default function SharedLibraryScreen() {
 
   if (!snap) return null;
 
-  const invite = async () => {
-    if (!username.trim()) {
-      Alert.alert("Merge", "Оберіть користувача зі списку.");
+  const generateCode = async () => {
+    setBusy(true);
+    try {
+      const res = await LibraryApi.generateMergeCode();
+      await load();
+      Alert.alert(
+        "Код об'єднання",
+        `${res.code}\n\nДійсний ~${Math.max(1, Math.round(res.seconds_left / 60))} хв. Передайте іншому користувачу.`
+      );
+    } catch (e) {
+      Alert.alert("Merge", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const redeemCode = async () => {
+    const code = mergeCode.trim();
+    if (!/^\d{4}$/.test(code)) {
+      Alert.alert("Merge", "Введіть 4-цифровий код.");
       return;
     }
     setBusy(true);
     try {
-      const res = await LibraryApi.invite(username.trim(), inviteMsg.trim());
-      setUsername("");
-      setInviteMsg("");
+      const res = await LibraryApi.redeemMergeCode(code);
+      setMergeCode("");
+      setShowRedeem(false);
       await load();
-      router.push(`/chat/${res.chat_partner_id}`);
+      if (res.awaiting_admin_isbn) {
+        Alert.alert(
+          "Об'єднання",
+          res.detail ||
+            "Код прийнято. Адміністратор підтвердить кількість спільних ISBN."
+        );
+        return;
+      }
+      Alert.alert("Об'єднання", "Готово. За потреби проголосуйте за адміна.");
     } catch (e) {
       Alert.alert("Merge", e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -216,48 +241,26 @@ export default function SharedLibraryScreen() {
 
       {snap.library.i_am_admin ? (
         <View style={styles.block}>
-          <Text style={styles.h2}>Об'єднати бібліотеку</Text>
+          <Text style={styles.h2}>Код об'єднання</Text>
           <Text style={styles.meta}>
-            Оберіть користувача — запит піде в чат для підтвердження.
+            Згенеруйте 4-цифровий код (дійсний 5 хв) і передайте іншому користувачу.
           </Text>
-          {(snap.merge_candidates || []).length === 0 ? (
-            <Text style={styles.meta}>Немає доступних користувачів.</Text>
-          ) : (
-            <View style={{ marginBottom: 10, maxHeight: 180 }}>
-              <ScrollView nestedScrollEnabled>
-                {(snap.merge_candidates || []).map((c) => (
-                  <Pressable
-                    key={c.id}
-                    disabled={c.invite_pending}
-                    onPress={() => setUsername(c.username)}
-                    style={[
-                      styles.candidate,
-                      username === c.username && styles.candidateOn,
-                      c.invite_pending && { opacity: 0.45 },
-                    ]}
-                  >
-                    <Text style={styles.row}>
-                      @{c.username}
-                      {c.invite_pending ? " (очікує)" : ""}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-          <CyrillicTextInput
-            style={[styles.input, { marginBottom: 8 }]}
-            value={inviteMsg}
-            onChangeText={setInviteMsg}
-            placeholder="Повідомлення (необов’язково)"
-            placeholderTextColor={colors.muted}
-          />
+          {snap.active_merge_code ? (
+            <>
+              <Text style={styles.code}>{snap.active_merge_code.code}</Text>
+              <Text style={styles.meta}>
+                залишилось ~{snap.active_merge_code.seconds_left} с
+              </Text>
+            </>
+          ) : null}
           <Pressable
-            style={[styles.btn, (busy || !username) && { opacity: 0.6 }]}
-            onPress={invite}
-            disabled={busy || !username}
+            style={[styles.btn, busy && { opacity: 0.6 }]}
+            onPress={generateCode}
+            disabled={busy}
           >
-            <Text style={styles.btnText}>Merge</Text>
+            <Text style={styles.btnText}>
+              {snap.active_merge_code ? "Новий код" : "Згенерувати код"}
+            </Text>
           </Pressable>
           {snap.invites_out.map((i) => (
             <View key={i.id} style={styles.inviteRow}>
@@ -268,7 +271,10 @@ export default function SharedLibraryScreen() {
                     : undefined
                 }
               >
-                <Text style={styles.row}>→ @{i.to_username} (чат)</Text>
+                <Text style={styles.row}>
+                  → @{i.to_username}
+                  {i.status === "awaiting_isbn" ? " (ISBN)" : ""}
+                </Text>
               </Pressable>
               <Pressable onPress={() => LibraryApi.cancelInvite(i.id).then(load)}>
                 <Text style={styles.link}>Скасувати</Text>
@@ -277,6 +283,49 @@ export default function SharedLibraryScreen() {
           ))}
         </View>
       ) : null}
+
+      <View style={styles.block}>
+        <Text style={styles.h2}>Об'єднати бібліотеку за кодом</Text>
+        <Text style={styles.meta}>
+          Натисніть Merge Library і введіть код адміністратора іншої бібліотеки.
+        </Text>
+        {!showRedeem ? (
+          <Pressable style={styles.btn} onPress={() => setShowRedeem(true)}>
+            <Text style={styles.btnText}>Merge Library</Text>
+          </Pressable>
+        ) : (
+          <>
+            <CyrillicTextInput
+              style={[styles.input, { marginBottom: 8, letterSpacing: 4 }]}
+              value={mergeCode}
+              onChangeText={(t) => setMergeCode(t.replace(/\D/g, "").slice(0, 4))}
+              placeholder="••••"
+              placeholderTextColor={colors.muted}
+              keyboardType="number-pad"
+              maxLength={4}
+              autoFocus
+            />
+            <View style={styles.rowBtns}>
+              <Pressable
+                style={[styles.btn, (busy || mergeCode.length !== 4) && { opacity: 0.6 }]}
+                onPress={redeemCode}
+                disabled={busy || mergeCode.length !== 4}
+              >
+                <Text style={styles.btnText}>Підтвердити код</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.btn, styles.btnGhost]}
+                onPress={() => {
+                  setShowRedeem(false);
+                  setMergeCode("");
+                }}
+              >
+                <Text style={[styles.btnText, { color: colors.ink }]}>Скасувати</Text>
+              </Pressable>
+            </View>
+          </>
+        )}
+      </View>
 
       {(snap.awaiting_isbn_merges || []).length > 0 ||
       (mergeOverlap.length > 0 && mergeInviteId != null) ? (
@@ -484,13 +533,13 @@ const styles = StyleSheet.create({
   inviteRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
   link: { color: colors.stamp, fontWeight: "700", paddingHorizontal: 8 },
   checkRow: { paddingVertical: 6 },
-  candidate: {
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  candidateOn: {
-    backgroundColor: colors.paperDark,
+  code: {
+    fontSize: fs(36),
+    fontWeight: "800",
+    letterSpacing: 8,
+    color: colors.ink,
+    marginTop: 8,
+    marginBottom: 4,
+    fontVariant: ["tabular-nums"],
   },
 });

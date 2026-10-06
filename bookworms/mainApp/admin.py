@@ -16,6 +16,7 @@ from .models import (
     LibraryAdminVote,
     LibraryInvite,
     LibraryMembership,
+    LibraryMergeCode,
     LoanHandoff,
     Post,
     PreprintedQrToken,
@@ -293,6 +294,22 @@ class LibraryInviteAdmin(admin.ModelAdmin):
     list_display = ("id", "library", "from_user", "to_user", "status", "created_at")
     list_filter = ("status",)
     raw_id_fields = ("library", "from_user", "to_user")
+
+
+@admin.register(LibraryMergeCode)
+class LibraryMergeCodeAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "code",
+        "library",
+        "created_by",
+        "expires_at",
+        "used_at",
+        "used_by",
+    )
+    list_filter = ("expires_at",)
+    raw_id_fields = ("library", "created_by", "used_by", "invite")
+    search_fields = ("code",)
 
 
 @admin.register(LibraryAction)

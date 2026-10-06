@@ -1636,24 +1636,54 @@ def library_mine(request):
 
 @api_view(["POST"])
 def library_invite(request):
-    from mainApp.library_service import LibraryError, invite_to_library
+    """Застаріло: merge лише через код."""
+    return _error(
+        "Об'єднання бібліотек лише за кодом: POST /api/library/merge-code/generate/"
+    )
 
-    username = (request.data.get("username") or "").strip()
-    message = (request.data.get("message") or "").strip()
-    if not username:
-        return _error("Вкажіть username.")
+
+@api_view(["POST"])
+def library_merge_code_generate(request):
+    from mainApp.library_service import (
+        LibraryError,
+        generate_merge_code,
+        serialize_merge_code,
+    )
+
     try:
-        inv = invite_to_library(request.user, username, message)
+        mc = generate_merge_code(request.user)
     except LibraryError as e:
         return _error(e.message)
+    return Response(serialize_merge_code(mc), status=201)
+
+
+@api_view(["POST"])
+def library_merge_code_redeem(request):
+    from mainApp.library_service import (
+        AwaitAdminIsbn,
+        LibraryError,
+        redeem_merge_code,
+    )
+
+    code = (request.data.get("code") or request.data.get("merge_code") or "").strip()
+    try:
+        result = redeem_merge_code(request.user, code)
+    except LibraryError as e:
+        return _error(e.message)
+    if isinstance(result, AwaitAdminIsbn):
+        return Response(
+            {
+                "awaiting_admin_isbn": True,
+                "invite_id": result.invite.id,
+                "overlap": result.overlap,
+                "detail": (
+                    "Код прийнято. Адміністратор підтвердить кількість спільних ISBN."
+                ),
+            },
+            status=200,
+        )
     return Response(
-        {
-            "id": inv.id,
-            "to_username": inv.to_user.username,
-            "to_user_id": inv.to_user_id,
-            "chat_partner_id": inv.to_user_id,
-        },
-        status=201,
+        {"ok": True, "library_id": result.id, "name": result.display_name}
     )
 
 

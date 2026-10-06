@@ -565,14 +565,26 @@ export const QueueApi = {
 
 export const LibraryApi = {
   mine: () => api<LibrarySnapshot>("/api/library/"),
-  invite: (username: string, message = "") =>
-    api<{ id: number; to_username: string; to_user_id: number; chat_partner_id: number }>(
-      "/api/library/invite/",
-      {
-        method: "POST",
-        body: { username, message },
-      }
-    ),
+  generateMergeCode: () =>
+    api<{
+      code: string;
+      expires_at: string;
+      seconds_left: number;
+      ttl_seconds: number;
+    }>("/api/library/merge-code/generate/", { method: "POST", body: {} }),
+  redeemMergeCode: (code: string) =>
+    api<{
+      ok?: boolean;
+      library_id?: number;
+      name?: string;
+      awaiting_admin_isbn?: boolean;
+      invite_id?: number;
+      overlap?: unknown[];
+      detail?: string;
+    }>("/api/library/merge-code/redeem/", {
+      method: "POST",
+      body: { code },
+    }),
   acceptInvite: (inviteId: number, isbn_counts: Record<string, number> = {}) =>
     api<{
       ok?: boolean;

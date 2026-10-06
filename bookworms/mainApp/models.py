@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 # Діапазон років для рекомендації (18 = "18+" у підписах).
 READER_AGE_MIN = 0
@@ -501,6 +502,57 @@ class LibraryInvite(models.Model):
 
     def __str__(self):
         return f"invite#{self.pk} {self.from_user_id}→{self.to_user_id} ({self.status})"
+
+
+class LibraryMergeCode(models.Model):
+    """Короткоживучий 4-цифровий код для старту об'єднання бібліотек."""
+
+    library = models.ForeignKey(
+        Library,
+        on_delete=models.CASCADE,
+        related_name="merge_codes",
+        verbose_name="Цільова бібліотека",
+    )
+    created_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="library_merge_codes_created",
+        verbose_name="Хто згенерував",
+    )
+    code = models.CharField(max_length=4, db_index=True, verbose_name="Код")
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True, verbose_name="Дійсний до")
+    used_at = models.DateTimeField(null=True, blank=True)
+    used_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="library_merge_codes_used",
+        verbose_name="Хто використав",
+    )
+    invite = models.ForeignKey(
+        LibraryInvite,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="merge_codes",
+        verbose_name="Створене запрошення",
+    )
+
+    class Meta:
+        verbose_name = "код об'єднання бібліотек"
+        verbose_name_plural = "коди об'єднання бібліотек"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"merge-code {self.code} lib#{self.library_id}"
+
+    @property
+    def is_active(self) -> bool:
+        if self.used_at is not None:
+            return False
+        return self.expires_at > timezone.now()
 
 
 class LibraryAction(models.Model):
