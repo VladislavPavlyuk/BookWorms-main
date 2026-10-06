@@ -795,11 +795,16 @@ input[type="button"].btn {
 }
 
 .create-post-fab__cam,
-.create-post-fab__mail {
+.create-post-fab__mail,
+.create-post-fab__send {
     display: block;
     color: #fff;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
     pointer-events: none;
+}
+
+.create-post-fab__send {
+    margin-left: 2px; /* optical center for paper-plane */
 }
 
 .create-post-fab__btn:hover,
@@ -817,6 +822,14 @@ input[type="button"].btn {
 .create-post-fab__btn:active {
     transform: scale(0.96);
     filter: brightness(0.97);
+}
+
+.create-post-fab__btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+    filter: none;
+    pointer-events: none;
 }
 
 .create-post-fab__menu {
@@ -1712,4 +1725,87 @@ html {
 
 .password-toggle__btn.is-visible .password-toggle__icon--hide {
     display: block;
+}
+
+/* Chat composer — send under textarea, right-aligned */
+.chat-composer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.chat-composer .form-control {
+    border-radius: 12px !important;
+    min-height: 6.5rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chat-composer .form-control:focus {
+    border-color: rgba(194, 59, 34, 0.45);
+    box-shadow: 0 0 0 0.2rem rgba(194, 59, 34, 0.15);
+}
+
+.chat-composer__actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.chat-send-btn {
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: 2px solid rgba(255, 255, 255, 0.55);
+    border-radius: 50%;
+    color: #fff;
+    background:
+        linear-gradient(145deg,
+            #ffcc33 0%,
+            #ff8a3d 32%,
+            #e83e8c 68%,
+            #6b2d9b 100%);
+    box-shadow:
+        0 8px 20px rgba(232, 62, 140, 0.38),
+        0 3px 10px rgba(26, 36, 51, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        filter 0.2s ease,
+        opacity 0.2s ease;
+}
+
+.chat-send-btn__glyph {
+    display: block;
+    margin-left: 2px; /* optical center for paper-plane */
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+    pointer-events: none;
+    transition: transform 0.2s ease;
+}
+
+.chat-send-btn:hover,
+.chat-send-btn:focus-visible {
+    color: #fff;
+    transform: scale(1.08) translateY(-1px);
+    filter: brightness(1.05);
+    outline: none;
+    box-shadow:
+        0 12px 28px rgba(232, 62, 140, 0.48),
+        0 5px 12px rgba(26, 36, 51, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.chat-send-btn:hover .chat-send-btn__glyph,
+.chat-send-btn:focus-visible .chat-send-btn__glyph {
+    transform: translateX(1px) translateY(-1px);
+}
+
+.chat-send-btn:active {
+    transform: scale(0.94);
+    filter: brightness(0.97);
+    transition-duration: 0.1s;
 }

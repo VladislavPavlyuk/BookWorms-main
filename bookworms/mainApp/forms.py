@@ -264,8 +264,15 @@ class EditBookManualForm(AddBookManualForm):
 class SendExchangePartnerMessageForm(forms.Form):
     """Лише текст: одержувач задається з контексту обміну/позики (partner id у view)."""
     body = forms.CharField(
-        label="Текст повідомлення",
-        widget=forms.Textarea(attrs={"class": "form-control", "rows": 4}),
+        label="",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 4,
+                "aria-label": "Текст повідомлення",
+                "placeholder": "Повідомлення…",
+            }
+        ),
     )
 
 

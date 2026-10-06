@@ -439,42 +439,41 @@
     <div class="col-lg-4">
         {% if partners|length > 1 %}
         <div class="card shadow-sm mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Інші діалоги</h5>
-                <ul class="list-unstyled small mb-0">
-                    {% for p in partners %}
-                        {% if p.id != partner.id %}
-                            <li class="mb-2">
-                                {% shelf_user_link p %}
-                                <span class="text-muted mx-1">|</span>
-                                <a href="{% url 'message_thread' p.id %}">чат</a>
-                            </li>
-                        {% endif %}
-                    {% endfor %}
-                </ul>
+            <div class="card-body py-2">
+                <div class="chat-other-dialogs d-flex flex-wrap align-items-baseline gap-2 small mb-0">
+                    <span class="fw-semibold text-nowrap">Інші діалоги</span>
+                    <span class="chat-other-dialogs__links d-flex flex-wrap align-items-baseline gap-2 ms-auto">
+                        {% for p in partners %}
+                            {% if p.id != partner.id %}
+                                <a href="{% url 'message_thread' p.id %}" class="text-nowrap">{{ p.username }}</a>
+                            {% endif %}
+                        {% endfor %}
+                    </span>
+                </div>
             </div>
         </div>
         {% endif %}
 
-        <div class="card shadow-sm">
+        <div class="card shadow-sm" id="chat-composer-card">
             <div class="card-body">
                 <h5 class="card-title">Написати {% shelf_user_link partner %}</h5>
-                <form method="post">
+                <form method="post" class="chat-composer" id="chat-composer">
                     {% csrf_token %}
                     <input type="hidden" name="send_message" value="1">
-                    <div class="mb-3">
-                        <label class="form-label" for="{{ form.body.id_for_label }}">{{ form.body.label }}</label>
+                    <div class="chat-composer__field mb-0">
                         {{ form.body }}
                         {% if form.body.errors %}<div class="text-danger small">{{ form.body.errors }}</div>{% endif %}
                     </div>
-                    <button type="submit"
-                            class="btn btn-primary btn-icon-action"
-                            title="Відправити"
-                            aria-label="Відправити">
-                        <svg class="btn-icon-action__glyph" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                            <path fill="currentColor" d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/>
-                        </svg>
-                    </button>
+                    <div class="chat-composer__actions">
+                        <button type="submit"
+                                class="chat-send-btn"
+                                title="Відправити"
+                                aria-label="Відправити">
+                            <svg class="chat-send-btn__glyph" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path fill="currentColor" d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/>
+                            </svg>
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
@@ -484,18 +483,50 @@
 <script>
 (function () {
     var panel = document.getElementById("chat-thread-panel");
-    if (!panel) return;
-    function scrollToBottom() {
+    var composer = document.getElementById("chat-composer-card") || document.getElementById("chat-composer");
+    var bodyField = document.getElementById("{{ form.body.id_for_label }}");
+
+    function isAdaptive() {
+        return window.matchMedia(
+            "(max-width: 991.98px), (max-width: 1200px) and (hover: none) and (pointer: coarse)"
+        ).matches;
+    }
+
+    function scrollPanelToBottom() {
+        if (!panel) return;
         panel.scrollTop = panel.scrollHeight;
     }
-    scrollToBottom();
+
+    function scrollToComposer() {
+        if (!composer || !isAdaptive()) return;
+        // Page scroll so the message field sits in view under the fixed navbar
+        composer.scrollIntoView({ behavior: "smooth", block: "end" });
+        if (bodyField && typeof bodyField.focus === "function") {
+            try {
+                bodyField.focus({ preventScroll: true });
+            } catch (e) {
+                bodyField.focus();
+            }
+        }
+    }
+
+    scrollPanelToBottom();
     requestAnimationFrame(function () {
-        requestAnimationFrame(scrollToBottom);
+        requestAnimationFrame(function () {
+            scrollPanelToBottom();
+            scrollToComposer();
+        });
     });
     if (window.document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(scrollToBottom);
+        document.fonts.ready.then(function () {
+            scrollPanelToBottom();
+            scrollToComposer();
+        });
     }
-    window.addEventListener("load", scrollToBottom);
+    window.addEventListener("load", function () {
+        scrollPanelToBottom();
+        scrollToComposer();
+    });
 })();
 </script>
 

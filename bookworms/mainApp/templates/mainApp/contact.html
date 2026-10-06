@@ -72,11 +72,25 @@
                    multiple>
             <div class="form-text">До {{ max_screenshots }} зображень, кожне до {{ max_file_mb }} МБ.</div>
             <ul id="contactFileList" class="small text-muted mt-2 mb-0"></ul>
-            <div id="contactFileError" class="text-danger small mt-1" hidden></div>
+        <div id="contactFileError" class="text-danger small mt-1" hidden></div>
         </div>
-
-        <button type="submit" class="btn btn-primary" id="contactSubmitBtn">Надіслати</button>
     </form>
+</div>
+{% endblock %}
+
+{% block body_modals %}
+{# Same corner as Create Post; submits #contactDevelopersForm #}
+<div class="create-post-fab">
+    <button type="submit"
+            form="contactDevelopersForm"
+            class="create-post-fab__btn"
+            id="contactSubmitBtn"
+            title="Надіслати"
+            aria-label="Надіслати">
+        <svg class="create-post-fab__send" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+    </button>
 </div>
 {% endblock %}
 
@@ -192,7 +206,7 @@
       fd.append("attachment", f, f.name);
     });
 
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     setStatus("Надсилаємо через Web3Forms…", "info");
     fetch(endpoint, { method: "POST", body: fd })
       .then(function (r) {
@@ -217,7 +231,7 @@
         setStatus("Мережева помилка: " + err, "danger");
       })
       .finally(function () {
-        btn.disabled = false;
+        if (btn) btn.disabled = false;
       });
   });
 })();

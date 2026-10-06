@@ -807,15 +807,21 @@ export default function Chat() {
           multiline
           editable={!busy}
         />
-        <Pressable
-          onPress={send}
-          disabled={busy || !body.trim()}
-          accessibilityRole="button"
-          accessibilityLabel="Відправити"
-          style={[styles.sendBtn, (!body.trim() || busy) && { opacity: 0.4 }]}
-        >
-          <Ionicons name="send" size={22} color={colors.stamp} />
-        </Pressable>
+        <View style={styles.sendRow}>
+          <Pressable
+            onPress={send}
+            disabled={busy || !body.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Відправити"
+            style={({ pressed }) => [
+              styles.sendBtn,
+              pressed && styles.sendBtnPressed,
+              (!body.trim() || busy) && styles.sendBtnDisabled,
+            ]}
+          >
+            <Ionicons name="send" size={20} color="#fff" />
+          </Pressable>
+        </View>
       </View>
 
       <Modal
@@ -928,8 +934,8 @@ const styles = StyleSheet.create({
   msgMine: { color: colors.ink },
   exLink: { color: colors.stamp, fontWeight: "700", marginTop: 6, fontSize: 12 },
   bar: {
-    flexDirection: "row",
-    alignItems: "flex-end",
+    flexDirection: "column",
+    alignItems: "stretch",
     padding: 10,
     borderTopWidth: 1,
     borderColor: colors.line,
@@ -937,17 +943,37 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   input: {
-    flex: 1,
+    width: "100%",
     minHeight: 40,
     maxHeight: 120,
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
     color: colors.ink,
     backgroundColor: "#fff",
   },
+  sendRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
   send: { color: colors.stamp, fontWeight: "800", paddingVertical: 10, paddingHorizontal: 4 },
-  sendBtn: { paddingVertical: 10, paddingHorizontal: 8, justifyContent: "center" },
+  sendBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.stamp,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.55)",
+    paddingLeft: 2,
+  },
+  sendBtnPressed: {
+    transform: [{ scale: 0.94 }],
+    opacity: 0.92,
+  },
+  sendBtnDisabled: { opacity: 0.4 },
 });
