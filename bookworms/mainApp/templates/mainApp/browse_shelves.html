@@ -158,9 +158,6 @@
                 {% endwith %}
             {% endfor %}
         </div>
-        <div class="d-flex flex-wrap align-items-center gap-3 mt-2 mb-4">
-            <button type="submit" class="btn btn-primary">Надіслати запити для обраних</button>
-        </div>
     </form>
 {% else %}
     <p class="text-muted">Немає примірників у каталозі.</p>
@@ -211,4 +208,21 @@
 })();
 </script>
 
+{% endblock %}
+
+{% block body_modals %}
+{% if others_grouped %}
+{# Outside .site-main so fixed FAB isn't trapped under z-index:1 stacking #}
+<div class="create-post-fab">
+    <button type="submit"
+            form="batch-exchange-form"
+            class="create-post-fab__btn"
+            title="Надіслати запити для обраних"
+            aria-label="Надіслати запити для обраних">
+        <svg class="create-post-fab__mail" width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
+        </svg>
+    </button>
+</div>
+{% endif %}
 {% endblock %}
