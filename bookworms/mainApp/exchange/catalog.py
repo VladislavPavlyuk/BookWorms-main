@@ -1,9 +1,36 @@
 """Book catalog resolve/sync from ISBN providers (SRP)."""
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+from typing import Any
+
 from ..error_handling import domain_guard
 from ..exceptions import ExchangeInvalidState, ExchangeNotFound
 from ..models import Book
+
+# CharField / URLField / TextField keys → max length (None = TextField)
+_STRING_FIELDS: tuple[tuple[str, int | None], ...] = (
+    ("title", 500),
+    ("title_long", 500),
+    ("authors", 500),
+    ("publisher", 300),
+    ("publish_date", 64),
+    ("binding", 64),
+    ("language", 32),
+    ("edition", 64),
+    ("dimensions", 200),
+    ("overview", None),
+    ("synopsis", None),
+    ("excerpt", None),
+    ("cover_url", 500),
+    ("cover_url_original", 500),
+    ("info_url", 500),
+    ("cover_text", None),
+    ("catalog_source", 64),
+    ("isbn10", 10),
+)
+
+_JSON_FIELDS = ("subjects", "other_isbns", "dewey_decimal", "dimensions_data")
 
 
 def sync_book_from_payload(
@@ -18,16 +45,18 @@ def sync_book_from_payload(
     overwrite=True: replace with non-empty catalog values (ISBN re-resolve / refresh).
     """
     changed_fields: list[str] = []
-    mapping = (
-        ("title", 500),
-        ("authors", 500),
-        ("publisher", 300),
-        ("publish_date", 64),
-        ("cover_url", 500),
-        ("info_url", 500),
-    )
-    for field, maxlen in mapping:
-        new = (payload.get(field) or "").strip()[:maxlen]
+
+    for field, maxlen in _STRING_FIELDS:
+        if field not in payload and field == "catalog_source":
+            # map legacy `source` key from providers
+            raw = payload.get("source")
+        else:
+            raw = payload.get(field)
+        if raw is None:
+            continue
+        new = str(raw).strip()
+        if maxlen is not None:
+            new = new[:maxlen]
         if not new:
             continue
         old = (getattr(book, field) or "").strip()
@@ -36,13 +65,51 @@ def sync_book_from_payload(
         if new != old:
             setattr(book, field, new)
             changed_fields.append(field)
-    cover_text = (payload.get("cover_text") or "").strip()
-    if cover_text and (
-        overwrite or not (book.cover_text or "").strip()
-    ):
-        if cover_text != (book.cover_text or "").strip():
-            book.cover_text = cover_text
-            changed_fields.append("cover_text")
+
+    # pages
+    if "pages" in payload and payload.get("pages") is not None:
+        try:
+            pages = int(payload["pages"])
+        except (TypeError, ValueError):
+            pages = None
+        if pages is not None and pages >= 0:
+            old_p = book.pages
+            if old_p is None or overwrite:
+                if pages != old_p:
+                    book.pages = pages
+                    changed_fields.append("pages")
+
+    # msrp
+    if "msrp" in payload and payload.get("msrp") is not None:
+        try:
+            msrp = Decimal(str(payload["msrp"]))
+        except (InvalidOperation, TypeError, ValueError):
+            msrp = None
+        if msrp is not None:
+            old_m = book.msrp
+            if old_m is None or overwrite:
+                if old_m != msrp:
+                    book.msrp = msrp
+                    changed_fields.append("msrp")
+
+    for field in _JSON_FIELDS:
+        if field not in payload:
+            continue
+        new_val = payload.get(field)
+        if new_val is None:
+            continue
+        if isinstance(new_val, list) and not new_val:
+            continue
+        if isinstance(new_val, dict) and not new_val:
+            continue
+        old_val = getattr(book, field, None)
+        empty_old = old_val in (None, [], {}, "")
+        if not empty_old and not overwrite:
+            continue
+        if new_val != old_val:
+            setattr(book, field, new_val)
+            changed_fields.append(field)
+
     # Prefer ISBN-13 when catalog returns a different candidate for the same work.
     new_isbn = (payload.get("isbn") or "").strip()
     if (
@@ -53,8 +120,11 @@ def sync_book_from_payload(
     ):
         book.isbn = new_isbn[:13]
         changed_fields.append("isbn")
+
     if changed_fields:
-        book.save(update_fields=changed_fields)
+        # unique + stable order
+        uniq = list(dict.fromkeys(changed_fields))
+        book.save(update_fields=uniq)
     return book
 
 
@@ -62,15 +132,36 @@ def get_or_create_book_from_payload(
     payload: dict, *, overwrite: bool = False
 ) -> tuple[Book, bool]:
     isbn = (payload.get("isbn") or "").strip()
-    defaults = {
-        "title": (payload.get("title") or "").strip()[:500],
-        "authors": (payload.get("authors") or "").strip()[:500],
-        "publisher": (payload.get("publisher") or "").strip()[:300],
-        "publish_date": (payload.get("publish_date") or "").strip()[:64],
-        "cover_url": (payload.get("cover_url") or "").strip()[:500],
-        "info_url": (payload.get("info_url") or "").strip()[:500],
-        "cover_text": (payload.get("cover_text") or "").strip(),
+    defaults: dict[str, Any] = {
+        "title": (payload.get("title") or "").strip()[:500] or "Книга",
     }
+    for field, maxlen in _STRING_FIELDS:
+        if field == "title":
+            continue
+        raw = payload.get(field)
+        if field == "catalog_source" and raw is None:
+            raw = payload.get("source")
+        if raw is None:
+            continue
+        val = str(raw).strip()
+        if maxlen is not None:
+            val = val[:maxlen]
+        if val:
+            defaults[field] = val
+    if payload.get("pages") is not None:
+        try:
+            defaults["pages"] = int(payload["pages"])
+        except (TypeError, ValueError):
+            pass
+    if payload.get("msrp") is not None:
+        try:
+            defaults["msrp"] = Decimal(str(payload["msrp"]))
+        except (InvalidOperation, TypeError, ValueError):
+            pass
+    for field in _JSON_FIELDS:
+        if payload.get(field) not in (None, [], {}):
+            defaults[field] = payload[field]
+
     book, created = Book.objects.get_or_create(isbn=isbn, defaults=defaults)
     if not created:
         sync_book_from_payload(book, payload, overwrite=overwrite)

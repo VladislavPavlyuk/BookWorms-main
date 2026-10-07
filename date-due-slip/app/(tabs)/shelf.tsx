@@ -881,6 +881,10 @@ export default function ShelfScreen() {
               </ScrollView>
             ) : null}
             <Text style={styles.title}>{detailShelf.book.title}</Text>
+            {detailShelf.book.title_long &&
+            detailShelf.book.title_long !== detailShelf.book.title ? (
+              <Text style={styles.meta}>{detailShelf.book.title_long}</Text>
+            ) : null}
             <Text style={styles.meta}>
               {detailShelf.book.authors || "Автор невідомий"}
               {"\n"}
@@ -888,10 +892,72 @@ export default function ShelfScreen() {
               {detailShelf.book.isbn?.startsWith("9799") || detailShelf.book.isbn_missing
                 ? detailShelf.book.note || "ISBN code not exists"
                 : detailShelf.book.isbn
-                  ? `ISBN ${detailShelf.book.isbn}`
+                  ? `ISBN-13 ${detailShelf.book.isbn}${
+                      detailShelf.book.isbn10 ? ` · ISBN-10 ${detailShelf.book.isbn10}` : ""
+                    }`
                   : ""}
               {` · ${detailShelf.book.reader_age_summary}`}
             </Text>
+            <View style={styles.isbnMetaBlock}>
+              <Text style={styles.isbnMetaH}>Дані ISBN</Text>
+              {(
+                [
+                  ["Видавець", detailShelf.book.publisher],
+                  ["Дата видання", detailShelf.book.publish_date],
+                  ["Палітурка", detailShelf.book.binding],
+                  ["Мова", detailShelf.book.language],
+                  ["Видання", detailShelf.book.edition],
+                  ["Сторінок", detailShelf.book.pages != null ? String(detailShelf.book.pages) : ""],
+                  ["Розміри", detailShelf.book.dimensions],
+                  ["MSRP", detailShelf.book.msrp || ""],
+                  [
+                    "Теми",
+                    (detailShelf.book.subjects || []).length
+                      ? (detailShelf.book.subjects || []).join(", ")
+                      : "",
+                  ],
+                  [
+                    "Dewey",
+                    (detailShelf.book.dewey_decimal || []).length
+                      ? (detailShelf.book.dewey_decimal || []).join(", ")
+                      : "",
+                  ],
+                  ["Джерело", detailShelf.book.catalog_source || ""],
+                ] as [string, string][]
+              )
+                .filter(([, v]) => !!(v && String(v).trim()))
+                .map(([k, v]) => (
+                  <Text key={k} style={styles.meta}>
+                    <Text style={{ fontWeight: "700" }}>{k}: </Text>
+                    {v}
+                  </Text>
+                ))}
+              {(detailShelf.book.other_isbns || []).length ? (
+                <Text style={styles.meta}>
+                  <Text style={{ fontWeight: "700" }}>Інші ISBN: </Text>
+                  {(detailShelf.book.other_isbns || [])
+                    .map((o) => (o.binding ? `${o.isbn} (${o.binding})` : o.isbn))
+                    .join("; ")}
+                </Text>
+              ) : null}
+              {detailShelf.book.synopsis ? (
+                <Text style={[styles.meta, { marginTop: 8 }]}>
+                  <Text style={{ fontWeight: "700" }}>Синопсис{"\n"}</Text>
+                  {detailShelf.book.synopsis.slice(0, 1200)}
+                </Text>
+              ) : detailShelf.book.overview ? (
+                <Text style={[styles.meta, { marginTop: 8 }]}>
+                  <Text style={{ fontWeight: "700" }}>Огляд{"\n"}</Text>
+                  {detailShelf.book.overview.slice(0, 800)}
+                </Text>
+              ) : null}
+              {detailShelf.book.excerpt ? (
+                <Text style={[styles.meta, { marginTop: 8 }]}>
+                  <Text style={{ fontWeight: "700" }}>Уривок{"\n"}</Text>
+                  {detailShelf.book.excerpt.slice(0, 600)}
+                </Text>
+              ) : null}
+            </View>
             {detailShelf.borrowed_from ? (
               <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 6 }}>
                 <Text style={styles.meta}>Позичено у </Text>
@@ -1615,6 +1681,13 @@ const styles = StyleSheet.create({
   cardBody: { paddingHorizontal: 16, paddingVertical: 10 },
   title: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4, fontSize: 13 },
+  isbnMetaBlock: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+  },
+  isbnMetaH: { color: colors.ink, fontWeight: "800", fontSize: 14, marginBottom: 6 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 14, marginTop: 10 },
   link: { color: colors.ink, fontWeight: "700" },
   action: { color: colors.stamp, fontWeight: "700" },

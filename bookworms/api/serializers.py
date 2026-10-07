@@ -96,18 +96,38 @@ class BookSerializer(serializers.ModelSerializer):
     photo_urls = serializers.SerializerMethodField()
     isbn_missing = serializers.SerializerMethodField()
     note = serializers.SerializerMethodField()
+    msrp = serializers.DecimalField(
+        max_digits=10, decimal_places=2, coerce_to_string=True, allow_null=True, required=False
+    )
 
     class Meta:
         model = Book
         fields = (
             "id",
             "isbn",
+            "isbn10",
             "title",
+            "title_long",
             "authors",
             "publisher",
             "publish_date",
+            "binding",
+            "language",
+            "edition",
+            "pages",
+            "dimensions",
+            "dimensions_data",
+            "dewey_decimal",
+            "overview",
+            "synopsis",
+            "excerpt",
+            "msrp",
+            "subjects",
+            "other_isbns",
             "cover_url",
+            "cover_url_original",
             "info_url",
+            "catalog_source",
             "cover_text",
             "photo_urls",
             "min_readers_age",

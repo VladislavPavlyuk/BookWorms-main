@@ -7,15 +7,34 @@ export type User = {
   last_watched_post_id?: number | null;
 };
 
+export type BookOtherIsbn = { isbn: string; binding?: string };
+
 export type Book = {
   id: number;
   isbn: string;
+  isbn10?: string;
   title: string;
+  title_long?: string;
   authors: string;
   publisher: string;
   publish_date: string;
+  binding?: string;
+  language?: string;
+  edition?: string;
+  pages?: number | null;
+  dimensions?: string;
+  dimensions_data?: Record<string, unknown> | unknown[];
+  dewey_decimal?: string[];
+  overview?: string;
+  synopsis?: string;
+  excerpt?: string;
+  msrp?: string | null;
+  subjects?: string[];
+  other_isbns?: BookOtherIsbn[];
   cover_url: string;
+  cover_url_original?: string;
   info_url: string;
+  catalog_source?: string;
   /** Full OCR text from cover photo (AI). */
   cover_text?: string;
   photo_urls?: string[];

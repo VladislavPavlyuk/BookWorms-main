@@ -46,7 +46,12 @@
                 {% if book.isbn|slice:":4" == "9799" %}
                     <p class="small text-muted mb-1">ISBN code not exists</p>
                 {% else %}
-                    <p class="small text-muted mb-1">ISBN: {{ book.isbn }}</p>
+                    <p class="small text-muted mb-1">ISBN: {{ book.isbn }}{% if book.isbn10 %} · {{ book.isbn10 }}{% endif %}</p>
+                {% endif %}
+                {% if book.publisher or book.publish_date or book.binding %}
+                <p class="small text-muted mb-1">
+                    {% if book.publisher %}{{ book.publisher }}{% endif %}{% if book.publisher and book.publish_date %} · {% endif %}{% if book.publish_date %}{{ book.publish_date }}{% endif %}{% if book.binding %} · {{ book.binding }}{% endif %}
+                </p>
                 {% endif %}
                 {% if not shelf.borrowed_from_id and shelf.copy %}
                     {% with labels=shelf.copy.listing_labels %}
@@ -57,6 +62,7 @@
                 {% endif %}
             </div>
         </div>
+        {% include "mainApp/_book_isbn_details.html" with book=book %}
         {% if book.photos.all %}
             <div class="library-book-photo-strip d-flex flex-wrap gap-1 mb-3">
                 {% for photo in book.photos.all %}

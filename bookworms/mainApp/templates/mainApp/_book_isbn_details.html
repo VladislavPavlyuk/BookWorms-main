@@ -1,0 +1,102 @@
+{# Full ISBNdb-aligned bibliographic block for a Book instance. #}
+{% with b=book %}
+<div class="book-isbn-details mb-3">
+    <h6 class="fw-semibold mb-2">Дані ISBN</h6>
+    <dl class="row small mb-0 book-isbn-details__dl">
+        {% if b.isbn|slice:":4" == "9799" %}
+        <dt class="col-sm-4 text-muted">ISBN</dt>
+        <dd class="col-sm-8">ISBN code not exists</dd>
+        {% else %}
+        <dt class="col-sm-4 text-muted">ISBN-13</dt>
+        <dd class="col-sm-8"><code>{{ b.isbn }}</code></dd>
+        {% if b.isbn10 %}
+        <dt class="col-sm-4 text-muted">ISBN-10</dt>
+        <dd class="col-sm-8"><code>{{ b.isbn10 }}</code></dd>
+        {% endif %}
+        {% endif %}
+        {% if b.title_long and b.title_long != b.title %}
+        <dt class="col-sm-4 text-muted">Повна назва</dt>
+        <dd class="col-sm-8">{{ b.title_long }}</dd>
+        {% endif %}
+        {% if b.authors %}
+        <dt class="col-sm-4 text-muted">Автори</dt>
+        <dd class="col-sm-8">{{ b.authors }}</dd>
+        {% endif %}
+        {% if b.publisher %}
+        <dt class="col-sm-4 text-muted">Видавець</dt>
+        <dd class="col-sm-8">{{ b.publisher }}</dd>
+        {% endif %}
+        {% if b.publish_date %}
+        <dt class="col-sm-4 text-muted">Дата видання</dt>
+        <dd class="col-sm-8">{{ b.publish_date }}</dd>
+        {% endif %}
+        {% if b.binding %}
+        <dt class="col-sm-4 text-muted">Палітурка</dt>
+        <dd class="col-sm-8">{{ b.binding }}</dd>
+        {% endif %}
+        {% if b.language %}
+        <dt class="col-sm-4 text-muted">Мова</dt>
+        <dd class="col-sm-8">{{ b.language }}</dd>
+        {% endif %}
+        {% if b.edition %}
+        <dt class="col-sm-4 text-muted">Видання</dt>
+        <dd class="col-sm-8">{{ b.edition }}</dd>
+        {% endif %}
+        {% if b.pages %}
+        <dt class="col-sm-4 text-muted">Сторінок</dt>
+        <dd class="col-sm-8">{{ b.pages }}</dd>
+        {% endif %}
+        {% if b.dimensions %}
+        <dt class="col-sm-4 text-muted">Розміри</dt>
+        <dd class="col-sm-8">{{ b.dimensions }}</dd>
+        {% endif %}
+        {% if b.msrp %}
+        <dt class="col-sm-4 text-muted">MSRP</dt>
+        <dd class="col-sm-8">{{ b.msrp }}</dd>
+        {% endif %}
+        {% if b.subjects %}
+        <dt class="col-sm-4 text-muted">Теми</dt>
+        <dd class="col-sm-8">{{ b.subjects|join:", " }}</dd>
+        {% endif %}
+        {% if b.dewey_decimal %}
+        <dt class="col-sm-4 text-muted">Dewey</dt>
+        <dd class="col-sm-8">{{ b.dewey_decimal|join:", " }}</dd>
+        {% endif %}
+        {% if b.other_isbns %}
+        <dt class="col-sm-4 text-muted">Інші ISBN</dt>
+        <dd class="col-sm-8">
+            <ul class="list-unstyled mb-0">
+                {% for o in b.other_isbns %}
+                <li><code>{{ o.isbn }}</code>{% if o.binding %} — {{ o.binding }}{% endif %}</li>
+                {% endfor %}
+            </ul>
+        </dd>
+        {% endif %}
+        {% if b.catalog_source %}
+        <dt class="col-sm-4 text-muted">Джерело</dt>
+        <dd class="col-sm-8">{{ b.catalog_source }}</dd>
+        {% endif %}
+        {% if b.info_url %}
+        <dt class="col-sm-4 text-muted">Каталог</dt>
+        <dd class="col-sm-8"><a href="{{ b.info_url }}" target="_blank" rel="noopener">Відкрити</a></dd>
+        {% endif %}
+    </dl>
+    {% if b.synopsis %}
+    <div class="mt-2">
+        <p class="small fw-semibold mb-1">Синопсис</p>
+        <p class="small text-muted mb-0" style="white-space: pre-wrap;">{{ b.synopsis|truncatechars:1200 }}</p>
+    </div>
+    {% elif b.overview %}
+    <div class="mt-2">
+        <p class="small fw-semibold mb-1">Огляд</p>
+        <p class="small text-muted mb-0" style="white-space: pre-wrap;">{{ b.overview|truncatechars:800 }}</p>
+    </div>
+    {% endif %}
+    {% if b.excerpt %}
+    <div class="mt-2">
+        <p class="small fw-semibold mb-1">Уривок</p>
+        <p class="small text-muted mb-0" style="white-space: pre-wrap;">{{ b.excerpt|truncatechars:600 }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endwith %}

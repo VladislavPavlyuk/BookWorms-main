@@ -446,6 +446,19 @@ input[type="button"].btn {
     flex-shrink: 0;
 }
 
+.book-isbn-details {
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    padding-top: 0.75rem;
+}
+
+.book-isbn-details__dl > dt {
+    font-weight: 500;
+}
+
+.book-isbn-details__dl > dd {
+    margin-bottom: 0.35rem;
+}
+
 .library-selection-bar {
     position: sticky;
     top: 0.75rem;

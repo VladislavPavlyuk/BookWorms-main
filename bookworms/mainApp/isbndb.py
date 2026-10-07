@@ -129,44 +129,125 @@ def _authors_line(raw: Any) -> str:
     return str(raw).strip()
 
 
+def _https(url: str) -> str:
+    u = (url or "").strip()
+    if u.startswith("http://"):
+        return "https://" + u[len("http://") :]
+    return u
+
+
+def _as_str_list(raw: Any) -> list[str]:
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    return [str(raw).strip()] if str(raw).strip() else []
+
+
+def _other_isbns(raw: Any) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        isbn = str(item.get("isbn") or "").strip()
+        if not isbn:
+            continue
+        out.append(
+            {
+                "isbn": isbn[:32],
+                "binding": str(item.get("binding") or "").strip()[:64],
+            }
+        )
+    return out
+
+
 def _from_book(book: dict[str, Any], fallback_isbn: str) -> dict[str, Any] | None:
+    """Map ISBNdb Book schema → internal catalog payload."""
     title = (book.get("title") or book.get("title_long") or "").strip()
     if not title:
         return None
 
     isbn13 = (book.get("isbn13") or "").strip()
-    isbn10 = (book.get("isbn") or "").strip()
-    # у схемі поле isbn іноді deprecated і теж ISBN-13
-    picked = normalize_isbn(isbn13) or normalize_isbn(isbn10) or normalize_isbn(fallback_isbn)
+    isbn_field = (book.get("isbn") or "").strip()
+    isbn10_raw = (book.get("isbn10") or "").strip()
+    # Schema: isbn is deprecated and often ISBN-13; prefer isbn13 then isbn10.
+    picked = (
+        normalize_isbn(isbn13)
+        or normalize_isbn(isbn_field if len(isbn_field) == 13 else "")
+        or normalize_isbn(isbn10_raw)
+        or normalize_isbn(isbn_field)
+        or normalize_isbn(fallback_isbn)
+    )
     if not picked:
         picked = fallback_isbn
 
-    # image (до 500px) стабільніший за image_original (expires ~2h)
-    cover = (book.get("image") or "").strip()
-    if cover.startswith("http://"):
-        cover = "https://" + cover[len("http://") :]
+    isbn10 = ""
+    if isbn10_raw and len(normalize_isbn(isbn10_raw) or "") == 10:
+        isbn10 = normalize_isbn(isbn10_raw) or ""
+    elif len(picked) == 13:
+        from .openlibrary import isbn13_to_isbn10
+
+        isbn10 = isbn13_to_isbn10(picked) or ""
+
+    # image (≤500px) is stable; image_original expires ~2h
+    cover = _https(book.get("image") or "")
+    cover_orig = _https(book.get("image_original") or "")
 
     date = book.get("date_published")
     if date is None:
         date_s = ""
     else:
         date_s = str(date).strip()
-        # ISO datetime → YYYY-MM-DD / YYYY
         if "T" in date_s:
             date_s = date_s.split("T", 1)[0]
+
+    pages = book.get("pages")
+    try:
+        pages_i = int(pages) if pages is not None and str(pages).strip() != "" else None
+    except (TypeError, ValueError):
+        pages_i = None
+
+    msrp = book.get("msrp")
+    try:
+        msrp_f = float(msrp) if msrp is not None and str(msrp).strip() != "" else None
+    except (TypeError, ValueError):
+        msrp_f = None
+
+    dims_data = book.get("dimensions_structured")
+    if not isinstance(dims_data, (dict, list)):
+        dims_data = {}
 
     publisher = (book.get("publisher") or "").strip()
     info_url = f"https://isbndb.com/book/{quote(picked)}"
 
     return {
         "title": title[:500],
+        "title_long": (book.get("title_long") or title)[:500],
         "authors": _authors_line(book.get("authors"))[:500],
         "publisher": publisher[:300],
         "publish_date": date_s[:64],
+        "binding": (book.get("binding") or "").strip()[:64],
+        "language": (book.get("language") or "").strip()[:32],
+        "edition": (book.get("edition") or "").strip()[:64],
+        "pages": pages_i,
+        "dimensions": (book.get("dimensions") or "").strip()[:200],
+        "dimensions_data": dims_data if isinstance(dims_data, dict) else {"_list": dims_data},
+        "dewey_decimal": _as_str_list(book.get("dewey_decimal")),
+        "overview": (book.get("overview") or "").strip(),
+        "synopsis": (book.get("synopsis") or "").strip(),
+        "excerpt": (book.get("excerpt") or "").strip(),
+        "msrp": msrp_f,
+        "subjects": _as_str_list(book.get("subjects")),
+        "other_isbns": _other_isbns(book.get("other_isbns")),
         "cover_url": cover[:500],
+        "cover_url_original": cover_orig[:500],
         "info_url": info_url[:500],
         "isbn": picked,
+        "isbn10": isbn10[:10],
         "source": "isbndb",
+        "catalog_source": "isbndb",
     }
 
 

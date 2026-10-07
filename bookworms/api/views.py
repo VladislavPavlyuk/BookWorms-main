@@ -154,7 +154,7 @@ def health(request):
     payload = {
         "status": "ok",
         "app": "rechenets",
-        "code_rev": "2026-10-07-meta-merge",
+        "code_rev": "2026-10-07-isbndb-schema",
     }
     try:
         connection.ensure_connection()

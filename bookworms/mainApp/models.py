@@ -73,13 +73,60 @@ class Book(models.Model):
     Shelf посилається на BookCopy (+ денормалізовано на Book).
     """
 
-    isbn = models.CharField(max_length=13, unique=True, db_index=True, verbose_name="ISBN")
+    # Core identity — aligned with ISBNdb Book schema (api2.isbndb.com)
+    isbn = models.CharField(max_length=13, unique=True, db_index=True, verbose_name="ISBN-13")
+    isbn10 = models.CharField(max_length=10, blank=True, verbose_name="ISBN-10")
     title = models.CharField(max_length=500, verbose_name="Назва")
+    title_long = models.CharField(max_length=500, blank=True, verbose_name="Повна назва")
     authors = models.CharField(max_length=500, blank=True, verbose_name="Автори")
     publisher = models.CharField(max_length=300, blank=True, verbose_name="Видавець")
     publish_date = models.CharField(max_length=64, blank=True, verbose_name="Дата видання")
+    binding = models.CharField(max_length=64, blank=True, verbose_name="Палітурка")
+    language = models.CharField(max_length=32, blank=True, verbose_name="Мова")
+    edition = models.CharField(max_length=64, blank=True, verbose_name="Видання")
+    pages = models.PositiveIntegerField(null=True, blank=True, verbose_name="Сторінок")
+    dimensions = models.CharField(max_length=200, blank=True, verbose_name="Розміри")
+    dimensions_data = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Розміри (структуровані)",
+        help_text="ISBNdb dimensions_structured",
+    )
+    dewey_decimal = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Dewey Decimal",
+    )
+    overview = models.TextField(blank=True, verbose_name="Огляд")
+    synopsis = models.TextField(blank=True, verbose_name="Синопсис")
+    excerpt = models.TextField(blank=True, verbose_name="Уривок")
+    msrp = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="MSRP",
+    )
+    subjects = models.JSONField(default=list, blank=True, verbose_name="Теми / категорії")
+    other_isbns = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Інші ISBN (видання/формати)",
+        help_text="ISBNdb other_isbns: [{isbn, binding}, …]",
+    )
     cover_url = models.URLField(max_length=500, blank=True, verbose_name="Обкладинка (URL)")
-    info_url = models.URLField(max_length=500, blank=True, verbose_name="Open Library")
+    cover_url_original = models.URLField(
+        max_length=500,
+        blank=True,
+        verbose_name="Обкладинка original (тимчасовий URL)",
+    )
+    info_url = models.URLField(max_length=500, blank=True, verbose_name="Сторінка в каталозі")
+    catalog_source = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name="Джерело метаданих",
+        help_text="isbndb / openlibrary / googlebooks / …",
+    )
     cover_text = models.TextField(
         blank=True,
         verbose_name="Текст з обкладинки (AI/OCR)",

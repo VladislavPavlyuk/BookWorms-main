@@ -67,13 +67,27 @@ def provider_labels(names: list[str] | None = None) -> list[dict[str, str]]:
 
 _MERGE_FIELDS = (
     "title",
+    "title_long",
     "authors",
     "publisher",
     "publish_date",
+    "binding",
+    "language",
+    "edition",
+    "dimensions",
+    "overview",
+    "synopsis",
+    "excerpt",
     "cover_url",
+    "cover_url_original",
     "info_url",
     "isbn",
+    "isbn10",
+    "catalog_source",
 )
+
+_MERGE_SCALAR = ("pages", "msrp")
+_MERGE_JSON = ("subjects", "other_isbns", "dewey_decimal", "dimensions_data")
 
 
 def _log_step(
@@ -109,26 +123,39 @@ def _merge_payload(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, 
     """Fill empty bibliographic fields from another provider hit."""
     out = dict(base)
     sources = list(out.get("_sources") or [])
-    src = (incoming.get("source") or "").strip()
+    src = (incoming.get("source") or incoming.get("catalog_source") or "").strip()
     if src and src not in sources:
         sources.append(src)
     for key in _MERGE_FIELDS:
-        new = (incoming.get(key) or "").strip()
+        raw = incoming.get(key)
+        if raw is None:
+            continue
+        new = str(raw).strip()
         if not new:
             continue
-        old = (out.get(key) or "").strip()
+        old = str(out.get(key) or "").strip()
         if not old:
             out[key] = incoming[key]
             continue
         # Prefer a longer, more descriptive title from a secondary catalog.
         if key == "title" and len(new) > len(old) + 8:
             out[key] = incoming[key]
-        # Prefer https cover / any cover if current missing scheme junk.
+        # Prefer https cover if current is missing scheme junk.
         if key == "cover_url" and new.startswith("https://") and not old.startswith("https://"):
             out[key] = incoming[key]
+    for key in _MERGE_SCALAR:
+        if out.get(key) in (None, "") and incoming.get(key) not in (None, ""):
+            out[key] = incoming[key]
+    for key in _MERGE_JSON:
+        old = out.get(key)
+        empty = old in (None, [], {})
+        new = incoming.get(key)
+        if empty and new not in (None, [], {}):
+            out[key] = new
     if sources:
         out["_sources"] = sources
         out["source"] = "+".join(sources)
+        out["catalog_source"] = out["source"]
     return out
 
 
