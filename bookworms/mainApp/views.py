@@ -36,7 +36,7 @@ from .forms import (
     UserUpdateForm,
 )
 from django.views.generic import CreateView
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.conf import settings
@@ -561,10 +561,26 @@ def my_library(request):
 
     if request.method == "POST" and "add_isbn" in request.POST:
         form = AddIsbnForm(request.POST)
+        wants_json = (
+            request.headers.get("X-Requested-With") == "XMLHttpRequest"
+            or "application/json" in (request.headers.get("Accept") or "")
+        )
         if form.is_valid():
+            search_log: list = []
             try:
-                book = resolve_and_sync_book_by_isbn(form.cleaned_data["isbn"])
+                book = resolve_and_sync_book_by_isbn(
+                    form.cleaned_data["isbn"], search_log=search_log
+                )
             except ExchangeError as exc:
+                if wants_json:
+                    return JsonResponse(
+                        {
+                            "ok": False,
+                            "detail": exc.message,
+                            "search_log": search_log,
+                        },
+                        status=getattr(exc, "http_status", 404) or 404,
+                    )
                 messages.error(request, exc.message)
             else:
                 from .library_service import (
@@ -580,22 +596,63 @@ def my_library(request):
                         request.user, book, confirm_extra=confirm
                     )
                 except LibraryError as exc:
+                    if wants_json:
+                        return JsonResponse(
+                            {
+                                "ok": False,
+                                "detail": exc.message,
+                                "search_log": search_log,
+                            },
+                            status=400,
+                        )
                     messages.error(request, exc.message)
                 else:
                     if isinstance(result, IsbnConfirmNeeded):
-                        messages.warning(
-                            request,
+                        detail = (
                             f"У бібліотеці вже є {result.existing_count} примірник(и) "
                             f"«{result.title}» (ISBN {result.isbn}). "
-                            f"Підтвердіть додавання ще одного нижче.",
+                            f"Підтвердіть додавання ще одного нижче."
                         )
                         request.session["library_confirm_extra"] = {
                             "isbn": result.isbn,
                             "count": result.existing_count,
                             "title": result.title,
                         }
+                        if wants_json:
+                            return JsonResponse(
+                                {
+                                    "ok": False,
+                                    "needs_confirmation": True,
+                                    "isbn": result.isbn,
+                                    "existing_count": result.existing_count,
+                                    "title": result.title,
+                                    "detail": detail,
+                                    "search_log": search_log,
+                                    "redirect": reverse("my_library"),
+                                },
+                                status=409,
+                            )
+                        messages.warning(request, detail)
                         return redirect("my_library")
                     if isinstance(result, LibraryAction):
+                        if wants_json:
+                            return JsonResponse(
+                                {
+                                    "ok": True,
+                                    "pending_approval": True,
+                                    "chat_partner_id": result.library.admin_id,
+                                    "detail": (
+                                        "У бібліотеці вже є цей ISBN. "
+                                        "Запит надіслано адміністратору в чат."
+                                    ),
+                                    "search_log": search_log,
+                                    "redirect": reverse(
+                                        "message_thread",
+                                        kwargs={"partner_id": result.library.admin_id},
+                                    ),
+                                },
+                                status=202,
+                            )
                         messages.info(
                             request,
                             "У бібліотеці вже є цей ISBN. Запит надіслано адміністратору в чат.",
@@ -604,8 +661,37 @@ def my_library(request):
                             "message_thread", partner_id=result.library.admin_id
                         )
                     else:
-                        messages.success(request, f"Додано: {book.title}")
+                        hit = next(
+                            (
+                                s
+                                for s in reversed(search_log)
+                                if s.get("status") == "hit"
+                            ),
+                            None,
+                        )
+                        src = (hit or {}).get("label") or ""
+                        msg = f"Додано: {book.title}"
+                        if src:
+                            msg = f"{msg} (знайдено в {src})"
+                        if wants_json:
+                            return JsonResponse(
+                                {
+                                    "ok": True,
+                                    "title": book.title,
+                                    "detail": msg,
+                                    "search_log": search_log,
+                                    "search_source": src or None,
+                                    "redirect": reverse("my_library"),
+                                },
+                                status=201,
+                            )
+                        messages.success(request, msg)
                     return redirect("my_library")
+        elif wants_json:
+            err = "; ".join(
+                e for errs in form.errors.values() for e in errs
+            ) or "Невірний ISBN"
+            return JsonResponse({"ok": False, "detail": err}, status=400)
 
     elif request.method == "POST" and "add_manual" in request.POST:
         manual_form = AddBookManualForm(request.POST, request.FILES)
@@ -842,6 +928,10 @@ def my_library(request):
     if confirm_extra:
         request.session.modified = True
 
+    from .book_lookup import provider_labels
+
+    isbn_providers = provider_labels()
+
     return render(
         request,
         "mainApp/library.html",
@@ -862,6 +952,7 @@ def my_library(request):
             "shared_member_count": shared_member_count,
             "shared_library_name": lib.display_name,
             "i_am_library_admin": lib.admin_id == request.user.id,
+            "isbn_providers": isbn_providers,
         },
     )
 

@@ -51,7 +51,11 @@ def sync_book_from_payload(book: Book, payload: dict) -> Book:
 
 
 @domain_guard("exchange.resolve_isbn")
-def resolve_and_sync_book_by_isbn(raw_isbn: str) -> Book:
+def resolve_and_sync_book_by_isbn(
+    raw_isbn: str,
+    *,
+    search_log: list | None = None,
+) -> Book:
     from ..book_lookup import fetch_book_by_isbn, isbn_candidates, normalize_isbn
 
     norm = normalize_isbn(raw_isbn)
@@ -63,7 +67,7 @@ def resolve_and_sync_book_by_isbn(raw_isbn: str) -> Book:
     candidates = isbn_candidates(norm)
     existing = Book.objects.filter(isbn__in=candidates).first()
 
-    payload, err = fetch_book_by_isbn(norm)
+    payload, err = fetch_book_by_isbn(norm, search_log=search_log)
 
     if payload:
         if existing and existing.isbn != payload.get("isbn"):
@@ -73,6 +77,15 @@ def resolve_and_sync_book_by_isbn(raw_isbn: str) -> Book:
         return book
 
     if existing:
+        if search_log is not None:
+            search_log.append(
+                {
+                    "provider": "local",
+                    "label": "Локальна база",
+                    "status": "hit",
+                    "detail": existing.title[:80] if existing.title else "вже в каталозі",
+                }
+            )
         return existing
 
     raise ExchangeNotFound(err or "Книгу з таким ISBN не знайдено.")

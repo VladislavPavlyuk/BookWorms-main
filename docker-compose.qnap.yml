@@ -71,9 +71,12 @@ services:
       DEFAULT_LOAN_DAYS: ${DEFAULT_LOAN_DAYS:-14}
       TIME_ZONE: ${TIME_ZONE:-Europe/Kyiv}
       LIBRARYTHING_API_KEY: ${LIBRARYTHING_API_KEY:-58aefacea1f37e153791c1cd58475558}
-      ISBNDB_API_KEY: ${ISBNDB_API_KEY:-}
-      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
-      BOOK_METADATA_PROVIDERS: ${BOOK_METADATA_PROVIDERS:-openlibrary,isbndb,googlebooks,librarything}
+      # Do NOT set ISBNDB_API_KEY / GOOGLE_BOOKS_API_KEY here.
+      # Compose `${VAR:-}` with an empty/missing host var injects "" into the
+      # container and OVERRIDES env_file — then ISBN lookup skips ISBNdb
+      # (9789667482596 etc. only exist there). Keys come from env_file (.env)
+      # + bind-mount /app/.env (settings + entrypoint force-load).
+      BOOK_METADATA_PROVIDERS: ${BOOK_METADATA_PROVIDERS:-isbndb,openlibrary,googlebooks,librarything}
       # OCR keys: default free OCR.space key so blank ${VAR:-} cannot wipe recognition.
       # Override in project-root .env anytime.
       OCR_SPACE_API_KEY: ${OCR_SPACE_API_KEY:-K89147673988957}

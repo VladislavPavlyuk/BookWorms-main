@@ -1811,3 +1811,35 @@ html {
     filter: brightness(0.97);
     transition-duration: 0.1s;
 }
+
+/* ISBN add — live catalog search messaging */
+.isbn-search-status {
+    max-width: 28rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid rgba(201, 180, 138, 0.55);
+    border-radius: 10px;
+    background: rgba(255, 251, 243, 0.92);
+}
+.isbn-search-status__title {
+    color: #2a1f14;
+}
+.isbn-search-status__log {
+    max-height: 9rem;
+    overflow-y: auto;
+    color: #6b5344;
+}
+.isbn-search-status__row {
+    padding: 0.12rem 0;
+    line-height: 1.35;
+}
+.isbn-search-status__row--hit {
+    color: #2f6b4f;
+    font-weight: 600;
+}
+.isbn-search-status__row--miss,
+.isbn-search-status__row--skip {
+    color: #6b5344;
+}
+.isbn-search-status__row--searching {
+    color: #8a6a3a;
+}

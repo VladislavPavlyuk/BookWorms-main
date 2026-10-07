@@ -154,7 +154,7 @@ def health(request):
     payload = {
         "status": "ok",
         "app": "rechenets",
-        "code_rev": "2026-09-24-handoff-for-update",
+        "code_rev": "2026-10-07-isbn-formdata",
     }
     try:
         connection.ensure_connection()
@@ -169,6 +169,20 @@ def health(request):
 
         payload.update(purge_status())
         payload.update(metadata_providers_ping())
+
+    # Live ISBN lookup probe (no auth) — e.g. ?isbn=9789667482596
+    probe_isbn = (request.GET.get("isbn") or "").strip()
+    if probe_isbn:
+        from mainApp.book_lookup import fetch_book_by_isbn
+
+        search_log: list = []
+        book, err = fetch_book_by_isbn(probe_isbn, search_log=search_log)
+        payload["isbn_probe"] = probe_isbn
+        payload["isbn_probe_ok"] = bool(book)
+        payload["isbn_probe_title"] = (book or {}).get("title") if book else None
+        payload["isbn_probe_source"] = (book or {}).get("source") if book else None
+        payload["isbn_probe_error"] = err
+        payload["isbn_probe_log"] = search_log
 
     if request.GET.get("test_mail") == "1":
         from mainApp.web3forms_mail import Web3FormsError, send_web3forms
@@ -570,7 +584,16 @@ def shelf_add_isbn(request):
 
     ser = AddIsbnSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
-    book = resolve_and_sync_book_by_isbn(ser.validated_data["isbn"])
+    search_log: list = []
+    try:
+        book = resolve_and_sync_book_by_isbn(
+            ser.validated_data["isbn"], search_log=search_log
+        )
+    except ExchangeError as e:
+        return Response(
+            {"detail": e.message, "code": e.code, "search_log": search_log},
+            status=e.http_status,
+        )
     try:
         result = add_copy_for_user(
             request.user,
@@ -578,7 +601,10 @@ def shelf_add_isbn(request):
             confirm_extra=bool(ser.validated_data.get("confirm_extra")),
         )
     except LibraryError as e:
-        return _error(e.message)
+        return Response(
+            {"detail": e.message, "search_log": search_log},
+            status=400,
+        )
     if isinstance(result, IsbnConfirmNeeded):
         return Response(
             {
@@ -586,6 +612,7 @@ def shelf_add_isbn(request):
                 "isbn": result.isbn,
                 "existing_count": result.existing_count,
                 "title": result.title,
+                "search_log": search_log,
                 "detail": (
                     f"У бібліотеці вже є {result.existing_count} примірник(и) "
                     f"«{result.title}» (ISBN {result.isbn}). "
@@ -600,6 +627,7 @@ def shelf_add_isbn(request):
                 "pending_approval": True,
                 "action_id": result.id,
                 "chat_partner_id": result.library.admin_id,
+                "search_log": search_log,
                 "detail": (
                     "У бібліотеці вже є цей ISBN. Запит надіслано адміністратору в чат — "
                     "очікуйте підтвердження або відхилення."
@@ -610,7 +638,13 @@ def shelf_add_isbn(request):
     shelf = Shelf.objects.select_related("book", "borrowed_from", "user", "copy").get(
         pk=result.pk
     )
-    return Response(ShelfSerializer(shelf, context={"request": request}).data, status=201)
+    payload = ShelfSerializer(shelf, context={"request": request}).data
+    if isinstance(payload, dict):
+        payload["search_log"] = search_log
+        hit = next((s for s in reversed(search_log) if s.get("status") == "hit"), None)
+        if hit:
+            payload["search_source"] = hit.get("label") or hit.get("provider")
+    return Response(payload, status=201)
 
 
 @api_view(["POST"])

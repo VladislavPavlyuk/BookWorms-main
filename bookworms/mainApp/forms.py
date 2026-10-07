@@ -161,19 +161,36 @@ class AddIsbnForm(forms.Form):
     """Поле ISBN для сторінки "Моя полиця"; вікові групи задаються окремо на картці книги."""
     isbn = forms.CharField(
         label="ISBN (10 або 13)",
-        max_length=13,
+        max_length=32,
         widget=forms.TextInput(
             attrs={
                 "class": "form-control isbn-add-input",
                 "placeholder": "9780140328721",
-                "maxlength": "13",
-                "size": "13",
+                "maxlength": "17",
+                "size": "17",
                 "inputmode": "numeric",
                 "autocomplete": "off",
                 "spellcheck": "false",
             }
         ),
     )
+
+    def clean_isbn(self):
+        raw = (self.cleaned_data.get("isbn") or "").strip().upper()
+        compact = raw.replace("-", "").replace(" ", "")
+        if len(compact) == 10 and compact[-1] == "X":
+            head = "".join(c for c in compact[:9] if c.isdigit())
+            if len(head) != 9:
+                raise ValidationError(
+                    "ISBN-10: 9 цифр і контрольна X, або лише цифри."
+                )
+            return head + "X"
+        digits = "".join(c for c in compact if c.isdigit())
+        if len(digits) not in (10, 13):
+            raise ValidationError(
+                "ISBN має містити 10 або 13 цифр (можна з дефісами; для ISBN-10 допускається X в кінці)."
+            )
+        return digits
 
 
 class AddBookManualForm(forms.Form):

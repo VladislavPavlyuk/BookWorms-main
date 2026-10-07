@@ -56,6 +56,9 @@ export default function ShelfScreen() {
   const [scanOpen, setScanOpen] = useState(false);
   const [coverCamOpen, setCoverCamOpen] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [searchMsg, setSearchMsg] = useState("");
+  const searchTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ISBN_SEARCH_LABELS = ["ISBNdb", "Open Library", "Google Books", "LibraryThing"];
   const [ageShelf, setAgeShelf] = useState<Shelf | null>(null);
   const [ageMin, setAgeMin] = useState("0");
   const [ageMax, setAgeMax] = useState("18");
@@ -131,6 +134,36 @@ export default function ShelfScreen() {
     }, [])
   );
 
+  const stopSearchTick = () => {
+    if (searchTickRef.current) {
+      clearInterval(searchTickRef.current);
+      searchTickRef.current = null;
+    }
+  };
+
+  const startSearchTick = () => {
+    stopSearchTick();
+    let i = 0;
+    setSearchMsg(`Шукаємо в ${ISBN_SEARCH_LABELS[0]}…`);
+    searchTickRef.current = setInterval(() => {
+      i = (i + 1) % ISBN_SEARCH_LABELS.length;
+      setSearchMsg(`Шукаємо в ${ISBN_SEARCH_LABELS[i]}…`);
+    }, 1200);
+  };
+
+  const formatSearchLog = (
+    log?: { label?: string; status?: string; detail?: string }[]
+  ) => {
+    if (!log?.length) return "";
+    return log
+      .filter((s) => s && s.label && s.status !== "searching")
+      .map((s) => {
+        const mark = s.status === "hit" ? "✓" : "·";
+        return `${mark} ${s.label}${s.detail ? ` — ${s.detail}` : ""}`;
+      })
+      .join("\n");
+  };
+
   const addIsbn = useCallback(async (raw?: string, confirmExtra = false) => {
     const code = (raw ?? isbn).trim();
     const norm = normalizeIsbn(code);
@@ -142,13 +175,24 @@ export default function ShelfScreen() {
     if (!confirmExtra && norm === lastAutoRef.current) return;
     lastAutoRef.current = norm;
     setAdding(true);
+    startSearchTick();
     try {
       const res = await ShelfApi.addIsbn(norm, confirmExtra);
+      stopSearchTick();
+      const logText = formatSearchLog(
+        res && typeof res === "object" && "search_log" in res
+          ? (res as { search_log?: { label?: string; status?: string; detail?: string }[] })
+              .search_log
+          : undefined
+      );
       if (res && typeof res === "object" && "needs_confirmation" in res && res.needs_confirmation) {
         lastAutoRef.current = "";
+        setSearchMsg("");
         Alert.alert(
           "Примірник уже є",
-          String(res.detail || `Уже є ${res.existing_count} шт. Додати ще один?`),
+          [String(res.detail || `Уже є ${res.existing_count} шт. Додати ще один?`), logText]
+            .filter(Boolean)
+            .join("\n\n"),
           [
             { text: "Ні", style: "cancel" },
             {
@@ -163,12 +207,15 @@ export default function ShelfScreen() {
       }
       if (res && typeof res === "object" && "pending_approval" in res && res.pending_approval) {
         const partnerId = (res as { chat_partner_id?: number }).chat_partner_id;
+        setSearchMsg("");
         Alert.alert(
           "Спільна бібліотека",
-          String(
-            res.detail ||
-              "ISBN уже є. Запит надіслано адміністратору в чат."
-          ),
+          [
+            String(res.detail || "ISBN уже є. Запит надіслано адміністратору в чат."),
+            logText,
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
           partnerId
             ? [
                 { text: "OK" },
@@ -183,21 +230,36 @@ export default function ShelfScreen() {
         lastAutoRef.current = "";
         return;
       }
+      const src =
+        res && typeof res === "object" && "search_source" in res
+          ? String((res as { search_source?: string }).search_source || "")
+          : "";
+      setSearchMsg(src ? `Знайдено в ${src}` : "Додано");
       setIsbn("");
       lastAutoRef.current = "";
       await load();
+      setTimeout(() => setSearchMsg(""), 4000);
     } catch (e) {
+      stopSearchTick();
       lastAutoRef.current = "";
+      const payload =
+        e instanceof ApiError
+          ? (e.payload as {
+              needs_confirmation?: boolean;
+              detail?: string;
+              existing_count?: number;
+              search_log?: { label?: string; status?: string; detail?: string }[];
+            })
+          : null;
+      const logText = formatSearchLog(payload?.search_log);
       if (e instanceof ApiError && e.status === 409) {
-        const p = (e.payload || {}) as {
-          needs_confirmation?: boolean;
-          detail?: string;
-          existing_count?: number;
-        };
-        if (p.needs_confirmation) {
+        if (payload?.needs_confirmation) {
+          setSearchMsg("");
           Alert.alert(
             "Примірник уже є",
-            String(p.detail || `Уже є ${p.existing_count} шт. Додати ще один?`),
+            [String(payload.detail || `Уже є ${payload.existing_count} шт. Додати ще один?`), logText]
+              .filter(Boolean)
+              .join("\n\n"),
             [
               { text: "Ні", style: "cancel" },
               {
@@ -211,8 +273,13 @@ export default function ShelfScreen() {
           return;
         }
       }
-      Alert.alert("ISBN", e instanceof ApiError ? e.message : String(e));
+      setSearchMsg("");
+      Alert.alert(
+        "ISBN",
+        [e instanceof ApiError ? e.message : String(e), logText].filter(Boolean).join("\n\n")
+      );
     } finally {
+      stopSearchTick();
       setAdding(false);
     }
   }, [adding, isbn]);
@@ -230,6 +297,7 @@ export default function ShelfScreen() {
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      stopSearchTick();
     };
   }, []);
 
@@ -564,7 +632,7 @@ export default function ShelfScreen() {
     <View style={{ flex: 1, backgroundColor: colors.screen }}>
       <View style={styles.row}>
         <CyrillicTextInput
-          placeholder={adding ? "Додаємо…" : "ISBN 10/13 — додається сам"}
+          placeholder={adding ? "Шукаємо в каталогах…" : "ISBN 10/13 — додається сам"}
           placeholderTextColor={colors.muted}
           style={styles.isbnInput}
           value={isbn}
@@ -594,6 +662,7 @@ export default function ShelfScreen() {
           <Text style={styles.addText}>Вручну</Text>
         </Pressable>
       </View>
+      {searchMsg ? <Text style={styles.searchMsg}>{searchMsg}</Text> : null}
       <FlatList
         key={`shelf-grid-${gridCols}`}
         data={shelves}
@@ -1452,6 +1521,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 16,
     fontVariant: ["tabular-nums"],
+  },
+  searchMsg: {
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "600",
   },
   inputFull: { borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 10, marginBottom: 12 },
   add: { backgroundColor: colors.ink, paddingHorizontal: 12, justifyContent: "center", borderRadius: btnRadius, flexDirection: "row", alignItems: "center" },

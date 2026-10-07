@@ -55,11 +55,22 @@ def _http_get_json(
         except HTTPError as e:
             if e.code == 404:
                 return None, None
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")[:400]
+            except Exception:
+                body = ""
             last_err = f"HTTP {e.code}"
+            if e.code == 403:
+                if "has not been used" in body or "disabled" in body.lower():
+                    return None, "HTTP 403 (Books API вимкнено в Google Cloud проєкті ключа)"
+                return None, "HTTP 403 (доступ заборонено)"
             if e.code in (429, 503) and attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
                 continue
             if e.code == 429:
+                if api_key():
+                    return None, "HTTP 429 (квота Google Books вичерпана)"
                 return None, "HTTP 429 (квота; задайте GOOGLE_BOOKS_API_KEY)"
             return None, last_err
         except URLError as e:

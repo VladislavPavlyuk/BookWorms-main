@@ -108,8 +108,17 @@
                 </button>
             </div>
         </form>
+        <div id="isbnSearchStatus"
+             class="isbn-search-status mt-2"
+             hidden
+             aria-live="polite"
+             data-providers='[{% for p in isbn_providers %}{"id":"{{ p.id }}","label":"{{ p.label }}"}{% if not forloop.last %},{% endif %}{% endfor %}]'>
+            <div class="isbn-search-status__title small fw-semibold mb-1" id="isbnSearchStatusTitle">Пошук у каталогах…</div>
+            <ul class="isbn-search-status__log small mb-0 list-unstyled" id="isbnSearchStatusLog"></ul>
+        </div>
         <p class="small text-muted mt-2 mb-0">
-            Метадані за ISBN: Open Library, потім LibraryThing (якщо є <code>LIBRARYTHING_API_KEY</code>).
+            Метадані за ISBN (по порядку):
+            {% for p in isbn_providers %}{{ p.label }}{% if not forloop.last %} → {% endif %}{% empty %}ISBNdb → Open Library → Google Books → LibraryThing{% endfor %}.
             Сканер штрихкоду — кнопка камери справа внизу.
         </p>
         <div class="mt-3">
@@ -637,7 +646,7 @@
 
 {% block extra_js %}
 {% load static %}
-<script src="{% url 'isbn_scan_asset' 'isbn_scan.js' %}?v=10"></script>
+<script src="{% url 'isbn_scan_asset' 'isbn_scan.js' %}?v=12"></script>
 <script src="{% url 'isbn_scan_asset' 'manual_book_photos.js' %}?v=18"></script>
 <script>
 (function () {

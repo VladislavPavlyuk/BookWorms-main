@@ -33,12 +33,32 @@ USER_AGENT = (
 )
 
 
+_PLACEHOLDER_KEYS = frozenset(
+    {
+        "",
+        "your_rest_key",
+        "your-rest-key",
+        "changeme",
+        "change-me",
+        "xxx",
+        "TODO",
+        "todo",
+    }
+)
+
+
 def api_key() -> str:
-    return (
+    raw = (
         os.environ.get("ISBNDB_API_KEY")
         or os.environ.get("ISBNDB_REST_KEY")
         or ""
     ).strip()
+    # strip inline comments from .env style "key  # comment"
+    if "#" in raw:
+        raw = raw.split("#", 1)[0].strip()
+    if raw.lower() in {p.lower() for p in _PLACEHOLDER_KEYS}:
+        return ""
+    return raw
 
 
 def configured() -> bool:
@@ -189,11 +209,18 @@ def fetch_book_by_isbn(isbn: str) -> tuple[dict[str, Any] | None, str | None]:
 def isbndb_ping() -> dict[str, Any]:
     """Для /api/health/?deep=1."""
     if not configured():
+        raw = (os.environ.get("ISBNDB_API_KEY") or os.environ.get("ISBNDB_REST_KEY") or "").strip()
+        hint = "no ISBNDB_API_KEY"
+        if raw and not api_key():
+            hint = "ISBNDB_API_KEY is placeholder/invalid (check /.env mount)"
+        elif not raw:
+            hint = "no ISBNDB_API_KEY in process env (recreate api after editing .env)"
         return {
             "isbndb_client": CLIENT_REV,
             "isbndb_configured": False,
             "isbndb_ok": False,
-            "isbndb_error": "no ISBNDB_API_KEY",
+            "isbndb_error": hint,
+            "isbndb_key_len": len(raw),
         }
     # /key — перевірка ключа (легше за book lookup)
     data, err = _http_get_json(f"{ISBNDB_HOST}/key", retries=0, timeout=8)

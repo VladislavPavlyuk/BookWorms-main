@@ -9,7 +9,7 @@
 
     var TICK_MS = 450;
     var MAX_W = 640;
-    var WORKER_SRC = "/library/isbn-scan-assets/isbn_scan_worker.js?v=6";
+    var WORKER_SRC = "/library/isbn-scan-assets/isbn_scan_worker.js?v=12";
 
     function normalizeIsbn(raw) {
         var digits = String(raw || "")
@@ -539,7 +539,7 @@
 
     /**
      * Auto-submit «Додати за ISBN» when the field reaches 10/13 digits.
-     * Replaces the old «Знайти та додати» button.
+     * AJAX + live search-status messaging (catalogs).
      */
     function initAutoIsbnAdd() {
         var form = document.getElementById("addIsbnForm");
@@ -551,6 +551,114 @@
         var timer = null;
         var lastSent = "";
         var submitting = false;
+        var statusBox = document.getElementById("isbnSearchStatus");
+        var statusTitle = document.getElementById("isbnSearchStatusTitle");
+        var statusLog = document.getElementById("isbnSearchStatusLog");
+        var providers = [];
+        try {
+            providers = JSON.parse(
+                (statusBox && statusBox.getAttribute("data-providers")) || "[]"
+            );
+        } catch (e) {
+            providers = [];
+        }
+        if (!providers.length) {
+            providers = [
+                { id: "isbndb", label: "ISBNdb" },
+                { id: "openlibrary", label: "Open Library" },
+                { id: "googlebooks", label: "Google Books" },
+                { id: "librarything", label: "LibraryThing" },
+            ];
+        }
+        var progressTimer = null;
+        var progressIdx = 0;
+
+        function setHint(text) {
+            var hint = document.getElementById("isbnAutoHint");
+            if (hint) hint.textContent = text;
+        }
+
+        function showStatus(title) {
+            if (!statusBox) return;
+            statusBox.hidden = false;
+            if (statusTitle) statusTitle.textContent = title || "Пошук у каталогах…";
+        }
+
+        function hideStatusLater() {
+            if (!statusBox) return;
+            setTimeout(function () {
+                if (!submitting) statusBox.hidden = true;
+            }, 8000);
+        }
+
+        function clearLog() {
+            if (statusLog) statusLog.innerHTML = "";
+        }
+
+        function appendLogLine(label, status, detail) {
+            if (!statusLog) return;
+            var li = document.createElement("li");
+            li.className = "isbn-search-status__row isbn-search-status__row--" + (status || "searching");
+            var mark =
+                status === "hit"
+                    ? "✓"
+                    : status === "miss" || status === "skip"
+                      ? "·"
+                      : "…";
+            li.textContent =
+                mark +
+                " " +
+                (label || "") +
+                (detail ? " — " + detail : status === "searching" ? "…" : "");
+            statusLog.appendChild(li);
+            statusLog.scrollTop = statusLog.scrollHeight;
+        }
+
+        function stopProgress() {
+            if (progressTimer) {
+                clearInterval(progressTimer);
+                progressTimer = null;
+            }
+        }
+
+        function startProgress() {
+            stopProgress();
+            clearLog();
+            progressIdx = 0;
+            showStatus("Пошук у каталогах…");
+            function tick() {
+                if (progressIdx >= providers.length) progressIdx = 0;
+                var p = providers[progressIdx++];
+                if (statusTitle) {
+                    statusTitle.textContent = "Шукаємо в " + (p.label || p.id) + "…";
+                }
+                appendLogLine(p.label || p.id, "searching", "");
+            }
+            tick();
+            progressTimer = setInterval(tick, 1200);
+        }
+
+        function renderServerLog(log) {
+            stopProgress();
+            clearLog();
+            if (!log || !log.length) return;
+            var hitLabel = "";
+            log.forEach(function (step) {
+                if (!step || step.provider === "lookup") return;
+                appendLogLine(step.label || step.provider, step.status, step.detail || "");
+                if (step.status === "hit") hitLabel = step.label || step.provider;
+            });
+            if (hitLabel && statusTitle) {
+                statusTitle.textContent = "Знайдено в " + hitLabel;
+            } else if (statusTitle) {
+                statusTitle.textContent = "Пошук завершено";
+            }
+        }
+
+        function csrfToken() {
+            var el = form.querySelector('[name="csrfmiddlewaretoken"]');
+            return el ? el.value : "";
+        }
 
         function submitIfReady() {
             if (submitting) return;
@@ -560,30 +668,83 @@
             if (key === lastSent) return;
             lastSent = key;
             submitting = true;
-            var hint = document.getElementById("isbnAutoHint");
-            if (hint) hint.textContent = "Додаємо книгу за ISBN…";
-            try {
-                if (typeof form.requestSubmit === "function") {
-                    form.requestSubmit();
-                } else {
-                    form.submit();
-                }
-            } catch (e) {
-                submitting = false;
-                lastSent = "";
-                console.warn("[isbn-auto]", e);
+            // FormData skips disabled fields — capture body BEFORE locking the input.
+            isbnInput.value = key;
+            var body = new FormData(form);
+            if (!body.get("isbn")) {
+                body.set("isbn", key);
             }
+            isbnInput.disabled = true;
+            setHint("Шукаємо книгу в каталогах за ISBN…");
+            startProgress();
+
+            fetch(form.getAttribute("action") || window.location.href, {
+                method: "POST",
+                body: body,
+                credentials: "same-origin",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    Accept: "application/json",
+                    "X-CSRFToken": csrfToken(),
+                },
+            })
+                .then(function (r) {
+                    return r.json().then(function (data) {
+                        return { ok: r.ok, status: r.status, data: data || {} };
+                    });
+                })
+                .then(function (res) {
+                    renderServerLog(res.data.search_log);
+                    if (res.data.needs_confirmation) {
+                        setHint(res.data.detail || "Підтвердіть додавання примірника.");
+                        hideStatusLater();
+                        if (res.data.redirect) {
+                            window.location.href = res.data.redirect;
+                            return;
+                        }
+                        window.location.reload();
+                        return;
+                    }
+                    if (res.data.pending_approval && res.data.redirect) {
+                        setHint(res.data.detail || "Запит надіслано адміністратору.");
+                        window.location.href = res.data.redirect;
+                        return;
+                    }
+                    if (res.ok && res.data.ok !== false) {
+                        var msg =
+                            res.data.detail ||
+                            (res.data.title ? "Додано: " + res.data.title : "Додано.");
+                        setHint(msg);
+                        showStatus(msg);
+                        hideStatusLater();
+                        window.location.href = res.data.redirect || window.location.pathname;
+                        return;
+                    }
+                    setHint(res.data.detail || "Книгу не знайдено.");
+                    showStatus(res.data.detail || "Книгу не знайдено.");
+                    hideStatusLater();
+                    submitting = false;
+                    lastSent = "";
+                    isbnInput.disabled = false;
+                })
+                .catch(function (e) {
+                    stopProgress();
+                    console.warn("[isbn-auto]", e);
+                    setHint("Помилка мережі під час пошуку. Спробуйте ще раз.");
+                    showStatus("Помилка мережі");
+                    submitting = false;
+                    lastSent = "";
+                    isbnInput.disabled = false;
+                });
         }
 
         function onInput() {
             if (timer) clearTimeout(timer);
             var raw = (isbnInput.value || "").trim();
             if (!isCompleteIsbn(raw)) {
-                var hint = document.getElementById("isbnAutoHint");
-                if (hint) {
-                    hint.textContent =
-                        "Книга додається автоматично після введення повного ISBN (10 або 13).";
-                }
+                setHint(
+                    "Книга додається автоматично після введення повного ISBN (10 або 13)."
+                );
                 return;
             }
             // Debounce so paste/scan settle; 10-digit won't fire again when typing toward 13

@@ -271,7 +271,10 @@ export const ShelfApi = {
     ),
   addIsbn: (isbn: string, confirmExtra = false) =>
     api<
-      | Shelf
+      | (Shelf & {
+          search_log?: { provider: string; label: string; status: string; detail?: string }[];
+          search_source?: string;
+        })
       | {
           needs_confirmation?: boolean;
           pending_approval?: boolean;
@@ -280,6 +283,9 @@ export const ShelfApi = {
           isbn?: string;
           detail?: string;
           action_id?: number;
+          chat_partner_id?: number;
+          search_log?: { provider: string; label: string; status: string; detail?: string }[];
+          search_source?: string;
         }
     >("/api/shelf/isbn/", {
       method: "POST",

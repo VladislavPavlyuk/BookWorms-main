@@ -10,23 +10,53 @@ REPO_ROOT = BASE_DIR.parent
 
 # Compose often injects OCR_SPACE_API_KEY="" via ${VAR:-} — that blocks dotenv.
 # Treat blank secrets as unset so a mounted/loaded .env can fill them.
+_ISBN_PLACEHOLDERS = frozenset(
+    {
+        "your_rest_key",
+        "your-rest-key",
+        "changeme",
+        "change-me",
+        "xxx",
+        "todo",
+    }
+)
+
+
+def _scrub_bad_secret(name: str) -> None:
+    """Drop blank/placeholder so a mounted .env can supply the real value."""
+    raw = (os.environ.get(name) or "").strip()
+    if "#" in raw:
+        raw = raw.split("#", 1)[0].strip()
+    if not raw or raw.lower() in _ISBN_PLACEHOLDERS:
+        os.environ.pop(name, None)
+
+
 for _blank_key in (
     "OCR_SPACE_API_KEY",
     "OPENAI_API_KEY",
     "OPENROUTER_API_KEY",
+    "ISBNDB_API_KEY",
+    "ISBNDB_REST_KEY",
+    "GOOGLE_BOOKS_API_KEY",
 ):
-    if _blank_key in os.environ and not (os.environ.get(_blank_key) or "").strip():
-        del os.environ[_blank_key]
+    _scrub_bad_secret(_blank_key)
 
 # Load .env from every plausible location (local + Docker mount /app/.env).
+# /app/.env is bind-mounted from host ./.env — must override stale compose env
+# (e.g. old ISBNDB_API_KEY=your_rest_key baked into the container).
 for dotenv_path in (
-    Path("/app/.env"),
     BASE_DIR / ".env",
     REPO_ROOT / ".env",
     Path.cwd() / ".env",
 ):
     if dotenv_path.is_file():
         load_dotenv(dotenv_path, override=False)
+_app_env = Path("/app/.env")
+if _app_env.is_file():
+    load_dotenv(_app_env, override=True)
+    # re-scrub in case the mounted file still has a placeholder
+    for _k in ("ISBNDB_API_KEY", "ISBNDB_REST_KEY", "GOOGLE_BOOKS_API_KEY"):
+        _scrub_bad_secret(_k)
 
 # Термін позики для Date Due Slip (днів від прийняття запиту).
 DEFAULT_LOAN_DAYS = int(os.environ.get("DEFAULT_LOAN_DAYS", "14"))

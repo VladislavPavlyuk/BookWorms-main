@@ -1,5 +1,31 @@
 #!/bin/sh
 set -e
+
+# Compose often freezes stale/empty ISBNDB_API_KEY from an older .env into the
+# container environment. Re-export ISBN secrets from the bind-mounted /app/.env
+# so lookups (e.g. 9789667482596 on ISBNdb) actually see the live key.
+if [ -f /app/.env ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      \#*|"") continue ;;
+      ISBNDB_API_KEY=*|ISBNDB_REST_KEY=*|GOOGLE_BOOKS_API_KEY=*|LIBRARYTHING_API_KEY=*|BOOK_METADATA_PROVIDERS=*)
+        key=${line%%=*}
+        val=${line#*=}
+        # strip inline comments and surrounding whitespace
+        val=${val%%#*}
+        val=$(printf '%s' "$val" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        case "$val" in
+          ""|your_rest_key|your-rest-key|changeme|xxx|TODO|todo) continue ;;
+        esac
+        export "$key=$val"
+        ;;
+    esac
+  done < /app/.env
+  echo "entrypoint: ISBN env from /app/.env ISBNDB_len=${#ISBNDB_API_KEY} providers=${BOOK_METADATA_PROVIDERS:-}" >&2
+else
+  echo "entrypoint: WARNING /app/.env missing — ISBN keys may be empty" >&2
+fi
+
 echo "entrypoint: wait postgres..." >&2
 python - <<'PY'
 import os, socket, time, sys
@@ -70,6 +96,27 @@ fi
 
 # Purge крутить лише gunicorn worker thread (post_worker_init) —
 # окремий manage.py loop їв DB + друкував «thread started» кожні 30s.
+echo "entrypoint: ISBN provider smoke..." >&2
+python - <<'PY' || echo "entrypoint: ISBN smoke failed (non-fatal)" >&2
+import os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "bookworms.settings")
+import django
+django.setup()
+from mainApp import isbndb as idb
+from mainApp.book_lookup import _providers
+
+print(
+    f"entrypoint: providers={_providers()} isbndb_configured={idb.configured()} key_len={len(idb.api_key())}",
+    flush=True,
+)
+if idb.configured():
+    book, err = idb.fetch_book_by_isbn("9789667482596")
+    title = (book or {}).get("title") if book else None
+    print(f"entrypoint: isbndb smoke 9789667482596 title={title!r} err={err!r}", flush=True)
+else:
+    print("entrypoint: ISBNDB_API_KEY missing — ISBN add will fail for books only on ISBNdb", flush=True)
+PY
+
 echo "entrypoint: starting gunicorn..." >&2
 exec gunicorn bookworms.wsgi:application \
   --config bookworms/gunicorn.conf.py \
