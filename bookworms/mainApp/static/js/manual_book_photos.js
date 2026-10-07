@@ -870,8 +870,21 @@
                             data = null;
                         }
                         if (data && typeof data === "object") {
-                            if (data.ok && data.redirect) {
-                                window.location.href = data.redirect;
+                            if (data.ok) {
+                                if (
+                                    data.shelf_html &&
+                                    typeof window.insertLibraryShelfHtml === "function" &&
+                                    window.insertLibraryShelfHtml(data.shelf_html)
+                                ) {
+                                    var collapse = document.getElementById("manualAddBook");
+                                    if (collapse && window.bootstrap) {
+                                        var c = bootstrap.Collapse.getInstance(collapse);
+                                        if (c) c.hide();
+                                    }
+                                    form.reset();
+                                    return;
+                                }
+                                window.location.reload();
                                 return;
                             }
                             if (!res.ok || data.ok === false) {
@@ -889,8 +902,7 @@
                             return;
                         }
                         if (res.ok) {
-                            window.location.href =
-                                res.url || window.location.pathname;
+                            window.location.reload();
                             return;
                         }
                         throw new Error(
@@ -1154,8 +1166,8 @@
                             data = null;
                         }
                         if (data && typeof data === "object") {
-                            if (data.ok && data.redirect) {
-                                window.location.href = data.redirect;
+                            if (data.ok) {
+                                window.location.reload();
                                 return;
                             }
                             if (!res.ok || data.ok === false) {
@@ -1167,8 +1179,7 @@
                             return;
                         }
                         if (res.ok) {
-                            window.location.href =
-                                res.url || window.location.pathname;
+                            window.location.reload();
                             return;
                         }
                         throw new Error(

@@ -551,6 +551,86 @@ def edit_post(request, post_id):
 
     return render(request, "mainApp/post_form.html", {"post": post})
 
+
+def _annotate_library_shelf(request, shelf: Shelf) -> Shelf:
+    """Attrs expected by `_library_shelf_item.html` for one shelf row."""
+    import json
+
+    from django.utils.safestring import mark_safe
+
+    from .book_photos import is_local_isbn, user_can_edit_manual_book
+    from .book_price import serialize_evaluation
+
+    shelf.is_lent_out = False
+    shelf.pending_return_row = None
+    shelf.loan_row = None
+    shelf.is_overdue = False
+    shelf.days_left = None
+    if shelf.borrowed_from_id and shelf.due_date:
+        today = timezone.now().date()
+        shelf.is_overdue = shelf.due_date < today
+        shelf.days_left = (shelf.due_date - today).days
+
+    shelf.can_edit_manual = (not shelf.borrowed_from_id) and user_can_edit_manual_book(
+        request.user, shelf.book
+    )
+    if shelf.can_edit_manual:
+        b = shelf.book
+        payload = {
+            "edit_url": reverse("update_manual_shelf_book", args=[shelf.id]),
+            "isbn": "" if is_local_isbn(b.isbn) else (b.isbn or ""),
+            "title": b.title or "",
+            "authors": b.authors or "",
+            "publisher": b.publisher or "",
+            "publish_date": b.publish_date or "",
+            "cover_text": b.cover_text or "",
+            "photos": [{"id": p.id, "url": p.image.url} for p in b.photos.all()],
+        }
+        raw = json.dumps(payload, ensure_ascii=False)
+        shelf.edit_payload_json = mark_safe(
+            raw.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+        )
+    else:
+        shelf.edit_payload_json = ""
+
+    ev = getattr(shelf.book, "price_evaluation", None)
+    pe = serialize_evaluation(ev)
+    shelf.price_eval = pe
+    if pe and pe.get("quotes") is not None:
+        raw_q = json.dumps(pe["quotes"], ensure_ascii=False)
+        shelf.price_quotes_json = mark_safe(
+            raw_q.replace("<", "\\u003c")
+            .replace(">", "\\u003e")
+            .replace("&", "\\u0026")
+        )
+    else:
+        shelf.price_quotes_json = mark_safe("[]")
+    return shelf
+
+
+def _render_library_shelf_item_html(request, shelf: Shelf) -> str:
+    """Fresh shelf HTML from DB for soft-insert into My Library grid."""
+    from django.template.loader import render_to_string
+
+    shelf = (
+        Shelf.objects.filter(pk=shelf.pk)
+        .select_related("book", "copy", "borrowed_from", "user")
+        .prefetch_related("book__photos", "book__price_evaluation__quotes")
+        .first()
+        or shelf
+    )
+    _annotate_library_shelf(request, shelf)
+    return render_to_string(
+        "mainApp/_library_shelf_item.html",
+        {
+            "shelf": shelf,
+            "reader_age_min": READER_AGE_MIN,
+            "reader_age_max": READER_AGE_MAX,
+        },
+        request=request,
+    )
+
+
 @login_required
 def my_library(request):
     """
@@ -681,6 +761,10 @@ def my_library(request):
                                     "detail": msg,
                                     "search_log": search_log,
                                     "search_source": src or None,
+                                    "shelf_id": result.id,
+                                    "shelf_html": _render_library_shelf_item_html(
+                                        request, result
+                                    ),
                                     "redirect": reverse("my_library"),
                                 },
                                 status=201,
@@ -806,6 +890,10 @@ def my_library(request):
                                 "redirect": reverse("my_library"),
                                 "title": book.title,
                                 "photos_saved": len(saved),
+                                "shelf_id": result.id,
+                                "shelf_html": _render_library_shelf_item_html(
+                                    request, result
+                                ),
                             }
                         )
                     return redirect("my_library")

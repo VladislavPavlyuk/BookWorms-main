@@ -9,7 +9,32 @@
 
     var TICK_MS = 450;
     var MAX_W = 640;
-    var WORKER_SRC = "/library/isbn-scan-assets/isbn_scan_worker.js?v=12";
+    var WORKER_SRC = "/library/isbn-scan-assets/isbn_scan_worker.js?v=13";
+
+    /** Soft-insert shelf card HTML returned by My Library AJAX add. */
+    function insertLibraryShelfHtml(html) {
+        if (!html) return false;
+        var grid = document.getElementById("librarySelectGrid");
+        if (!grid) return false;
+        var empty = document.getElementById("libraryShelfEmpty");
+        if (empty) empty.remove();
+        var header = document.getElementById("libraryShelfHeader");
+        if (header) header.hidden = false;
+        var wrap = document.createElement("div");
+        wrap.innerHTML = String(html).trim();
+        var nodes = Array.prototype.slice.call(wrap.childNodes);
+        var firstCard = grid.querySelector(".library-select-card");
+        nodes.forEach(function (node) {
+            if (node.nodeType !== 1) return;
+            if (firstCard) {
+                grid.insertBefore(node, firstCard);
+            } else {
+                grid.appendChild(node);
+            }
+        });
+        return true;
+    }
+    window.insertLibraryShelfHtml = insertLibraryShelfHtml;
 
     function normalizeIsbn(raw) {
         var digits = String(raw || "")
@@ -717,7 +742,18 @@
                         setHint(msg);
                         showStatus(msg);
                         hideStatusLater();
-                        window.location.href = res.data.redirect || window.location.pathname;
+                        // Soft-insert from DB HTML — same-URL location.href does not reload.
+                        if (
+                            res.data.shelf_html &&
+                            insertLibraryShelfHtml(res.data.shelf_html)
+                        ) {
+                            isbnInput.value = "";
+                            submitting = false;
+                            lastSent = "";
+                            isbnInput.disabled = false;
+                            return;
+                        }
+                        window.location.reload();
                         return;
                     }
                     setHint(res.data.detail || "Книгу не знайдено.");

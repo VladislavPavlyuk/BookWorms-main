@@ -154,7 +154,7 @@ def health(request):
     payload = {
         "status": "ok",
         "app": "rechenets",
-        "code_rev": "2026-10-07-isbn-formdata",
+        "code_rev": "2026-10-07-shelf-live",
     }
     try:
         connection.ensure_connection()

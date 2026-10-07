@@ -233,8 +233,8 @@
     </div>
 </div>
 
-{% if shelves %}
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+<div id="libraryShelfSection">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3" id="libraryShelfHeader"{% if not shelves %} hidden{% endif %}>
         <div class="alert alert-info border-0 shadow-sm mb-0 flex-grow-1" role="status">
             <strong>Полиця:</strong> обкладинка · назва · автор · вибір.
             Натисніть <strong>обкладинку</strong>, щоб відкрити деталі (ціна, вік, історія, пост…).
@@ -248,7 +248,7 @@
         </div>
         <div class="library-price-total border rounded px-3 py-2 bg-body-secondary">
             <span class="small text-muted d-block">Оцінка вартості полиці</span>
-            <strong class="fs-5">≈ {{ library_price_total }} ₴</strong>
+            <strong class="fs-5" id="libraryPriceTotalValue">≈ {{ library_price_total }} ₴</strong>
             <span class="small text-muted d-block">сума оцінок ISBN (де знайдено ≥3 джерела)</span>
         </div>
     </div>
@@ -281,184 +281,15 @@
     </form>
 
     <div class="library-shelf-grid-wrap">
-    <div class="library-select-grid">
+    <div class="library-select-grid" id="librarySelectGrid">
         {% for shelf in shelves %}
-            {% with book=shelf.book %}
-            <div class="library-select-card card {% if not shelf.borrowed_from_id and shelf.copy %}library-select-card--owned{% endif %}"
-                 data-shelf-id="{{ shelf.id }}"
-                 {% if not shelf.borrowed_from_id and shelf.copy %}data-selectable="1"{% endif %}>
-                <div class="library-cover-wrap">
-                    <button type="button"
-                            class="library-cover-btn js-library-open-detail"
-                            data-detail-id="{{ shelf.id }}"
-                            aria-label="Деталі: {{ book.title }}">
-                        {% if book.cover_url %}
-                            <img src="{{ book.cover_url }}" class="library-cover-img" alt="">
-                        {% elif book.photos.all %}
-                            <img src="{{ book.photos.all.0.image.url }}" class="library-cover-img" alt="">
-                        {% else %}
-                            <span class="library-cover-placeholder">Немає обкладинки</span>
-                        {% endif %}
-                    </button>
-                    {% if not shelf.borrowed_from_id and shelf.copy %}
-                    <label class="library-select-check form-check m-0">
-                        <input type="checkbox" class="form-check-input js-library-select" value="{{ shelf.id }}" aria-label="Вибрати {{ book.title }}">
-                    </label>
-                    {% endif %}
-                </div>
-                <div class="card-body library-select-card__meta pt-2 pb-2">
-                    <h6 class="card-title mb-1 library-select-card__title">{{ book.title }}</h6>
-                    {% if book.authors %}
-                        <p class="card-text small text-muted mb-0 library-select-card__author">{{ book.authors }}</p>
-                    {% else %}
-                        <p class="card-text small text-muted mb-0 library-select-card__author">Автор невідомий</p>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="d-none" id="library-detail-host-{{ shelf.id }}" hidden>
-                <div class="library-instance-detail" data-shelf-id="{{ shelf.id }}">
-                    <div class="d-flex gap-3 mb-3">
-                        {% if book.cover_url %}
-                            <img src="{{ book.cover_url }}" class="library-detail-cover" alt="">
-                        {% elif book.photos.all %}
-                            <img src="{{ book.photos.all.0.image.url }}" class="library-detail-cover" alt="">
-                        {% endif %}
-                        <div class="flex-grow-1">
-                            <h5 class="mb-1">{{ book.title }}</h5>
-                            {% if book.authors %}<p class="mb-1">{{ book.authors }}</p>{% endif %}
-                            {% if book.isbn|slice:":4" == "9799" %}
-                                <p class="small text-muted mb-1">ISBN code not exists</p>
-                            {% else %}
-                                <p class="small text-muted mb-1">ISBN: {{ book.isbn }}</p>
-                            {% endif %}
-                            {% if not shelf.borrowed_from_id and shelf.copy %}
-                                {% with labels=shelf.copy.listing_labels %}
-                                {% if labels %}
-                                <p class="small text-muted mb-0">{{ labels|join:", " }}</p>
-                                {% endif %}
-                                {% endwith %}
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% if book.photos.all %}
-                        <div class="library-book-photo-strip d-flex flex-wrap gap-1 mb-3">
-                            {% for photo in book.photos.all %}
-                                <a href="{{ photo.image.url }}" target="_blank" rel="noopener" class="library-book-photo-thumb">
-                                    <img src="{{ photo.image.url }}" alt="">
-                                </a>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-                    <div class="library-book-price mb-3" data-book-id="{{ book.id }}">
-                        {% if shelf.price_eval %}
-                            {% if shelf.price_eval.status == "ready" and shelf.price_eval.price_avg %}
-                                <p class="mb-1">
-                                    <span class="fw-semibold">≈ {{ shelf.price_eval.price_avg }} ₴</span>
-                                    <span class="small text-muted">({{ shelf.price_eval.price_min }}–{{ shelf.price_eval.price_max }})</span>
-                                </p>
-                                <div class="d-flex flex-wrap gap-2">
-                                    <button type="button"
-                                            class="btn btn-sm btn-outline-secondary js-price-sources"
-                                            data-book-id="{{ book.id }}"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#priceSourcesModal">
-                                        Price sources ({{ shelf.price_eval.source_count }})
-                                    </button>
-                                    <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline js-price-refresh-form">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-sm btn-outline-primary">Оновити</button>
-                                    </form>
-                                </div>
-                                <script type="application/json" id="price-quotes-{{ book.id }}">{{ shelf.price_quotes_json }}</script>
-                            {% else %}
-                                <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-sm btn-outline-primary">Оцінити ціну</button>
-                                </form>
-                            {% endif %}
-                        {% else %}
-                            <form method="post" action="{% url 'refresh_book_price' book.id %}" class="d-inline">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-primary">Оцінити ціну</button>
-                            </form>
-                        {% endif %}
-                    </div>
-                    {% if not shelf.borrowed_from_id %}
-                    <form method="post" action="{% url 'update_shelf_book_reader_age' shelf.id %}" class="book-reader-age-form border rounded p-2 mb-3 bg-body-secondary" data-autosave="1">
-                        {% csrf_token %}
-                        <p class="small fw-semibold mb-1">Рекомендований вік читача</p>
-                        <div class="reader-age-ticks small text-muted user-select-none">
-                            <span>0</span><span>3</span><span>5</span><span>7</span><span>10</span><span>12</span><span>15</span><span>18+</span>
-                        </div>
-                        <div class="reader-age-dual">
-                            <div class="reader-age-track" aria-hidden="true"><div class="reader-age-fill"></div></div>
-                            <input type="range" name="min_readers_age" min="{{ reader_age_min }}" max="{{ reader_age_max }}" step="1" value="{{ book.min_readers_age }}" class="reader-age-input reader-age-min" aria-label="Мінімальний вік">
-                            <input type="range" name="max_readers_age" min="{{ reader_age_min }}" max="{{ reader_age_max }}" step="1" value="{{ book.max_readers_age }}" class="reader-age-input reader-age-max" aria-label="Максимальний вік">
-                        </div>
-                        <p class="small text-muted mb-0 mt-1 js-reader-age-status" aria-live="polite"></p>
-                    </form>
-                    {% endif %}
-                    <p class="mb-3 d-flex flex-wrap gap-2">
-                        <a href="{% url 'copy_history' shelf.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія</a>
-                        {% if not shelf.borrowed_from_id and shelf.copy_id %}
-                        <a href="{% url 'copy_qr_scan' %}?attach_copy_id={{ shelf.copy_id }}"
-                           class="btn btn-sm btn-primary">Скан QR</a>
-                        {% endif %}
-                        <a href="{% url 'create_post' %}?mode=feedback&amp;book_id={{ book.id }}" class="btn btn-sm btn-outline-success">Написати пост</a>
-                        {% if shelf.can_edit_manual %}
-                        <button type="button"
-                                class="btn btn-sm btn-outline-primary js-edit-manual-book btn-icon-action"
-                                data-shelf-id="{{ shelf.id }}"
-                                title="Редагувати"
-                                aria-label="Редагувати">
-                            <svg class="btn-icon-action__glyph" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/>
-                            </svg>
-                        </button>
-                        <script type="application/json" id="edit-book-payload-{{ shelf.id }}">{{ shelf.edit_payload_json }}</script>
-                        {% endif %}
-                    </p>
-                    {% if shelf.borrowed_from_id %}
-                        <p class="small text-warning mb-1">
-                            Позичено у <strong>{% shelf_user_link shelf.borrowed_from %}</strong>
-                        </p>
-                        {% if shelf.due_date %}
-                        <p class="small mb-2 {% if shelf.is_overdue %}text-danger fw-semibold{% else %}text-muted{% endif %}">
-                            Термін: <strong>{{ shelf.due_date|date:"d.m.Y" }}</strong>
-                            {% if shelf.is_overdue %} · прострочено
-                            {% elif shelf.days_left is not None %} · ще {{ shelf.days_left }} дн.{% endif %}
-                        </p>
-                        {% endif %}
-                        <a href="{% url 'message_thread' shelf.borrowed_from_id %}" class="btn btn-outline-secondary btn-sm mb-2">Чат з власником</a>
-                        {% if shelf.return_pending %}
-                            <p class="small text-info mb-0">Очікується підтвердження повернення.</p>
-                        {% else %}
-                        <form method="post" action="{% url 'return_borrowed_shelf_book' shelf.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-success btn-sm">Повернути власнику</button>
-                        </form>
-                        {% endif %}
-                    {% elif shelf.pending_return_row %}
-                        <p class="small text-success mb-2">
-                            {% shelf_user_link shelf.pending_return_row.user %} повідомив про повернення.
-                        </p>
-                        <form method="post" action="{% url 'confirm_return_borrowed_shelf_book' shelf.pending_return_row.id %}" class="mb-2">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-success btn-sm">
-                              {% if shelf.copy.qr_token and shelf.copy.qr_attached_at %}Скан QR → повернуто{% else %}Підтвердити повернення{% endif %}
-                            </button>
-                        </form>
-                    {% endif %}
-                </div>
-            </div>
-            {% endwith %}
+            {% include "mainApp/_library_shelf_item.html" with shelf=shelf reader_age_min=reader_age_min reader_age_max=reader_age_max %}
+        {% empty %}
+            <p class="text-muted library-shelf-empty mb-0" id="libraryShelfEmpty">Поки що порожньо — додайте першу книгу за ISBN.</p>
         {% endfor %}
     </div>
     </div>
-{% else %}
-    <p class="text-muted">Поки що порожньо -додайте першу книгу за ISBN.</p>
-{% endif %}
+</div>
 
 {% endblock %}
 
@@ -646,8 +477,8 @@
 
 {% block extra_js %}
 {% load static %}
-<script src="{% url 'isbn_scan_asset' 'isbn_scan.js' %}?v=12"></script>
-<script src="{% url 'isbn_scan_asset' 'manual_book_photos.js' %}?v=18"></script>
+<script src="{% url 'isbn_scan_asset' 'isbn_scan.js' %}?v=13"></script>
+<script src="{% url 'isbn_scan_asset' 'manual_book_photos.js' %}?v=19"></script>
 <script>
 (function () {
   document.querySelectorAll(".js-price-sources").forEach(function (btn) {
@@ -758,13 +589,6 @@
       });
     }
 
-    document.querySelectorAll(".js-library-select").forEach(function (cb) {
-      cb.addEventListener("change", syncBar);
-      cb.addEventListener("click", function (ev) {
-        ev.stopPropagation();
-      });
-    });
-
     function parkDetail() {
       if (parkedPanel && parkedHost) {
         parkedHost.appendChild(parkedPanel);
@@ -802,12 +626,28 @@
     if (detailModalEl) {
       detailModalEl.addEventListener("hidden.bs.modal", parkDetail);
     }
-    document.querySelectorAll(".js-library-open-detail").forEach(function (btn) {
-      btn.addEventListener("click", function (ev) {
+
+    // Event delegation — works for soft-inserted shelf cards after AJAX add.
+    var shelfGrid = document.getElementById("librarySelectGrid") || document;
+    shelfGrid.addEventListener("change", function (ev) {
+      if (ev.target && ev.target.classList && ev.target.classList.contains("js-library-select")) {
+        syncBar();
+      }
+    });
+    shelfGrid.addEventListener("click", function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var cb = t.closest(".js-library-select");
+      if (cb) {
+        ev.stopPropagation();
+        return;
+      }
+      var btn = t.closest(".js-library-open-detail");
+      if (btn) {
         ev.preventDefault();
         ev.stopPropagation();
         openDetail(btn.getAttribute("data-detail-id"));
-      });
+      }
     });
 
     function fillIds() {
