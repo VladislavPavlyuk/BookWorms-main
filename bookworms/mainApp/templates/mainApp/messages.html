@@ -443,11 +443,11 @@
                 <div class="chat-other-dialogs d-flex flex-wrap align-items-baseline gap-2 small mb-0">
                     <span class="fw-semibold text-nowrap">Інші діалоги</span>
                     <span class="chat-other-dialogs__links d-flex flex-wrap align-items-baseline gap-2 ms-auto">
-                        {% for p in partners %}
-                            {% if p.id != partner.id %}
+                    {% for p in partners %}
+                        {% if p.id != partner.id %}
                                 <a href="{% url 'message_thread' p.id %}" class="text-nowrap">{{ p.username }}</a>
-                            {% endif %}
-                        {% endfor %}
+                        {% endif %}
+                    {% endfor %}
                     </span>
                 </div>
             </div>
@@ -493,7 +493,7 @@
     }
 
     function scrollPanelToBottom() {
-        if (!panel) return;
+    if (!panel) return;
         panel.scrollTop = panel.scrollHeight;
     }
 

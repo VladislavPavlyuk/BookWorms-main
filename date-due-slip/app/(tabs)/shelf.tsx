@@ -942,21 +942,39 @@ export default function ShelfScreen() {
                 </Text>
               ) : null}
               {detailShelf.book.synopsis ? (
-                <Text style={[styles.meta, { marginTop: 8 }]}>
-                  <Text style={{ fontWeight: "700" }}>Синопсис{"\n"}</Text>
-                  {htmlToPlain(detailShelf.book.synopsis, 1200)}
-                </Text>
+                <View style={styles.proseScrollWrap}>
+                  <Text style={[styles.meta, { fontWeight: "700", marginBottom: 4 }]}>Синопсис</Text>
+                  <ScrollView
+                    style={styles.proseScroll}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                  >
+                    <Text style={styles.meta}>{htmlToPlain(detailShelf.book.synopsis)}</Text>
+                  </ScrollView>
+                </View>
               ) : detailShelf.book.overview ? (
-                <Text style={[styles.meta, { marginTop: 8 }]}>
-                  <Text style={{ fontWeight: "700" }}>Огляд{"\n"}</Text>
-                  {htmlToPlain(detailShelf.book.overview, 800)}
-                </Text>
+                <View style={styles.proseScrollWrap}>
+                  <Text style={[styles.meta, { fontWeight: "700", marginBottom: 4 }]}>Огляд</Text>
+                  <ScrollView
+                    style={styles.proseScroll}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                  >
+                    <Text style={styles.meta}>{htmlToPlain(detailShelf.book.overview)}</Text>
+                  </ScrollView>
+                </View>
               ) : null}
               {detailShelf.book.excerpt ? (
-                <Text style={[styles.meta, { marginTop: 8 }]}>
-                  <Text style={{ fontWeight: "700" }}>Уривок{"\n"}</Text>
-                  {htmlToPlain(detailShelf.book.excerpt, 600)}
-                </Text>
+                <View style={styles.proseScrollWrap}>
+                  <Text style={[styles.meta, { fontWeight: "700", marginBottom: 4 }]}>Уривок</Text>
+                  <ScrollView
+                    style={styles.proseScroll}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                  >
+                    <Text style={styles.meta}>{htmlToPlain(detailShelf.book.excerpt)}</Text>
+                  </ScrollView>
+                </View>
               ) : null}
             </View>
             {detailShelf.borrowed_from ? (
@@ -1689,6 +1707,16 @@ const styles = StyleSheet.create({
     borderTopColor: colors.line,
   },
   isbnMetaH: { color: colors.ink, fontWeight: "800", fontSize: 14, marginBottom: 6 },
+  proseScrollWrap: { marginTop: 8 },
+  proseScroll: {
+    maxHeight: 192,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: "#F7F7F5",
+  },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 14, marginTop: 10 },
   link: { color: colors.ink, fontWeight: "700" },
   action: { color: colors.stamp, fontWeight: "700" },

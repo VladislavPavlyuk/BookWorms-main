@@ -85,18 +85,18 @@
     {% if b.synopsis %}
     <div class="mt-2">
         <p class="small fw-semibold mb-1">Синопсис</p>
-        <div class="small text-muted mb-0 book-isbn-details__prose">{{ b.synopsis|isbn_html:1200 }}</div>
+        <div class="small text-muted mb-0 book-isbn-details__prose book-isbn-details__prose--scroll">{{ b.synopsis|isbn_html }}</div>
     </div>
     {% elif b.overview %}
     <div class="mt-2">
         <p class="small fw-semibold mb-1">Огляд</p>
-        <div class="small text-muted mb-0 book-isbn-details__prose">{{ b.overview|isbn_html:800 }}</div>
+        <div class="small text-muted mb-0 book-isbn-details__prose book-isbn-details__prose--scroll">{{ b.overview|isbn_html }}</div>
     </div>
     {% endif %}
     {% if b.excerpt %}
     <div class="mt-2">
         <p class="small fw-semibold mb-1">Уривок</p>
-        <div class="small text-muted mb-0 book-isbn-details__prose">{{ b.excerpt|isbn_html:600 }}</div>
+        <div class="small text-muted mb-0 book-isbn-details__prose book-isbn-details__prose--scroll">{{ b.excerpt|isbn_html }}</div>
     </div>
     {% endif %}
 </div>

@@ -464,6 +464,17 @@ input[type="button"].btn {
     max-width: 42rem;
 }
 
+.book-isbn-details__prose--scroll {
+    max-height: 12rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 0.35rem;
+    background: rgba(0, 0, 0, 0.02);
+    -webkit-overflow-scrolling: touch;
+}
+
 .book-isbn-details__prose > *:first-child {
     margin-top: 0;
 }

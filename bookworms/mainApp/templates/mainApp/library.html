@@ -136,50 +136,50 @@
 
 <div class="collapse{% if manual_open %} show{% endif %} mb-4" id="manualAddBook">
     <div class="card">
-        <div class="card-body">
-            <h5 class="card-title">Додати книгу вручну</h5>
+    <div class="card-body">
+        <h5 class="card-title">Додати книгу вручну</h5>
             <p class="small text-muted mb-3">ISBN не обов’язковий: зробіть фото обкладинки — AI спробує заповнити назву, авторів і ISBN. Книга потрапить на полицю навіть без каталогу.</p>
             <form method="post" enctype="multipart/form-data" class="row g-3" id="manualAddBookForm">
-                {% csrf_token %}
-                <input type="hidden" name="add_manual" value="1">
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ manual_form.isbn.id_for_label }}">{{ manual_form.isbn.label }}</label>
-                    {{ manual_form.isbn }}
-                    {% if manual_form.isbn.errors %}<div class="text-danger small">{{ manual_form.isbn.errors }}</div>{% endif %}
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ manual_form.title.id_for_label }}">{{ manual_form.title.label }}</label>
-                    {{ manual_form.title }}
-                    {% if manual_form.title.errors %}<div class="text-danger small">{{ manual_form.title.errors }}</div>{% endif %}
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ manual_form.authors.id_for_label }}">{{ manual_form.authors.label }}</label>
-                    {{ manual_form.authors }}
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ manual_form.publisher.id_for_label }}">{{ manual_form.publisher.label }}</label>
-                    {{ manual_form.publisher }}
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ manual_form.publish_date.id_for_label }}">{{ manual_form.publish_date.label }}</label>
-                    {{ manual_form.publish_date }}
-                </div>
+            {% csrf_token %}
+            <input type="hidden" name="add_manual" value="1">
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.isbn.id_for_label }}">{{ manual_form.isbn.label }}</label>
+                {{ manual_form.isbn }}
+                {% if manual_form.isbn.errors %}<div class="text-danger small">{{ manual_form.isbn.errors }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.title.id_for_label }}">{{ manual_form.title.label }}</label>
+                {{ manual_form.title }}
+                {% if manual_form.title.errors %}<div class="text-danger small">{{ manual_form.title.errors }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.authors.id_for_label }}">{{ manual_form.authors.label }}</label>
+                {{ manual_form.authors }}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.publisher.id_for_label }}">{{ manual_form.publisher.label }}</label>
+                {{ manual_form.publisher }}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.publish_date.id_for_label }}">{{ manual_form.publish_date.label }}</label>
+                {{ manual_form.publish_date }}
+            </div>
                 <div class="col-12">
                     <label class="form-label" for="{{ manual_form.cover_text.id_for_label }}">{{ manual_form.cover_text.label }}</label>
                     {{ manual_form.cover_text }}
                     <p class="small text-muted mb-0">Повний текст з фото після AI-розпізнавання (можна правити вручну).</p>
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ manual_form.cover_url.id_for_label }}">{{ manual_form.cover_url.label }}</label>
-                    {{ manual_form.cover_url }}
-                    {% if manual_form.cover_url.errors %}<div class="text-danger small">{{ manual_form.cover_url.errors }}</div>{% endif %}
-                </div>
-                <div class="col-12">
-                    <label class="form-label" for="{{ manual_form.info_url.id_for_label }}">{{ manual_form.info_url.label }}</label>
-                    {{ manual_form.info_url }}
-                    {% if manual_form.info_url.errors %}<div class="text-danger small">{{ manual_form.info_url.errors }}</div>{% endif %}
-                </div>
-                <div class="col-12">
+            <div class="col-md-6">
+                <label class="form-label" for="{{ manual_form.cover_url.id_for_label }}">{{ manual_form.cover_url.label }}</label>
+                {{ manual_form.cover_url }}
+                {% if manual_form.cover_url.errors %}<div class="text-danger small">{{ manual_form.cover_url.errors }}</div>{% endif %}
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="{{ manual_form.info_url.id_for_label }}">{{ manual_form.info_url.label }}</label>
+                {{ manual_form.info_url }}
+                {% if manual_form.info_url.errors %}<div class="text-danger small">{{ manual_form.info_url.errors }}</div>{% endif %}
+            </div>
+            <div class="col-12">
                     <label class="form-label">Фото книги</label>
                     <p class="small text-muted mb-2">Камера обріже обкладинку без фону. Після знімка AI заповнить порожні поля (назва / автори / ISBN). Видалені з прев’ю не потраплять у базу. До 8 фото.</p>
                     <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
@@ -215,7 +215,7 @@
                     <input type="hidden" id="manualRecognizeUrl" value="{% url 'recognize_book_cover' %}">
                 </div>
                 <div class="col-12 d-flex flex-wrap gap-2">
-                    <button type="submit" class="btn btn-outline-primary">Додати на полицю</button>
+                <button type="submit" class="btn btn-outline-primary">Додати на полицю</button>
                     <button type="button" class="btn btn-outline-danger" id="manualClearAllBtn">
                         Очистити всі поля
                     </button>
@@ -227,8 +227,8 @@
                             aria-controls="manualAddBook">
                         Сховати
                     </button>
-                </div>
-            </form>
+            </div>
+        </form>
         </div>
     </div>
 </div>
@@ -352,7 +352,7 @@
     <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <form method="post" enctype="multipart/form-data" id="editManualBookForm">
-                {% csrf_token %}
+                            {% csrf_token %}
                 <div class="modal-header">
                     <h5 class="modal-title" id="editManualBookLabel">Редагувати книгу</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -383,14 +383,14 @@
                             <label class="form-label" for="editManualCoverText">Текст з обкладинки (AI)</label>
                             <textarea name="cover_text" id="editManualCoverText" class="form-control" rows="8"
                                       placeholder="Повний розпізнаний текст обкладинки"></textarea>
-                        </div>
+                            </div>
                         <div class="col-12">
                             <label class="form-label">Поточні фото</label>
                             <div id="editManualExistingPhotos" class="d-flex flex-wrap gap-2 mb-2"></div>
                             <label class="form-label" for="editManualPhotos">Додати фото</label>
                             <input type="file" name="photos" id="editManualPhotos" class="form-control" accept="image/*" multiple>
                             <p class="small text-muted mb-0" id="editManualStatus"></p>
-                        </div>
+                            </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -453,7 +453,7 @@
                         <input type="radio" class="form-check-input js-bulk-sale-gift" name="bulk_sale_gift" value="{{ value }}" {% if value == "" %}checked{% endif %}>
                         {{ label }}
                     </label>
-                    {% endfor %}
+        {% endfor %}
                 </div>
                 <div class="js-bulk-listing-sale mb-2" hidden>
                     <label class="form-label small mb-0" for="bulkSalePrice">Ціна продажу (₴)</label>
