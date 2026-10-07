@@ -459,6 +459,39 @@ input[type="button"].btn {
     margin-bottom: 0.35rem;
 }
 
+.book-isbn-details__prose {
+    line-height: 1.45;
+    max-width: 42rem;
+}
+
+.book-isbn-details__prose > *:first-child {
+    margin-top: 0;
+}
+
+.book-isbn-details__prose > *:last-child {
+    margin-bottom: 0;
+}
+
+.book-isbn-details__prose p {
+    margin: 0 0 0.5rem;
+}
+
+.book-isbn-details__prose ul,
+.book-isbn-details__prose ol {
+    margin: 0 0 0.5rem;
+    padding-left: 1.25rem;
+}
+
+.book-isbn-details__prose a {
+    word-break: break-word;
+}
+
+.book-isbn-details__prose blockquote {
+    margin: 0.35rem 0;
+    padding-left: 0.75rem;
+    border-left: 2px solid rgba(0, 0, 0, 0.15);
+}
+
 .library-selection-bar {
     position: sticky;
     top: 0.75rem;

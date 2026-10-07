@@ -6,7 +6,10 @@ from typing import Any
 
 from ..error_handling import domain_guard
 from ..exceptions import ExchangeInvalidState, ExchangeNotFound
+from ..html_sanitize import sanitize_isbn_html
 from ..models import Book
+
+_HTML_PROSE_FIELDS = frozenset({"overview", "synopsis", "excerpt"})
 
 # CharField / URLField / TextField keys → max length (None = TextField)
 _STRING_FIELDS: tuple[tuple[str, int | None], ...] = (
@@ -55,6 +58,8 @@ def sync_book_from_payload(
         if raw is None:
             continue
         new = str(raw).strip()
+        if field in _HTML_PROSE_FIELDS:
+            new = sanitize_isbn_html(new)
         if maxlen is not None:
             new = new[:maxlen]
         if not new:

@@ -1,4 +1,5 @@
 {# Full ISBNdb-aligned bibliographic block for a Book instance. #}
+{% load isbn_tags %}
 {% with b=book %}
 <div class="book-isbn-details mb-3">
     <h6 class="fw-semibold mb-2">Дані ISBN</h6>
@@ -84,18 +85,18 @@
     {% if b.synopsis %}
     <div class="mt-2">
         <p class="small fw-semibold mb-1">Синопсис</p>
-        <p class="small text-muted mb-0" style="white-space: pre-wrap;">{{ b.synopsis|truncatechars:1200 }}</p>
+        <div class="small text-muted mb-0 book-isbn-details__prose">{{ b.synopsis|isbn_html:1200 }}</div>
     </div>
     {% elif b.overview %}
     <div class="mt-2">
         <p class="small fw-semibold mb-1">Огляд</p>
-        <p class="small text-muted mb-0" style="white-space: pre-wrap;">{{ b.overview|truncatechars:800 }}</p>
+        <div class="small text-muted mb-0 book-isbn-details__prose">{{ b.overview|isbn_html:800 }}</div>
     </div>
     {% endif %}
     {% if b.excerpt %}
     <div class="mt-2">
         <p class="small fw-semibold mb-1">Уривок</p>
-        <p class="small text-muted mb-0" style="white-space: pre-wrap;">{{ b.excerpt|truncatechars:600 }}</p>
+        <div class="small text-muted mb-0 book-isbn-details__prose">{{ b.excerpt|isbn_html:600 }}</div>
     </div>
     {% endif %}
 </div>

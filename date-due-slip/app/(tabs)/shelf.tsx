@@ -21,6 +21,7 @@ import { BookCover } from "../../src/BookCover";
 import { HistoryLink } from "../../src/HistoryLink";
 import { IsbnScanModal, isbnReadyToAdd, normalizeIsbn } from "../../src/IsbnScanModal";
 import { BookCoverCaptureModal } from "../../src/BookCoverCaptureModal";
+import { htmlToPlain } from "../../src/htmlText";
 import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { BookPriceEval, BookPriceQuote, SaleGift, Shelf } from "../../src/types";
@@ -943,18 +944,18 @@ export default function ShelfScreen() {
               {detailShelf.book.synopsis ? (
                 <Text style={[styles.meta, { marginTop: 8 }]}>
                   <Text style={{ fontWeight: "700" }}>Синопсис{"\n"}</Text>
-                  {detailShelf.book.synopsis.slice(0, 1200)}
+                  {htmlToPlain(detailShelf.book.synopsis, 1200)}
                 </Text>
               ) : detailShelf.book.overview ? (
                 <Text style={[styles.meta, { marginTop: 8 }]}>
                   <Text style={{ fontWeight: "700" }}>Огляд{"\n"}</Text>
-                  {detailShelf.book.overview.slice(0, 800)}
+                  {htmlToPlain(detailShelf.book.overview, 800)}
                 </Text>
               ) : null}
               {detailShelf.book.excerpt ? (
                 <Text style={[styles.meta, { marginTop: 8 }]}>
                   <Text style={{ fontWeight: "700" }}>Уривок{"\n"}</Text>
-                  {detailShelf.book.excerpt.slice(0, 600)}
+                  {htmlToPlain(detailShelf.book.excerpt, 600)}
                 </Text>
               ) : null}
             </View>
