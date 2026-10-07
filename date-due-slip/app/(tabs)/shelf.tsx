@@ -128,6 +128,32 @@ export default function ShelfScreen() {
     }
   };
 
+  const refreshMetadata = async (bookId: number) => {
+    try {
+      const r = await ShelfApi.refreshMetadata(bookId);
+      if (r.book) {
+        setShelves((prev) =>
+          prev.map((s) => (s.book.id === bookId ? { ...s, book: { ...s.book, ...r.book } } : s))
+        );
+      }
+      Alert.alert(
+        "Каталог",
+        r.detail || (r.search_source ? `Оновлено з ${r.search_source}` : "Метадані оновлено.")
+      );
+      await load();
+    } catch (e) {
+      const payload =
+        e instanceof ApiError
+          ? (e.payload as { search_log?: { label?: string; status?: string; detail?: string }[] })
+          : null;
+      const log = formatSearchLog(payload?.search_log);
+      Alert.alert(
+        "Каталог",
+        [e instanceof ApiError ? e.message : String(e), log].filter(Boolean).join("\n\n")
+      );
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       load().catch((e) => Alert.alert("Полиця", e instanceof ApiError ? e.message : String(e)));
@@ -945,6 +971,17 @@ export default function ShelfScreen() {
                 </Pressable>
               </View>
             )}
+            {!detailShelf.borrowed_from &&
+            detailShelf.book.isbn &&
+            !detailShelf.book.isbn.startsWith("9799") &&
+            !detailShelf.book.isbn_missing ? (
+              <Pressable
+                onPress={() => refreshMetadata(detailShelf.book.id)}
+                style={[styles.priceBtn, { alignSelf: "flex-start", marginTop: 8 }]}
+              >
+                <Text style={styles.priceBtnText}>Оновити з каталогу</Text>
+              </Pressable>
+            ) : null}
             <View style={[styles.actions, { marginTop: 16 }]}>
               <HistoryLink copyId={detailShelf.copy_id} style={styles.link} />
               {!detailShelf.borrowed_from && detailShelf.copy_id ? (

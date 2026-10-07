@@ -1217,6 +1217,65 @@ def refresh_book_price_view(request, book_id):
 
 @login_required
 @require_POST
+def refresh_book_metadata_view(request, book_id):
+    """Re-fetch title/authors/cover/… from ISBNdb (etc.) for a shelf book."""
+    from .exchange.catalog import refresh_book_metadata_from_catalog
+    from .models import Book, Shelf
+
+    owns = Shelf.objects.filter(user=request.user, book_id=book_id).exists()
+    if not owns:
+        return JsonResponse({"detail": "Книга не на вашій полиці."}, status=403)
+    book = (
+        Book.objects.filter(pk=book_id)
+        .prefetch_related("photos", "price_evaluation__quotes")
+        .first()
+    )
+    if not book:
+        return JsonResponse({"detail": "Книгу не знайдено."}, status=404)
+
+    search_log: list = []
+    is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    try:
+        book = refresh_book_metadata_from_catalog(book, search_log=search_log)
+    except ExchangeError as exc:
+        if is_xhr:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "detail": exc.message,
+                    "search_log": search_log,
+                },
+                status=getattr(exc, "http_status", 404) or 404,
+            )
+        messages.error(request, exc.message)
+        return redirect("my_library")
+
+    hit = next((s for s in reversed(search_log) if s.get("status") == "hit"), None)
+    src = (hit or {}).get("label") or ""
+    msg = f"Оновлено з каталогу: {book.title}"
+    if src:
+        msg = f"{msg} ({src})"
+    if is_xhr:
+        return JsonResponse(
+            {
+                "ok": True,
+                "detail": msg,
+                "title": book.title,
+                "authors": book.authors,
+                "isbn": book.isbn,
+                "cover_url": book.cover_url,
+                "publisher": book.publisher,
+                "publish_date": book.publish_date,
+                "search_log": search_log,
+                "search_source": src or None,
+            }
+        )
+    messages.success(request, msg)
+    return redirect("my_library")
+
+
+@login_required
+@require_POST
 def recognize_book_cover_view(request):
     """Web: AI fill title/authors/ISBN from cover photo(s) (manual add)."""
     files = list(request.FILES.getlist("photos") or [])

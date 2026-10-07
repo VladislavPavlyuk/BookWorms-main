@@ -477,8 +477,78 @@
 
 {% block extra_js %}
 {% load static %}
-<script src="{% url 'isbn_scan_asset' 'isbn_scan.js' %}?v=13"></script>
+<script src="{% url 'isbn_scan_asset' 'isbn_scan.js' %}?v=14"></script>
 <script src="{% url 'isbn_scan_asset' 'manual_book_photos.js' %}?v=19"></script>
+<script>
+(function () {
+  function csrfCookie() {
+    var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+  function formatLog(log) {
+    if (!log || !log.length) return "";
+    return log
+      .filter(function (s) { return s && s.provider !== "lookup"; })
+      .map(function (s) {
+        var mark = s.status === "hit" ? "✓" : "·";
+        return mark + " " + (s.label || s.provider) + (s.detail ? " — " + s.detail : "");
+      })
+      .join("\n");
+  }
+  document.addEventListener("submit", function (ev) {
+    var form = ev.target;
+    if (!form || !form.classList || !form.classList.contains("js-metadata-refresh-form")) return;
+    ev.preventDefault();
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Шукаємо в каталогах…";
+    }
+    var fd = new FormData(form);
+    var csrfEl = form.querySelector('[name="csrfmiddlewaretoken"]');
+    var token = (csrfEl && csrfEl.value) || csrfCookie();
+    fetch(form.action, {
+      method: "POST",
+      body: fd,
+      credentials: "same-origin",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        Accept: "application/json",
+        "X-CSRFToken": token,
+      },
+    })
+      .then(function (r) {
+        return r.text().then(function (text) {
+          var data = null;
+          try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+          return { ok: r.ok, status: r.status, data: data || {}, raw: text };
+        });
+      })
+      .then(function (res) {
+        if (res.ok && res.data && res.data.ok !== false) {
+          var src = res.data.search_source ? " (" + res.data.search_source + ")" : "";
+          if (btn) btn.textContent = "Оновлено" + src;
+          window.location.reload();
+          return;
+        }
+        var detail = (res.data && res.data.detail) || ("HTTP " + res.status);
+        var log = formatLog(res.data && res.data.search_log);
+        alert([detail, log].filter(Boolean).join("\n\n") || "Каталог не знайшов ISBN.");
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Оновити з каталогу";
+        }
+      })
+      .catch(function (e) {
+        alert("Помилка мережі під час оновлення з каталогу: " + (e && e.message ? e.message : e));
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Оновити з каталогу";
+        }
+      });
+  });
+})();
+</script>
 <script>
 (function () {
   document.querySelectorAll(".js-price-sources").forEach(function (btn) {

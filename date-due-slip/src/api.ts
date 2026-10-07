@@ -269,6 +269,14 @@ export const ShelfApi = {
       `/api/books/${bookId}/price/refresh/`,
       { method: "POST" }
     ),
+  refreshMetadata: (bookId: number) =>
+    api<{
+      ok: boolean;
+      detail?: string;
+      search_source?: string;
+      book?: import("./types").Book;
+      search_log?: { provider: string; label: string; status: string; detail?: string }[];
+    }>(`/api/books/${bookId}/metadata/refresh/`, { method: "POST" }),
   addIsbn: (isbn: string, confirmExtra = false) =>
     api<
       | (Shelf & {

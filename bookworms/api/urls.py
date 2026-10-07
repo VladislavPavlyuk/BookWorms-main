@@ -25,6 +25,7 @@ urlpatterns = [
     path("shelf/bulk/", views.shelf_bulk),
     path("shelf/<int:shelf_id>/manual/", views.shelf_update_manual),
     path("books/<int:book_id>/price/refresh/", views.book_price_refresh),
+    path("books/<int:book_id>/metadata/refresh/", views.book_metadata_refresh),
     path("shelf/<int:shelf_id>/", views.shelf_remove),
     path("shelf/<int:shelf_id>/reader-age/", views.shelf_reader_age),
     path("shelf/<int:shelf_id>/listing/", views.shelf_listing),

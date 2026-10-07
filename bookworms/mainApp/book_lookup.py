@@ -65,6 +65,17 @@ def provider_labels(names: list[str] | None = None) -> list[dict[str, str]]:
     ]
 
 
+_MERGE_FIELDS = (
+    "title",
+    "authors",
+    "publisher",
+    "publish_date",
+    "cover_url",
+    "info_url",
+    "isbn",
+)
+
+
 def _log_step(
     search_log: list[dict[str, Any]] | None,
     provider: str,
@@ -83,23 +94,68 @@ def _log_step(
     )
 
 
+def _payload_incomplete(data: dict[str, Any]) -> bool:
+    """True when first-hit metadata is sparse — worth asking other catalogs."""
+    if not (data.get("title") or "").strip():
+        return True
+    if not (data.get("authors") or "").strip():
+        return True
+    if not (data.get("cover_url") or "").strip():
+        return True
+    return False
+
+
+def _merge_payload(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    """Fill empty bibliographic fields from another provider hit."""
+    out = dict(base)
+    sources = list(out.get("_sources") or [])
+    src = (incoming.get("source") or "").strip()
+    if src and src not in sources:
+        sources.append(src)
+    for key in _MERGE_FIELDS:
+        new = (incoming.get(key) or "").strip()
+        if not new:
+            continue
+        old = (out.get(key) or "").strip()
+        if not old:
+            out[key] = incoming[key]
+            continue
+        # Prefer a longer, more descriptive title from a secondary catalog.
+        if key == "title" and len(new) > len(old) + 8:
+            out[key] = incoming[key]
+        # Prefer https cover / any cover if current missing scheme junk.
+        if key == "cover_url" and new.startswith("https://") and not old.startswith("https://"):
+            out[key] = incoming[key]
+    if sources:
+        out["_sources"] = sources
+        out["source"] = "+".join(sources)
+    return out
+
+
 def fetch_book_by_isbn(
     isbn: str,
     *,
     search_log: list[dict[str, Any]] | None = None,
+    merge: bool = False,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """
     Перебирає провайдерів по порядку.
-    Повертає перший успішний payload або зібрану помилку.
+
+    merge=False (default add): stop on first hit, but if that hit is incomplete
+    (no authors/cover) keep asking other catalogs to fill gaps.
+    merge=True (metadata refresh): always query every provider and merge fields.
+
     Optional ``search_log`` collects per-provider steps for UI messaging.
     """
     providers = _providers()
     errors: list[str] = []
+    merged: dict[str, Any] | None = None
     logger.info(
-        "isbn_lookup.start isbn=%s providers=%s isbndb_configured=%s",
+        "isbn_lookup.start isbn=%s providers=%s isbndb_configured=%s merge=%s",
         isbn,
         providers,
         idb.configured(),
+        merge,
     )
     _log_step(search_log, "lookup", "searching", f"ISBN {isbn}")
     for name in providers:
@@ -145,13 +201,47 @@ def fetch_book_by_isbn(
                 and data.get("isbn")
             ):
                 data["cover_url"] = lt.cover_url_for_isbn(data["isbn"], "medium")
-            return data, None
+            if merged is None:
+                merged = dict(data)
+                merged["_sources"] = [name]
+            else:
+                before_cover = (merged.get("cover_url") or "").strip()
+                before_authors = (merged.get("authors") or "").strip()
+                merged = _merge_payload(merged, data)
+                filled = []
+                if not before_cover and (merged.get("cover_url") or "").strip():
+                    filled.append("cover")
+                if not before_authors and (merged.get("authors") or "").strip():
+                    filled.append("authors")
+                if filled:
+                    # amend last hit detail so UI shows enrichment
+                    if search_log:
+                        search_log[-1]["detail"] = (
+                            f"{title or 'знайдено'} (+{', '.join(filled)})"
+                        )
+            # Fast path: complete first hit and not forcing full merge.
+            if not merge and merged is not None and not _payload_incomplete(merged):
+                merged.pop("_sources", None)
+                return merged, None
+            continue
         if err:
             errors.append(f"{name}: {err}" if name not in err else err)
             _log_step(search_log, name, "miss", err)
             logger.warning("isbn_lookup.miss isbn=%s provider=%s err=%s", isbn, name, err)
         else:
             _log_step(search_log, name, "miss", "не знайдено")
+
+    if merged:
+        sources = merged.pop("_sources", None) or []
+        if sources:
+            merged["source"] = "+".join(sources) if len(sources) > 1 else sources[0]
+        logger.info(
+            "isbn_lookup.merged isbn=%s sources=%s title=%s",
+            isbn,
+            sources,
+            (merged.get("title") or "")[:80],
+        )
+        return merged, None
 
     if not errors:
         return None, "Книгу з таким ISBN не знайдено."

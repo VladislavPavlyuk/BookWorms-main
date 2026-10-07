@@ -115,8 +115,16 @@
             <p class="small text-muted mb-0 mt-1 js-reader-age-status" aria-live="polite"></p>
         </form>
         {% endif %}
-        <p class="mb-3 d-flex flex-wrap gap-2">
+                    <p class="mb-3 d-flex flex-wrap gap-2">
             <a href="{% url 'copy_history' shelf.copy_id %}" class="btn btn-sm btn-outline-secondary">Історія</a>
+            {% if not shelf.borrowed_from_id and book.isbn|slice:":4" != "9799" %}
+            <form method="post"
+                  action="{% url 'refresh_book_metadata' book.id %}"
+                  class="d-inline js-metadata-refresh-form">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-primary">Оновити з каталогу</button>
+            </form>
+            {% endif %}
             {% if not shelf.borrowed_from_id and shelf.copy_id %}
             <a href="{% url 'copy_qr_scan' %}?attach_copy_id={{ shelf.copy_id }}"
                class="btn btn-sm btn-primary">Скан QR</a>

@@ -154,7 +154,7 @@ def health(request):
     payload = {
         "status": "ok",
         "app": "rechenets",
-        "code_rev": "2026-10-07-shelf-live",
+        "code_rev": "2026-10-07-meta-merge",
     }
     try:
         connection.ensure_connection()
@@ -549,6 +549,37 @@ def book_price_refresh(request, book_id):
         return _error("Книгу не знайдено.", 404)
     ev = ensure_pending_and_schedule(book, force=True)
     return Response({"ok": True, "price_eval": serialize_evaluation(ev)})
+
+
+@api_view(["POST"])
+def book_metadata_refresh(request, book_id):
+    """Owner-only: re-fetch bibliographic metadata from ISBNdb / other providers."""
+    from mainApp.exchange.catalog import refresh_book_metadata_from_catalog
+    from mainApp.models import Book
+
+    if not Shelf.objects.filter(user=request.user, book_id=book_id).exists():
+        return _error("Книга не на вашій полиці.", 403)
+    book = Book.objects.filter(pk=book_id).first()
+    if not book:
+        return _error("Книгу не знайдено.", 404)
+    search_log: list = []
+    try:
+        book = refresh_book_metadata_from_catalog(book, search_log=search_log)
+    except ExchangeError as e:
+        return Response(
+            {"detail": e.message, "code": e.code, "search_log": search_log},
+            status=e.http_status,
+        )
+    hit = next((s for s in reversed(search_log) if s.get("status") == "hit"), None)
+    return Response(
+        {
+            "ok": True,
+            "book": BookSerializer(book, context={"request": request}).data,
+            "search_log": search_log,
+            "search_source": (hit or {}).get("label"),
+            "detail": f"Оновлено: {book.title}",
+        }
+    )
 
 
 @api_view(["GET"])

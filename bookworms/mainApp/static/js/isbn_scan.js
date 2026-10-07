@@ -9,7 +9,7 @@
 
     var TICK_MS = 450;
     var MAX_W = 640;
-    var WORKER_SRC = "/library/isbn-scan-assets/isbn_scan_worker.js?v=13";
+    var WORKER_SRC = "/library/isbn-scan-assets/isbn_scan_worker.js?v=14";
 
     /** Soft-insert shelf card HTML returned by My Library AJAX add. */
     function insertLibraryShelfHtml(html) {
@@ -722,11 +722,7 @@
                     renderServerLog(res.data.search_log);
                     if (res.data.needs_confirmation) {
                         setHint(res.data.detail || "Підтвердіть додавання примірника.");
-                        hideStatusLater();
-                        if (res.data.redirect) {
-                            window.location.href = res.data.redirect;
-                            return;
-                        }
+                        // Same-URL location.href does not reload — session banner never appears.
                         window.location.reload();
                         return;
                     }

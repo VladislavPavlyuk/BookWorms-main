@@ -28,6 +28,7 @@ local_settings.py
 !**/.env.example
 bookworms/.env
 deploy/qnap/.env
+deploy/qnap/rebuild-api.sh
 
 # IDEs
 .idea/

@@ -47,6 +47,7 @@ from .services import (
 )
 from .catalog import (
     get_or_create_book_from_payload,
+    refresh_book_metadata_from_catalog,
     resolve_and_sync_book_by_isbn,
     sync_book_from_payload,
 )
@@ -151,6 +152,7 @@ __all__ = [
     "for_user_physical_shelf",
     "get_available_owned_offer",
     "get_or_create_book_from_payload",
+    "refresh_book_metadata_from_catalog",
     "group_shelves_by_book",
     "handoffs_involving",
     "is_book_lent_out",
