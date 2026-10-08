@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from django.core.cache import cache
+from django.db import connection
+from django.db.models import Q
 
 from .models import Book
 
@@ -15,6 +17,21 @@ def _normalize_subject(raw) -> str:
     if isinstance(raw, str):
         return raw.strip()
     return str(raw).strip()
+
+
+def subjects_contain_q(subject: str, *, field: str = "subjects") -> Q:
+    """
+    Exact membership of ``subject`` in a JSON list field.
+    Postgres: JSON ``contains``; SQLite/others: quoted-token ``icontains``
+    (JSON array text), so repo tests pass on both backends.
+    """
+    label = _normalize_subject(subject)
+    if not label:
+        return Q(pk__in=[])  # match nothing
+    if connection.vendor == "postgresql":
+        return Q(**{f"{field}__contains": [label]})
+    # SQLite stores JSON lists as text; match "Theme" token.
+    return Q(**{f"{field}__icontains": f'"{label}"'})
 
 
 def catalog_subjects(*, use_cache: bool = True) -> list[str]:

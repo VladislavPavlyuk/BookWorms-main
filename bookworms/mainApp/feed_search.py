@@ -115,7 +115,9 @@ def apply_book_search(qs: QuerySet | None = None, params=None) -> QuerySet:
 
     subject = (params.get("subject") or params.get("theme") or "").strip()
     if subject:
-        qs = qs.filter(subjects__contains=[subject])
+        from .book_subjects import subjects_contain_q
+
+        qs = qs.filter(subjects_contain_q(subject))
 
     age_min = _int_or_none(params.get("age_min"))
     age_max = _int_or_none(params.get("age_max"))

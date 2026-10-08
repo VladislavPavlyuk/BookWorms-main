@@ -51,9 +51,11 @@ def persona_match_q(*, age: int | None, subjects) -> Q | None:
 
     theme_q: Q | None = None
     if themes:
+        from .book_subjects import subjects_contain_q
+
         tq = Q()
         for theme in themes:
-            tq |= Q(book__subjects__contains=[theme])
+            tq |= subjects_contain_q(theme, field="book__subjects")
         theme_q = tq
 
     if age_q is None and theme_q is None:
