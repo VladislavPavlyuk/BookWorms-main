@@ -129,11 +129,14 @@ def _http_get_json(
 
 
 def _cover_url_from_edition(edition: dict[str, Any], isbn: str) -> str:
+    # Prefer large cover — we mirror into local MEDIA on ingest/refresh.
+    # Do NOT fall back to /b/isbn/… — OL serves a ~43-byte blank GIF there
+    # when missing, which wiped real covers on «Оновити з каталогу».
     covers = edition.get("covers") or []
     for cid in covers:
         if isinstance(cid, int) and cid > 0:
-            return f"{COVERS_HOST}/b/id/{cid}-M.jpg"
-    return f"{COVERS_HOST}/b/isbn/{quote(isbn)}-M.jpg"
+            return f"{COVERS_HOST}/b/id/{cid}-L.jpg"
+    return ""
 
 
 def _publisher_line(edition: dict[str, Any]) -> str:
@@ -187,11 +190,7 @@ def _from_search_doc(doc: dict[str, Any], isbn: str) -> dict[str, Any] | None:
         return None
     authors = doc.get("author_name") or []
     cover_id = doc.get("cover_i")
-    cover_url = (
-        f"{COVERS_HOST}/b/id/{cover_id}-M.jpg"
-        if cover_id
-        else f"{COVERS_HOST}/b/isbn/{quote(isbn)}-M.jpg"
-    )
+    cover_url = f"{COVERS_HOST}/b/id/{cover_id}-L.jpg" if cover_id else ""
     olid = doc.get("edition_key") or doc.get("key") or ""
     if isinstance(olid, list) and olid:
         info_url = f"{OL_HOST}/books/{olid[0]}"

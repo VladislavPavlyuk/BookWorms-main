@@ -16,6 +16,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any
@@ -119,8 +120,75 @@ def _payload_incomplete(data: dict[str, Any]) -> bool:
     return False
 
 
-def _merge_payload(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
-    """Fill empty bibliographic fields from another provider hit."""
+_RICH_TEXT_FIELDS = frozenset(
+    {"synopsis", "overview", "excerpt", "title", "title_long", "authors", "publisher", "dimensions"}
+)
+
+
+def _cover_quality(url: str) -> int:
+    """Higher = better candidate for local mirror (size / original / https)."""
+    u = (url or "").strip().lower()
+    if not u:
+        return -1
+    score = 0
+    if u.startswith("https://"):
+        score += 10
+    elif u.startswith("http://"):
+        score += 3
+    if "original" in u:
+        # Ephemeral ISBNdb originals expire ~2h — demote vs stable CDN.
+        score -= 20
+    if "-l.jpg" in u or "/large/" in u or "/l/" in u:
+        score += 50
+    elif "-m.jpg" in u or "/medium/" in u or "/m/" in u:
+        score += 25
+    elif "-s.jpg" in u or "/small/" in u or "/s/" in u:
+        score += 5
+    # OL /b/isbn/… frequently serves a ~43-byte blank GIF.
+    if "covers.openlibrary.org/b/isbn/" in u:
+        score -= 40
+    if "images.isbndb.com" in u:
+        score += 15
+    score += min(len(u), 200) // 40
+    return score
+
+
+def _merge_json_lists(old: Any, new: Any) -> Any:
+    if new in (None, [], {}):
+        return old
+    if old in (None, [], {}):
+        return new
+    if isinstance(old, list) and isinstance(new, list):
+        out: list[Any] = []
+        seen: set[str] = set()
+        for item in old + new:
+            key = json.dumps(item, sort_keys=True, ensure_ascii=False) if isinstance(item, (dict, list)) else str(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+        return out
+    if isinstance(old, dict) and isinstance(new, dict):
+        merged = dict(old)
+        for k, v in new.items():
+            if k not in merged or merged[k] in (None, "", [], {}):
+                merged[k] = v
+        return merged
+    return old
+
+
+def _merge_payload(
+    base: dict[str, Any],
+    incoming: dict[str, Any],
+    *,
+    enrich: bool = False,
+) -> dict[str, Any]:
+    """
+    Merge provider payloads.
+    enrich=False: fill empty gaps only (add-by-ISBN path).
+    enrich=True: maximize fields — longer prose, better covers, union JSON
+    (used by «Оновити з каталогу»).
+    """
     out = dict(base)
     sources = list(out.get("_sources") or [])
     src = (incoming.get("source") or incoming.get("catalog_source") or "").strip()
@@ -137,6 +205,13 @@ def _merge_payload(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, 
         if not old:
             out[key] = incoming[key]
             continue
+        if key in ("cover_url", "cover_url_original"):
+            if _cover_quality(new) > _cover_quality(old):
+                out[key] = incoming[key]
+            continue
+        if enrich and key in _RICH_TEXT_FIELDS and len(new) > len(old) + (0 if key != "title" else 8):
+            out[key] = incoming[key]
+            continue
         # Prefer a longer, more descriptive title from a secondary catalog.
         if key == "title" and len(new) > len(old) + 8:
             out[key] = incoming[key]
@@ -146,12 +221,17 @@ def _merge_payload(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, 
     for key in _MERGE_SCALAR:
         if out.get(key) in (None, "") and incoming.get(key) not in (None, ""):
             out[key] = incoming[key]
+        elif enrich and out.get(key) in (None, "") and incoming.get(key) not in (None, ""):
+            out[key] = incoming[key]
     for key in _MERGE_JSON:
         old = out.get(key)
-        empty = old in (None, [], {})
         new = incoming.get(key)
-        if empty and new not in (None, [], {}):
-            out[key] = new
+        if enrich:
+            out[key] = _merge_json_lists(old, new)
+        else:
+            empty = old in (None, [], {})
+            if empty and new not in (None, [], {}):
+                out[key] = new
     if sources:
         out["_sources"] = sources
         out["source"] = "+".join(sources)
@@ -168,9 +248,10 @@ def fetch_book_by_isbn(
     """
     Перебирає провайдерів по порядку.
 
-    merge=False (default add): stop on first hit, but if that hit is incomplete
-    (no authors/cover) keep asking other catalogs to fill gaps.
-    merge=True (metadata refresh): always query every provider and merge fields.
+    merge=False: stop on first complete hit; if incomplete, keep asking others
+    to fill gaps (legacy / probes).
+    merge=True (first ingest + «Оновити з каталогу»): query every provider and
+    enrich-merge (maximize prose, covers, subjects).
 
     Optional ``search_log`` collects per-provider steps for UI messaging.
     """
@@ -227,19 +308,23 @@ def fetch_book_by_isbn(
                 and lt.configured()
                 and data.get("isbn")
             ):
-                data["cover_url"] = lt.cover_url_for_isbn(data["isbn"], "medium")
+                data["cover_url"] = lt.cover_url_for_isbn(data["isbn"], "large")
             if merged is None:
                 merged = dict(data)
                 merged["_sources"] = [name]
             else:
                 before_cover = (merged.get("cover_url") or "").strip()
                 before_authors = (merged.get("authors") or "").strip()
-                merged = _merge_payload(merged, data)
+                before_syn = len((merged.get("synopsis") or merged.get("overview") or "").strip())
+                merged = _merge_payload(merged, data, enrich=merge)
                 filled = []
-                if not before_cover and (merged.get("cover_url") or "").strip():
+                if (merged.get("cover_url") or "").strip() != before_cover:
                     filled.append("cover")
                 if not before_authors and (merged.get("authors") or "").strip():
                     filled.append("authors")
+                after_syn = len((merged.get("synopsis") or merged.get("overview") or "").strip())
+                if merge and after_syn > before_syn:
+                    filled.append("text")
                 if filled:
                     # amend last hit detail so UI shows enrichment
                     if search_log:

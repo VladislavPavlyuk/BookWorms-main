@@ -562,7 +562,7 @@ def _enrich_from_catalog(fields: dict[str, str]) -> dict[str, str]:
     try:
         from .book_lookup import fetch_book_by_isbn
 
-        payload, _err = fetch_book_by_isbn(isbn)
+        payload, _err = fetch_book_by_isbn(isbn, merge=True)
     except Exception:
         payload = None
     if not payload:

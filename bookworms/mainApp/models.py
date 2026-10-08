@@ -114,7 +114,9 @@ class Book(models.Model):
         verbose_name="Інші ISBN (видання/формати)",
         help_text="ISBNdb other_isbns: [{isbn, binding}, …]",
     )
-    cover_url = models.URLField(max_length=500, blank=True, verbose_name="Обкладинка (URL)")
+    # CharField (not URLField): local covers are path-only ``/media/...`` so HTTPS
+    # pages (Safari) are not mixed-content blocked by ``http://NAS/...`` absolutes.
+    cover_url = models.CharField(max_length=500, blank=True, verbose_name="Обкладинка (URL)")
     cover_url_original = models.URLField(
         max_length=500,
         blank=True,

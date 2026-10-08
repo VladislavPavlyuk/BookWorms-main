@@ -41,6 +41,19 @@ def _absolute_url(request, file_field) -> str:
     return url
 
 
+def _stored_media_url(file_field) -> str:
+    """Path-only /media/... for Book.cover_url (same-origin on HTTPS)."""
+    from .catalog_media import to_relative_media_url
+
+    url = file_field.url or ""
+    rel = to_relative_media_url(url)
+    if rel:
+        return rel[:500]
+    if url.startswith("/"):
+        return url[:500]
+    return f"/{url}"[:500] if url else ""
+
+
 def _trim_pil_background(img: Any) -> Any:
     """Strip near-uniform desk margins via edge row/col bg ratio."""
     from PIL import Image
@@ -204,7 +217,7 @@ def save_book_photos(book: Book, uploaded_files, request=None) -> list[BookPhoto
     if saved:
         # Always refresh cover from first photo of this batch when cover empty
         # or when previous cover was a placeholder / missing
-        first_url = _absolute_url(request, saved[0].image)[:500]
+        first_url = _stored_media_url(saved[0].image)
         cover = (book.cover_url or "").strip()
         if not cover:
             book.cover_url = first_url
@@ -221,7 +234,7 @@ def ensure_cover_from_photos(book: Book, request=None) -> None:
     first = book.photos.order_by("sort_order", "id").first()
     if not first:
         return
-    book.cover_url = _absolute_url(request, first.image)[:500]
+    book.cover_url = _stored_media_url(first.image)
     book.save(update_fields=["cover_url"])
 
 

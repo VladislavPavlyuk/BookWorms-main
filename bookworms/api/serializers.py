@@ -94,6 +94,7 @@ class MeUpdateSerializer(serializers.ModelSerializer):
 class BookSerializer(serializers.ModelSerializer):
     reader_age_summary = serializers.CharField(read_only=True)
     photo_urls = serializers.SerializerMethodField()
+    cover_url = serializers.SerializerMethodField()
     isbn_missing = serializers.SerializerMethodField()
     note = serializers.SerializerMethodField()
     msrp = serializers.DecimalField(
@@ -136,6 +137,11 @@ class BookSerializer(serializers.ModelSerializer):
             "isbn_missing",
             "note",
         )
+
+    def get_cover_url(self, obj):
+        from mainApp.catalog_media import media_url_for_request
+
+        return media_url_for_request(obj.cover_url, self.context.get("request"))
 
     def get_photo_urls(self, obj):
         from mainApp.book_photos import book_photo_urls

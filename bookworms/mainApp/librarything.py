@@ -205,7 +205,7 @@ def _parse_getwork_xml(xml_text: str, isbn: str) -> dict[str, Any] | None:
         "authors": ", ".join(authors),
         "publisher": publisher,
         "publish_date": publish_date,
-        "cover_url": cover_url_for_isbn(isbn, "medium") if api_key() else "",
+        "cover_url": cover_url_for_isbn(isbn, "large") if api_key() else "",
         "info_url": info_url,
         "isbn": isbn,
         "source": "librarything",
@@ -246,7 +246,7 @@ def fetch_book_by_isbn(isbn: str) -> tuple[dict[str, Any] | None, str | None]:
             parsed["isbn"] = _preferred_isbn(norm, candidate)
             # обкладинка завжди на нормалізований/обраний ISBN
             if key:
-                parsed["cover_url"] = cover_url_for_isbn(parsed["isbn"], "medium")
+                parsed["cover_url"] = cover_url_for_isbn(parsed["isbn"], "large")
             return parsed, None
 
     if soft_err:

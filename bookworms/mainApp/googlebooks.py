@@ -107,10 +107,14 @@ def _from_volume(item: dict[str, Any], isbn: str) -> dict[str, Any] | None:
     cover = ""
     images = info.get("imageLinks") or {}
     if isinstance(images, dict):
+        # Prefer largest available — mirrored into local MEDIA on ingest/refresh.
         cover = (
-            images.get("thumbnail")
-            or images.get("smallThumbnail")
+            images.get("extraLarge")
+            or images.get("large")
             or images.get("medium")
+            or images.get("small")
+            or images.get("thumbnail")
+            or images.get("smallThumbnail")
             or ""
         ).strip()
         # Google часто віддає http:// — браузери/мобільні люблять https

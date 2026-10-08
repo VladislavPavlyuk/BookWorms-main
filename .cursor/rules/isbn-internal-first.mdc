@@ -1,0 +1,30 @@
+---
+description: UI serves Book covers/data from local DB; maximize external fetch only when missing
+globs: bookworms/mainApp/exchange/catalog.py,bookworms/mainApp/catalog_media.py,bookworms/mainApp/book_lookup.py,bookworms/mainApp/views.py,bookworms/api/views.py,date-due-slip/**/*.{tsx,ts}
+alwaysApply: false
+---
+
+# Catalog: view from internal DB; fetch abroad only when missing
+
+## Display / serve
+
+Templates, API serializers, and the RN app **must** show book covers and bibliographic data from the **local `Book` row** (`cover_url` → local MEDIA after mirror, synopsis, authors, …).
+
+Do not hot-link external catalog hosts for normal browsing once a book is ingested. Do not call ISBNdb / Open Library / Google / LibraryThing on shelf/instance **view**.
+
+## Resolve / add by ISBN
+
+`resolve_and_sync_book_by_isbn`:
+
+1. **Local hit** → return that `Book` (optional one-time `persist_catalog_cover` if still a remote hot-link). **No** provider API calls.
+2. **Local miss** → `fetch_book_by_isbn(..., merge=True)`: query **all** providers, enrich-merge (longer prose, best cover, union subjects/other_isbns/dewey), persist fields on `Book`, mirror the best cover into `media/catalog_covers/…`. Store `cover_url` as path-only `/media/catalog_covers/…` (Safari HTTPS-safe); `cover_url_original` = remote. API expands via `media_url_for_request`.
+
+## «Оновити з каталогу»
+
+`refresh_book_metadata_from_catalog` is the **only** action that re-fetches abroad for an existing book: same maximize merge, overwrite local fields, force re-mirror cover.
+
+## Persist contract
+
+After any successful external fetch: all usable metadata + cover image bytes live in the app’s database/MEDIA. Subsequent reads use that store until explicit refresh.
+
+**Cover safety on refresh:** `sync_book_from_payload` must never overwrite a local MEDIA `cover_url` with a remote hot-link. Only `persist_catalog_cover` may change `cover_url`. Prefer stable catalog image URLs over ephemeral ISBNdb `image_original` (~2h TTL). Reject downloads &lt; 2KiB (Open Library blank GIF placeholders). Demote `covers.openlibrary.org/b/isbn/…`. If re-mirror fails, keep the previous usable local cover. Never store `http://NAS:port/media/...` absolutes in `cover_url`.
