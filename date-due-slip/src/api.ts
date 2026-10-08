@@ -209,7 +209,11 @@ export type FeedSearch = {
   isbn?: string;
   authors?: string;
   publisher?: string;
+  /** @deprecated use year_from / year_to */
   publish_date?: string;
+  year_from?: string;
+  year_to?: string;
+  language?: string;
   age_min?: string;
   age_max?: string;
 };

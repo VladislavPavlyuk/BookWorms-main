@@ -492,7 +492,7 @@
 </nav>
 
 <main class="site-main">
-<div class="collapse site-advanced-collapse{% if request.GET.isbn or request.GET.authors or request.GET.publisher or request.GET.publish_date or request.GET.age_min or request.GET.age_max %} show{% endif %}"
+<div class="collapse site-advanced-collapse{% if request.GET.isbn or request.GET.authors or request.GET.publisher or request.GET.publish_date or request.GET.year_from or request.GET.year_to or request.GET.language or request.GET.age_min or request.GET.age_max %} show{% endif %}"
      id="advancedSearch">
     <div class="container site-advanced-collapse__inner">
         <form class="home-advanced"
@@ -521,8 +521,41 @@
                         <input id="adv-publisher" class="form-control" name="publisher" value="{{ request.GET.publisher|default:'' }}">
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label small mb-0" for="adv-publish-date">Дата видання</label>
-                        <input id="adv-publish-date" class="form-control" name="publish_date" value="{{ request.GET.publish_date|default:'' }}" placeholder="1980">
+                        <label class="form-label small mb-1 d-block">Рік видання</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <input id="adv-year-from"
+                                   class="form-control"
+                                   type="number"
+                                   name="year_from"
+                                   inputmode="numeric"
+                                   min="1000"
+                                   max="2100"
+                                   step="1"
+                                   placeholder="від"
+                                   value="{{ request.GET.year_from|default:'' }}"
+                                   aria-label="Рік від">
+                            <span class="text-muted small">—</span>
+                            <input id="adv-year-to"
+                                   class="form-control"
+                                   type="number"
+                                   name="year_to"
+                                   inputmode="numeric"
+                                   min="1000"
+                                   max="2100"
+                                   step="1"
+                                   placeholder="до"
+                                   value="{{ request.GET.year_to|default:'' }}"
+                                   aria-label="Рік до">
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-0" for="adv-language">Мова</label>
+                        <select id="adv-language" class="form-select" name="language">
+                            <option value="">Усі мови</option>
+                            {% for code, label in european_languages %}
+                            <option value="{{ code }}"{% if request.GET.language == code %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="col-md-4 col-lg-3">
                         <div class="search-reader-age-form search-reader-age-form--compact">

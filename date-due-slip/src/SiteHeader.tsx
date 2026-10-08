@@ -1,5 +1,13 @@
 import { memo, useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { FeedSearch } from "./api";
@@ -8,6 +16,7 @@ import { EMPTY_FEED_SEARCH, useFeedSearch } from "./feedSearch";
 import { FilterGlyph } from "./HeaderGlyphs";
 import { CyrillicTextInput } from "./CyrillicTextInput";
 import { AgeRangeDual, ageFilterParams, parseAgeParam } from "./AgeRangeDual";
+import { EUROPEAN_LANGUAGES, languageLabel } from "./europeanLanguages";
 import { colors, fs, s, btnRadius } from "./theme";
 
 const CHROME_IDLE_MS = 2000;
@@ -143,7 +152,9 @@ export function SiteHeader() {
     isbn: search.isbn || "",
     authors: search.authors || "",
     publisher: search.publisher || "",
-    publish_date: search.publish_date || "",
+    year_from: search.year_from || "",
+    year_to: search.year_to || "",
+    language: search.language || "",
     age_min: search.age_min || "",
     age_max: search.age_max || "",
   });
@@ -177,7 +188,9 @@ export function SiteHeader() {
       isbn: search.isbn || "",
       authors: search.authors || "",
       publisher: search.publisher || "",
-      publish_date: search.publish_date || "",
+      year_from: search.year_from || "",
+      year_to: search.year_to || "",
+      language: search.language || "",
       age_min: search.age_min || "",
       age_max: search.age_max || "",
     };
@@ -212,7 +225,9 @@ export function SiteHeader() {
             isbn: a.isbn,
             authors: a.authors,
             publisher: a.publisher,
-            publish_date: a.publish_date,
+            year_from: a.year_from,
+            year_to: a.year_to,
+            language: a.language,
             age_min: a.age_min,
             age_max: a.age_max,
           });
@@ -231,7 +246,9 @@ export function SiteHeader() {
       isbn: a.isbn,
       authors: a.authors,
       publisher: a.publisher,
-      publish_date: a.publish_date,
+      year_from: a.year_from,
+      year_to: a.year_to,
+      language: a.language,
       age_min: a.age_min,
       age_max: a.age_max,
     });
@@ -322,14 +339,36 @@ export function SiteHeader() {
               onChange={(t) => setAdvField(key, t)}
             />
           ))}
+          <AdvLanguageSelect
+            value={adv.language || ""}
+            onChange={(code) => setAdvField("language", code)}
+          />
           <View style={styles.advRow}>
-            <View style={styles.advRowField}>
-              <AdvField
-                label="Дата видання"
-                initial={adv.publish_date || ""}
-                keyboardType="default"
-                onChange={(t) => setAdvField("publish_date", t)}
-              />
+            <View style={styles.advYearWrap}>
+              <Text style={styles.label}>Рік видання</Text>
+              <View style={styles.advYearRow}>
+                <CyrillicTextInput
+                  style={[styles.advInput, styles.advYearInput]}
+                  placeholderTextColor={colors.muted}
+                  placeholder="від"
+                  defaultValue={adv.year_from || ""}
+                  onChangeText={(t) => setAdvField("year_from", t.replace(/[^\d]/g, "").slice(0, 4))}
+                  keyboardType="number-pad"
+                  autoCapitalize="none"
+                  showSoftInputOnFocus
+                />
+                <Text style={styles.advYearDash}>—</Text>
+                <CyrillicTextInput
+                  style={[styles.advInput, styles.advYearInput]}
+                  placeholderTextColor={colors.muted}
+                  placeholder="до"
+                  defaultValue={adv.year_to || ""}
+                  onChangeText={(t) => setAdvField("year_to", t.replace(/[^\d]/g, "").slice(0, 4))}
+                  keyboardType="number-pad"
+                  autoCapitalize="none"
+                  showSoftInputOnFocus
+                />
+              </View>
             </View>
             <View style={styles.advAgeWrap}>
               <AgeRangeDual
@@ -390,6 +429,59 @@ const AdvField = memo(function AdvField({
         autoCapitalize="none"
         showSoftInputOnFocus
       />
+    </View>
+  );
+});
+
+const AdvLanguageSelect = memo(function AdvLanguageSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (code: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const data = [{ code: "", label: "Усі мови" }, ...EUROPEAN_LANGUAGES];
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>Мова</Text>
+      <Pressable
+        style={styles.advSelect}
+        onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Мова"
+      >
+        <Text style={styles.advSelectText}>{languageLabel(value)}</Text>
+        <Text style={styles.advSelectChevron}>▾</Text>
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.langModalBackdrop} onPress={() => setOpen(false)}>
+          <View style={styles.langModalCard}>
+            <Text style={styles.langModalTitle}>Мова</Text>
+            <FlatList
+              data={data}
+              keyExtractor={(item) => item.code || "_all"}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => {
+                const on = (value || "") === (item.code || "");
+                return (
+                  <Pressable
+                    style={[styles.langRow, on ? styles.langRowOn : null]}
+                    onPress={() => {
+                      onChange(item.code);
+                      setOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.langRowText, on ? styles.langRowTextOn : null]}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              }}
+            />
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 });
@@ -460,6 +552,46 @@ const styles = StyleSheet.create({
   advBtnOn: {
     backgroundColor: colors.ink,
   },
+  advYearWrap: { flex: 1, minWidth: s(140) },
+  advYearRow: { flexDirection: "row", alignItems: "center", gap: s(6) },
+  advYearInput: { flex: 1, minWidth: 0, textAlign: "center" },
+  advYearDash: { color: colors.muted, fontSize: fs(14) },
+  advSelect: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    borderRadius: btnRadius,
+    paddingHorizontal: s(12),
+    paddingVertical: s(10),
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  advSelectText: { color: colors.ink, fontSize: fs(15), flex: 1 },
+  advSelectChevron: { color: colors.muted, fontSize: fs(14), marginLeft: s(8) },
+  langModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    paddingHorizontal: s(24),
+  },
+  langModalCard: {
+    backgroundColor: colors.white,
+    borderRadius: btnRadius,
+    maxHeight: "70%",
+    paddingVertical: s(8),
+  },
+  langModalTitle: {
+    color: colors.ink,
+    fontWeight: "700",
+    fontSize: fs(16),
+    paddingHorizontal: s(14),
+    paddingVertical: s(8),
+  },
+  langRow: { paddingHorizontal: s(14), paddingVertical: s(12) },
+  langRowOn: { backgroundColor: colors.paperDark },
+  langRowText: { color: colors.ink, fontSize: fs(15) },
+  langRowTextOn: { fontWeight: "700" },
   advPanel: {
     paddingHorizontal: s(12),
     paddingTop: s(10),

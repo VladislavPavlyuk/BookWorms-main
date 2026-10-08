@@ -14,6 +14,9 @@ export const EMPTY_FEED_SEARCH: FeedSearch = {
   authors: "",
   publisher: "",
   publish_date: "",
+  year_from: "",
+  year_to: "",
+  language: "",
   age_min: "",
   age_max: "",
 };
@@ -41,6 +44,9 @@ export function FeedSearchProvider({ children }: { children: ReactNode }) {
       authors: (s.authors || "").trim(),
       publisher: (s.publisher || "").trim(),
       publish_date: (s.publish_date || "").trim(),
+      year_from: (s.year_from || "").trim(),
+      year_to: (s.year_to || "").trim(),
+      language: (s.language || "").trim(),
       age_min: (s.age_min || "").trim(),
       age_max: (s.age_max || "").trim(),
     });

@@ -1,5 +1,6 @@
 """Context processors для навбару."""
 
+from .book_languages import european_language_choices
 from .models import READER_AGE_MAX, READER_AGE_MIN
 
 
@@ -16,3 +17,7 @@ def reader_age_scale(request):
         "reader_age_min": READER_AGE_MIN,
         "reader_age_max": READER_AGE_MAX,
     }
+
+
+def book_search_languages(request):
+    return {"european_languages": european_language_choices()}
