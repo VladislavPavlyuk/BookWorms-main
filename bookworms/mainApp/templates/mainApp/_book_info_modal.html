@@ -1,0 +1,56 @@
+{# Shared book-info modal + open/park JS (My Library pattern). #}
+<div class="modal fade" id="bookInfoModal" tabindex="-1" aria-labelledby="bookInfoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bookInfoModalLabel">Книга</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="bookInfoModalBody"></div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+  var modalEl = document.getElementById("bookInfoModal");
+  var bodyEl = document.getElementById("bookInfoModalBody");
+  var titleEl = document.getElementById("bookInfoModalLabel");
+  if (!modalEl || !bodyEl) return;
+  var parkedPanel = null;
+  var parkedHost = null;
+
+  function park() {
+    if (parkedPanel && parkedHost) {
+      parkedHost.appendChild(parkedPanel);
+    }
+    parkedPanel = null;
+    parkedHost = null;
+    bodyEl.innerHTML = "";
+  }
+
+  function openFrom(btn) {
+    var hostId = btn.getAttribute("data-info-host");
+    if (!hostId) return;
+    var host = document.getElementById(hostId);
+    if (!host) return;
+    var panel = host.querySelector(".js-book-info-panel");
+    if (!panel) return;
+    park();
+    parkedHost = host;
+    parkedPanel = panel;
+    bodyEl.appendChild(panel);
+    var h = panel.querySelector("h5");
+    if (titleEl) titleEl.textContent = h ? h.textContent : "Книга";
+    var modal = window.bootstrap && bootstrap.Modal.getOrCreateInstance(modalEl);
+    if (modal) modal.show();
+  }
+
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target && ev.target.closest && ev.target.closest(".js-book-info-open");
+    if (!btn) return;
+    ev.preventDefault();
+    openFrom(btn);
+  });
+  modalEl.addEventListener("hidden.bs.modal", park);
+})();
+</script>

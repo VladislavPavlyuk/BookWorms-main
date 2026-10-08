@@ -1,0 +1,34 @@
+{# Bibliographic panel for book-info modal (My Library–style). Expects `book`. #}
+<div class="library-instance-detail js-book-info-panel">
+    <div class="d-flex gap-3 mb-3">
+        {% if book.cover_url %}
+            <img src="{{ book.cover_url }}" class="library-detail-cover" alt="">
+        {% elif book.photos.all %}
+            <img src="{{ book.photos.all.0.image.url }}" class="library-detail-cover" alt="">
+        {% endif %}
+        <div class="flex-grow-1">
+            <h5 class="mb-1">{{ book.title }}</h5>
+            {% if book.authors %}<p class="mb-1">{{ book.authors }}</p>{% endif %}
+            {% if book.isbn|slice:":4" == "9799" %}
+                <p class="small text-muted mb-1">ISBN code not exists</p>
+            {% else %}
+                <p class="small text-muted mb-1">ISBN: {{ book.isbn }}{% if book.isbn10 %} · {{ book.isbn10 }}{% endif %}</p>
+            {% endif %}
+            {% if book.publisher or book.publish_date or book.binding %}
+            <p class="small text-muted mb-0">
+                {% if book.publisher %}{{ book.publisher }}{% endif %}{% if book.publisher and book.publish_date %} · {% endif %}{% if book.publish_date %}{{ book.publish_date }}{% endif %}{% if book.binding %} · {{ book.binding }}{% endif %}
+            </p>
+            {% endif %}
+        </div>
+    </div>
+    {% include "mainApp/_book_isbn_details.html" with book=book %}
+    {% if book.photos.all %}
+        <div class="library-book-photo-strip d-flex flex-wrap gap-1 mb-0">
+            {% for photo in book.photos.all %}
+                <a href="{{ photo.image.url }}" target="_blank" rel="noopener" class="library-book-photo-thumb">
+                    <img src="{{ photo.image.url }}" alt="">
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>

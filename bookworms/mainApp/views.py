@@ -1782,7 +1782,10 @@ def user_public_shelf(request, user_id):
 @login_required
 def book_history(request, book_id):
     """ISBN overview: список примірників (кожен зі своєю історією) + пости."""
-    book = get_object_or_404(Book, pk=book_id)
+    book = get_object_or_404(
+        Book.objects.prefetch_related("photos"),
+        pk=book_id,
+    )
     copies = list(
         BookCopy.objects.filter(book=book)
         .select_related("owner", "book")
@@ -1829,7 +1832,7 @@ def copy_history(request, copy_id):
     from .copy_qr import serialize_copy_qr
 
     copy = get_object_or_404(
-        BookCopy.objects.select_related("book", "owner"),
+        BookCopy.objects.select_related("book", "owner").prefetch_related("book__photos"),
         pk=copy_id,
     )
     book = copy.book

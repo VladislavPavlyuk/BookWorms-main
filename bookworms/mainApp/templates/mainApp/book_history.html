@@ -6,14 +6,37 @@
 {% block content %}
 
 <div class="d-flex flex-wrap align-items-start gap-3 mb-4">
-    {% if book.cover_url %}
-        <img src="{{ book.cover_url }}" alt="" class="rounded" style="max-width: 120px; max-height: 180px; object-fit: contain;">
-    {% endif %}
+    <button type="button"
+            class="library-cover-btn js-book-info-open flex-shrink-0 p-0 border-0 bg-transparent"
+            data-info-host="book-info-host"
+            aria-label="Деталі: {{ book.title }}">
+        {% if book.cover_url %}
+            <img src="{{ book.cover_url }}" alt="" class="rounded library-history-cover" style="max-width: 120px; max-height: 180px; object-fit: contain;">
+        {% elif book.photos.all %}
+            <img src="{{ book.photos.all.0.image.url }}" alt="" class="rounded library-history-cover" style="max-width: 120px; max-height: 180px; object-fit: contain;">
+        {% else %}
+            <span class="library-cover-placeholder d-inline-flex align-items-center justify-content-center rounded"
+                  style="width:120px;height:180px;">Немає обкладинки</span>
+        {% endif %}
+    </button>
     <div class="min-w-0">
-        <h2 class="h4 mb-1">{{ book.title }}</h2>
+        <h2 class="h4 mb-1">
+            <button type="button"
+                    class="btn btn-link link-dark text-decoration-none p-0 align-baseline js-book-info-open library-book-title-link"
+                    data-info-host="book-info-host">{{ book.title }}</button>
+        </h2>
         {% if book.authors %}<p class="text-muted small mb-1">{{ book.authors }}</p>{% endif %}
         <p class="text-muted small mb-0">ISBN: {{ book.isbn }}</p>
+        <p class="small mt-2 mb-0">
+            <button type="button" class="btn btn-sm btn-outline-primary js-book-info-open" data-info-host="book-info-host">
+                Дані ISBN
+            </button>
+        </p>
     </div>
+</div>
+
+<div class="d-none" id="book-info-host" hidden>
+    {% include "mainApp/_book_info_panel.html" with book=book %}
 </div>
 
 <p class="text-muted small mb-4">
@@ -101,5 +124,7 @@
 {% else %}
 <p class="text-muted">Постів з прив’язкою до цієї книги на головній ще немає.</p>
 {% endif %}
+
+{% include "mainApp/_book_info_modal.html" %}
 
 {% endblock %}
