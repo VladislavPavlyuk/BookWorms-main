@@ -83,6 +83,7 @@ from .serializers import (
     LoanHandoffSerializer,
     MeSerializer,
     MeUpdateSerializer,
+    SubProfileSerializer,
     MessageSerializer,
     PickOfferSerializer,
     PostSerializer,
@@ -305,6 +306,50 @@ def me(request):
     ser.is_valid(raise_exception=True)
     ser.save()
     return Response(MeSerializer(request.user, context={"request": request}).data)
+
+
+_MAX_SUBPROFILES = 8
+
+
+@api_view(["GET", "POST"])
+def me_subprofiles(request):
+    """List / create UserSubProfile for the authenticated user."""
+    from mainApp.models import UserSubProfile
+
+    if request.method == "GET":
+        qs = request.user.subprofiles.all()
+        return Response(SubProfileSerializer(qs, many=True).data)
+
+    if request.user.subprofiles.count() >= _MAX_SUBPROFILES:
+        return _error(f"Ліміт підпрофілів: {_MAX_SUBPROFILES}.", 400)
+    ser = SubProfileSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+    sp = UserSubProfile(user=request.user, sort_order=request.user.subprofiles.count())
+    for field in ("name", "age", "place", "preferred_subjects"):
+        if field in ser.validated_data:
+            setattr(sp, field, ser.validated_data[field])
+    if not sp.preferred_subjects:
+        sp.preferred_subjects = []
+    sp.save()
+    return Response(SubProfileSerializer(sp).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PATCH", "DELETE"])
+def me_subprofile_detail(request, pk):
+    from mainApp.models import UserSubProfile
+
+    sp = UserSubProfile.objects.filter(pk=pk, user=request.user).first()
+    if not sp:
+        return _error("Підпрофіль не знайдено.", 404)
+    if request.method == "GET":
+        return Response(SubProfileSerializer(sp).data)
+    if request.method == "DELETE":
+        sp.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    ser = SubProfileSerializer(sp, data=request.data, partial=True)
+    ser.is_valid(raise_exception=True)
+    ser.save()
+    return Response(SubProfileSerializer(sp).data)
 
 
 @api_view(["GET"])

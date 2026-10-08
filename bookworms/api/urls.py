@@ -10,6 +10,8 @@ urlpatterns = [
     path("auth/login/", views.login_view),
     path("auth/refresh/", TokenRefreshView.as_view()),
     path("auth/me/", views.me),
+    path("auth/me/subprofiles/", views.me_subprofiles),
+    path("auth/me/subprofiles/<int:pk>/", views.me_subprofile_detail),
     path("contact/config/", views.contact_config),
     path("posts/", views.post_list),
     path("books/", views.book_search),

@@ -16,6 +16,7 @@ from mainApp.models import (
     READER_AGE_MAX,
     READER_AGE_MIN,
     Shelf,
+    UserSubProfile,
 )
 
 User = get_user_model()
@@ -36,7 +37,61 @@ class UserPublicSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(url) if request else url
 
 
+class SubProfileSerializer(serializers.ModelSerializer):
+    age = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0, max_value=120
+    )
+    place = serializers.CharField(
+        required=False, allow_blank=True, max_length=255, default=""
+    )
+    preferred_subjects = serializers.ListField(
+        child=serializers.CharField(max_length=200, allow_blank=False),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
+
+    class Meta:
+        model = UserSubProfile
+        fields = (
+            "id",
+            "name",
+            "age",
+            "place",
+            "preferred_subjects",
+            "sort_order",
+            "created_at",
+        )
+        read_only_fields = ("id", "created_at", "sort_order")
+
+    def validate_preferred_subjects(self, value):
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Очікується список рядків.")
+        out = []
+        seen = set()
+        for item in value:
+            label = (item if isinstance(item, str) else str(item or "")).strip()
+            if not label:
+                continue
+            key = label.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(label)
+        return out
+
+    def validate_name(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Назва обов’язкова.")
+        return value[:100]
+
+
 class MeSerializer(UserPublicSerializer):
+    subprofiles = SubProfileSerializer(many=True, read_only=True)
+
     class Meta(UserPublicSerializer.Meta):
         fields = (
             "id",
@@ -44,6 +99,10 @@ class MeSerializer(UserPublicSerializer):
             "email",
             "biography",
             "avatar_url",
+            "age",
+            "place",
+            "preferred_subjects",
+            "subprofiles",
             "date_joined",
             "last_watched_post_id",
         )
@@ -86,9 +145,76 @@ class RegisterSerializer(serializers.Serializer):
 
 
 class MeUpdateSerializer(serializers.ModelSerializer):
+    age = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0, max_value=120
+    )
+    place = serializers.CharField(
+        required=False, allow_blank=True, max_length=255
+    )
+    preferred_subjects = serializers.ListField(
+        child=serializers.CharField(max_length=200, allow_blank=False),
+        required=False,
+        allow_empty=True,
+    )
+
     class Meta:
         model = User
-        fields = ("username", "biography", "avatar")
+        fields = (
+            "username",
+            "biography",
+            "avatar",
+            "age",
+            "place",
+            "preferred_subjects",
+        )
+
+    def to_internal_value(self, data):
+        # Multipart: preferred_subjects may arrive as a JSON string; age as "".
+        mutable = data.copy() if hasattr(data, "copy") else dict(data)
+        if "age" in mutable and mutable.get("age") in ("", None):
+            mutable["age"] = None
+        ps = mutable.get("preferred_subjects")
+        if isinstance(ps, str):
+            import json
+
+            raw = ps.strip()
+            if not raw:
+                mutable["preferred_subjects"] = []
+            else:
+                try:
+                    mutable["preferred_subjects"] = json.loads(raw)
+                except json.JSONDecodeError:
+                    mutable["preferred_subjects"] = [
+                        s.strip() for s in raw.split(",") if s.strip()
+                    ]
+        return super().to_internal_value(mutable)
+
+    def validate_preferred_subjects(self, value):
+        if value is None:
+            return []
+        out = []
+        seen = set()
+        for item in value:
+            label = (item if isinstance(item, str) else str(item or "")).strip()
+            if not label:
+                continue
+            key = label.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(label)
+        return out
+
+    def validate_age(self, value):
+        if value is None or value == "":
+            return None
+        try:
+            age = int(value)
+        except (TypeError, ValueError):
+            raise serializers.ValidationError("Вік має бути числом.")
+        if age < 0 or age > 120:
+            raise serializers.ValidationError("Вік: 0–120.")
+        return age
 
 
 class BookSerializer(serializers.ModelSerializer):

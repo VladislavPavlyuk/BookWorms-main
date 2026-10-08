@@ -17,7 +17,11 @@ FEED_ORDER = ("-created_ad", "-id")
 def feed_queryset(filter_my: bool = False, user=None) -> QuerySet[Post]:
     qs = Post.objects.select_related("author", "book").order_by(*FEED_ORDER)
     if filter_my and user is not None and getattr(user, "is_authenticated", False):
-        qs = qs.filter(author=user)
+        return qs.filter(author=user)
+    if user is not None and getattr(user, "is_authenticated", False):
+        from .feed_profile import apply_profile_feed_filter
+
+        qs = apply_profile_feed_filter(qs, user)
     return qs
 
 

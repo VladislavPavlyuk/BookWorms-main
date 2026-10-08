@@ -1,16 +1,100 @@
 {% extends "mainApp/base.html" %}
 {% load shelf_tags %}
 
-{% block title %}Профиль{% endblock %}
+{% block title %}Профіль{% endblock %}
 
 {% block content %}
 
-<p><strong>Ім'я:</strong> {% shelf_user_link user %}</p>
-<p><strong>Про себе:</strong> {{ user.biography }}</p>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+  <h1 class="h3 mb-0">Профіль</h1>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{% url 'profile_app:edit_profile' %}" class="btn btn-dark btn-sm">Редагувати профіль</a>
+    {% if can_add_sub %}
+    <a href="{% url 'profile_app:subprofile_create' %}" class="btn btn-outline-dark btn-sm">+ Підпрофіль</a>
+    {% endif %}
+  </div>
+</div>
 
-{% if user.avatar %}
-    <img src="{{ user.avatar.url }}" width="150" alt="">
-{% endif %}
+<div class="d-flex align-items-start gap-3 mb-4">
+  {% if user.avatar %}
+  <img src="{{ user.avatar.url }}" width="96" height="96" class="rounded-circle border" alt="">
+  {% else %}
+  <div class="rounded-circle border d-flex align-items-center justify-content-center bg-light"
+       style="width:96px;height:96px;font-size:2rem;font-weight:700;">
+    {{ user.username|slice:":1"|upper }}
+  </div>
+  {% endif %}
+  <div class="flex-grow-1">
+    <p class="mb-1"><strong>Ім'я:</strong> {% shelf_user_link user %}</p>
+    <p class="mb-1"><strong>Про себе:</strong> {{ user.biography|default:"—" }}</p>
+    <p class="mb-1"><strong>Вік:</strong> {% if user.age is not None %}{{ user.age }}{% else %}—{% endif %}</p>
+    <p class="mb-1"><strong>Місце проживання:</strong> {{ user.place|default:"—" }}</p>
+    <a href="{% url 'profile_app:edit_profile' %}" class="small">Змінити логін, біографію, вік, місце, теми, аватар →</a>
+  </div>
+</div>
+
+<section class="mb-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <h2 class="h5 mb-0">Теми / жанри</h2>
+    <a href="{% url 'profile_app:edit_profile' %}#themes" class="btn btn-outline-secondary btn-sm">Обрати теми</a>
+  </div>
+  {% if user.preferred_subjects %}
+  <div class="d-flex flex-wrap gap-2">
+    {% for t in user.preferred_subjects %}
+    <span class="badge text-bg-dark fw-normal">{{ t }}</span>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted small mb-0">Не обрано — стрічка без обмеження тем для основного профілю.
+    <a href="{% url 'profile_app:edit_profile' %}#themes">Обрати</a>
+  </p>
+  {% endif %}
+</section>
+
+<section class="mb-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <h2 class="h5 mb-0">Підпрофілі</h2>
+    {% if can_add_sub %}
+    <a href="{% url 'profile_app:subprofile_create' %}" class="btn btn-outline-dark btn-sm">+ Додати</a>
+    {% endif %}
+  </div>
+  <p class="small text-muted">Для пошуку книг іншій людині. Стрічка = пости під ваш профіль <em>або</em> будь-який підпрофіль.</p>
+  {% if subprofiles %}
+  <ul class="list-group">
+    {% for sp in subprofiles %}
+    <li class="list-group-item d-flex flex-wrap justify-content-between align-items-start gap-2">
+      <div>
+        <strong>{{ sp.name }}</strong>
+        {% if sp.age is not None %} · {{ sp.age }} р.{% endif %}
+        {% if sp.place %} · {{ sp.place }}{% endif %}
+        {% if sp.preferred_subjects %}
+        <div class="small text-muted mt-1">{{ sp.preferred_subjects|join:", " }}</div>
+        {% else %}
+        <div class="small text-muted mt-1">Теми не обрано</div>
+        {% endif %}
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'profile_app:subprofile_edit' sp.pk %}">Редагувати</a>
+        <form method="post" action="{% url 'profile_app:subprofile_delete' sp.pk %}"
+              onsubmit="return confirm('Видалити підпрофіль «{{ sp.name|escapejs }}»?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-outline-danger">Видалити</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted small mb-0">Немає підпрофілів.
+    {% if can_add_sub %}
+    <a href="{% url 'profile_app:subprofile_create' %}">Створити</a>
+    {% endif %}
+  </p>
+  {% endif %}
+  {% if not can_add_sub and subprofiles %}
+  <p class="small text-muted mt-2 mb-0">Досягнуто ліміт підпрофілів ({{ max_subprofiles }}).</p>
+  {% endif %}
+</section>
 
 {% endblock %}
 

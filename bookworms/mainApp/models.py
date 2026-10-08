@@ -23,6 +23,24 @@ class AvatarCollection(models.Model):
 class CustomUser(AbstractUser):
     biography = models.CharField(max_length=500, blank=True, verbose_name="Про себе")
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name="Аватар")
+    age = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(120)],
+        verbose_name="Вік",
+        help_text="Вік користувача (років). Для стрічки зіставляється з рекомендованим віком книги.",
+    )
+    place = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Місце проживання",
+    )
+    preferred_subjects = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Улюблені теми / жанри",
+        help_text="Підмножина тем з каталогу Book.subjects.",
+    )
     # False = чекає підтвердження (лінк / Web3Forms). Purge дивиться на це поле, не лише is_active.
     email_confirmed = models.BooleanField(
         default=True,
@@ -42,6 +60,47 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return self.username
+
+
+class UserSubProfile(models.Model):
+    """
+    Підпрофіль: шукати книги для іншої людини (дитина, партнер тощо).
+    Стрічка = OR по основному профілю та всіх підпрофілях (теми ∩ вік).
+    """
+
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="subprofiles",
+        verbose_name="Користувач",
+    )
+    name = models.CharField(max_length=100, verbose_name="Назва")
+    age = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(120)],
+        verbose_name="Вік",
+    )
+    place = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Місце проживання",
+    )
+    preferred_subjects = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Улюблені теми / жанри",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0, verbose_name="Порядок")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "підпрофіль"
+        verbose_name_plural = "підпрофілі"
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return f"{self.name} ({self.user_id})"
 
 class Post(models.Model):
     """

@@ -1,0 +1,55 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}{% if creating %}Новий підпрофіль{% else %}Підпрофіль{% endif %}{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">{% if creating %}Новий підпрофіль{% else %}Редагувати: {{ subprofile.name }}{% endif %}</h1>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+    {{ form.name }}
+    {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+  </div>
+  <div class="row g-2 mb-3">
+    <div class="col-md-4">
+      <label class="form-label" for="{{ form.age.id_for_label }}">{{ form.age.label }}</label>
+      {{ form.age }}
+      {% if form.age.errors %}<div class="text-danger small">{{ form.age.errors }}</div>{% endif %}
+    </div>
+    <div class="col-md-8">
+      <label class="form-label" for="{{ form.place.id_for_label }}">{{ form.place.label }}</label>
+      {{ form.place }}
+      {% if form.place.errors %}<div class="text-danger small">{{ form.place.errors }}</div>{% endif %}
+    </div>
+  </div>
+  <fieldset class="mb-4">
+    <legend class="form-label fs-6">{{ form.preferred_subjects.label }}</legend>
+    {% if form.preferred_subjects.field.choices %}
+    <div class="theme-pick-grid">{{ form.preferred_subjects }}</div>
+    {% else %}
+    <p class="text-muted small">Немає тем у каталозі.</p>
+    {% endif %}
+  </fieldset>
+  <button type="submit" class="btn btn-primary">Зберегти</button>
+  <a href="{% url 'profile_app:profile' %}" class="btn btn-outline-secondary">Назад до профілю</a>
+</form>
+
+<style>
+.theme-pick-grid ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.35rem 0.75rem;
+}
+.theme-pick-grid label {
+  font-size: 0.9rem;
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+</style>
+{% endblock %}

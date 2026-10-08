@@ -1,9 +1,23 @@
+export type UserSubProfile = {
+  id: number;
+  name: string;
+  age: number | null;
+  place: string;
+  preferred_subjects: string[];
+  sort_order?: number;
+  created_at?: string;
+};
+
 export type User = {
   id: number;
   username: string;
   email?: string;
   biography: string;
   avatar_url: string | null;
+  age?: number | null;
+  place?: string;
+  preferred_subjects?: string[];
+  subprofiles?: UserSubProfile[];
   last_watched_post_id?: number | null;
 };
 

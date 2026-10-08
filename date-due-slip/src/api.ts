@@ -184,12 +184,49 @@ export const AuthApi = {
     }>(`/api/auth/check-availability/?${q.toString()}`, { auth: false });
   },
   me: () => api<User>("/api/auth/me/"),
-  updateMe: (body: { username?: string; biography?: string } | FormData) =>
+  updateMe: (
+    body:
+      | {
+          username?: string;
+          biography?: string;
+          age?: number | null;
+          place?: string;
+          preferred_subjects?: string[];
+        }
+      | FormData
+  ) =>
     api<User>("/api/auth/me/", {
       method: "PATCH",
       body,
       formData: body instanceof FormData,
     }),
+  listSubprofiles: () =>
+    api<import("./types").UserSubProfile[]>("/api/auth/me/subprofiles/"),
+  createSubprofile: (body: {
+    name: string;
+    age?: number | null;
+    place?: string;
+    preferred_subjects?: string[];
+  }) =>
+    api<import("./types").UserSubProfile>("/api/auth/me/subprofiles/", {
+      method: "POST",
+      body,
+    }),
+  updateSubprofile: (
+    id: number,
+    body: {
+      name?: string;
+      age?: number | null;
+      place?: string;
+      preferred_subjects?: string[];
+    }
+  ) =>
+    api<import("./types").UserSubProfile>(`/api/auth/me/subprofiles/${id}/`, {
+      method: "PATCH",
+      body,
+    }),
+  deleteSubprofile: (id: number) =>
+    api<void>(`/api/auth/me/subprofiles/${id}/`, { method: "DELETE" }),
 };
 
 export const ContactApi = {

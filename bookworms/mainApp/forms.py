@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
-from .models import AvatarCollection
+from .models import AvatarCollection, UserSubProfile
 from django.core.exceptions import ValidationError
 
 User = get_user_model()
@@ -130,33 +130,137 @@ class UserUpdateForm(forms.ModelForm):
         widget=forms.RadioSelect(attrs={"class": "avatar-pick__radio"}),
         label="Оберіть аватар",
     )
+    preferred_subjects = forms.MultipleChoiceField(
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "theme-pick"}),
+        label="Теми / жанри",
+        help_text="Список зростає разом із темами в каталозі книг.",
+    )
 
     class Meta:
         model = User
-        fields = ["username", "biography"]
+        fields = ["username", "biography", "age", "place", "preferred_subjects"]
         labels = {
             "username": "Логін",
             "biography": "Про себе",
+            "age": "Вік",
+            "place": "Місце проживання",
+        }
+        widgets = {
+            "age": forms.NumberInput(
+                attrs={"min": 0, "max": 120, "inputmode": "numeric", "placeholder": "років"}
+            ),
+            "place": forms.TextInput(attrs={"placeholder": "місто / країна"}),
+            "biography": forms.Textarea(attrs={"rows": 3}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        from .book_subjects import catalog_subjects
+
+        catalog = catalog_subjects()
+        current = []
+        if self.instance and getattr(self.instance, "pk", None):
+            current = list(self.instance.preferred_subjects or [])
+        # Keep selected themes even if temporarily missing from catalog.
+        choices_map = {c.casefold(): c for c in catalog}
+        for c in current:
+            key = (c or "").casefold()
+            if key and key not in choices_map:
+                choices_map[key] = c
+        choices = [(v, v) for _, v in sorted(choices_map.items(), key=lambda x: x[0])]
+        self.fields["preferred_subjects"].choices = choices
+        if not self.is_bound:
+            self.initial["preferred_subjects"] = current
 
         for name, field in self.fields.items():
-            if name == "avatar_choice":
+            if name in ("avatar_choice", "preferred_subjects"):
                 continue
             field.widget.attrs["class"] = "form-control"
         if "username" in self.fields:
             self.fields["username"].widget.attrs["lang"] = "uk"
 
+    def clean_preferred_subjects(self):
+        return list(self.cleaned_data.get("preferred_subjects") or [])
+
+    def clean_age(self):
+        age = self.cleaned_data.get("age")
+        if age is None or age == "":
+            return None
+        return age
+
     def save(self, commit=True):
         user = super().save(commit=False)
+        user.preferred_subjects = self.cleaned_data.get("preferred_subjects") or []
         choice = self.cleaned_data.get("avatar_choice")
         if choice:
             _apply_avatar_choice(user, choice)
         if commit:
             user.save()
         return user
+
+
+class SubProfileForm(forms.ModelForm):
+    preferred_subjects = forms.MultipleChoiceField(
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "theme-pick"}),
+        label="Теми / жанри",
+    )
+
+    class Meta:
+        model = UserSubProfile
+        fields = ["name", "age", "place", "preferred_subjects"]
+        labels = {
+            "name": "Назва",
+            "age": "Вік",
+            "place": "Місце проживання",
+        }
+        widgets = {
+            "name": forms.TextInput(attrs={"placeholder": "напр. Для сина"}),
+            "age": forms.NumberInput(
+                attrs={"min": 0, "max": 120, "inputmode": "numeric", "placeholder": "років"}
+            ),
+            "place": forms.TextInput(attrs={"placeholder": "місто / країна"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from .book_subjects import catalog_subjects
+
+        catalog = catalog_subjects()
+        current = []
+        if self.instance and getattr(self.instance, "pk", None):
+            current = list(self.instance.preferred_subjects or [])
+        choices_map = {c.casefold(): c for c in catalog}
+        for c in current:
+            key = (c or "").casefold()
+            if key and key not in choices_map:
+                choices_map[key] = c
+        self.fields["preferred_subjects"].choices = [
+            (v, v) for _, v in sorted(choices_map.items(), key=lambda x: x[0])
+        ]
+        if not self.is_bound:
+            self.initial["preferred_subjects"] = current
+        for name, field in self.fields.items():
+            if name == "preferred_subjects":
+                continue
+            field.widget.attrs["class"] = "form-control"
+
+    def clean_preferred_subjects(self):
+        return list(self.cleaned_data.get("preferred_subjects") or [])
+
+    def clean_age(self):
+        age = self.cleaned_data.get("age")
+        if age is None or age == "":
+            return None
+        return age
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        obj.preferred_subjects = self.cleaned_data.get("preferred_subjects") or []
+        if commit:
+            obj.save()
+        return obj
 class AddIsbnForm(forms.Form):
     """Поле ISBN для сторінки "Моя полиця"; вікові групи задаються окремо на картці книги."""
     isbn = forms.CharField(

@@ -20,6 +20,32 @@
         {% if form.biography.errors %}<div class="text-danger small">{{ form.biography.errors }}</div>{% endif %}
     </div>
 
+    <div class="row g-2 mb-3">
+        <div class="col-md-4">
+            <label class="form-label" for="{{ form.age.id_for_label }}">{{ form.age.label }}</label>
+            {{ form.age }}
+            {% if form.age.errors %}<div class="text-danger small">{{ form.age.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-8">
+            <label class="form-label" for="{{ form.place.id_for_label }}">{{ form.place.label }}</label>
+            {{ form.place }}
+            {% if form.place.errors %}<div class="text-danger small">{{ form.place.errors }}</div>{% endif %}
+        </div>
+    </div>
+
+    <fieldset class="mb-4" id="themes">
+        <legend class="form-label fs-6">{{ form.preferred_subjects.label }}</legend>
+        <p class="small text-muted mb-2">{{ form.preferred_subjects.help_text }}</p>
+        {% if form.preferred_subjects.field.choices %}
+        <div class="theme-pick-grid">
+            {{ form.preferred_subjects }}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0">У каталозі ще немає тем — з’являться після додавання книг із subjects.</p>
+        {% endif %}
+        {% if form.preferred_subjects.errors %}<div class="text-danger small">{{ form.preferred_subjects.errors }}</div>{% endif %}
+    </fieldset>
+
     <fieldset class="mb-4">
         <legend class="form-label fs-6">{{ form.avatar_choice.label }}</legend>
         {% if user.avatar %}
@@ -52,9 +78,44 @@
         {% if form.avatar_choice.errors %}<div class="text-danger small">{{ form.avatar_choice.errors }}</div>{% endif %}
     </fieldset>
 
-    <button type="submit" class="btn btn-primary">Зберегти</button>
+    <button type="submit" class="btn btn-primary">Зберегти профіль</button>
     <a href="{% url 'profile_app:profile' %}" class="btn btn-outline-secondary">Скасувати</a>
 </form>
+
+<hr class="my-4">
+
+<h2 class="h5">Підпрофілі</h2>
+<p class="small text-muted">До {{ max_subprofiles }} шт. Стрічка = книги для вас <em>або</em> будь-якого підпрофілю.</p>
+
+{% if subprofiles %}
+<ul class="list-group mb-3">
+  {% for sp in subprofiles %}
+  <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <strong>{{ sp.name }}</strong>
+      {% if sp.age is not None %} · {{ sp.age }} р.{% endif %}
+      {% if sp.place %} · {{ sp.place }}{% endif %}
+      {% if sp.preferred_subjects %}
+      <div class="small text-muted">{{ sp.preferred_subjects|join:", " }}</div>
+      {% endif %}
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'profile_app:subprofile_edit' sp.pk %}">Редагувати</a>
+      <form method="post" action="{% url 'profile_app:subprofile_delete' sp.pk %}" onsubmit="return confirm('Видалити підпрофіль?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-danger">Видалити</button>
+      </form>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if can_add_sub %}
+<a class="btn btn-outline-dark btn-sm" href="{% url 'profile_app:subprofile_create' %}">+ Додати підпрофіль</a>
+{% else %}
+<p class="small text-muted">Досягнуто ліміт підпрофілів.</p>
+{% endif %}
 
 <style>
 .avatar-pick {
@@ -88,6 +149,20 @@
 }
 .avatar-pick__item:hover .avatar-pick__img {
   border-color: rgba(26, 36, 51, 0.45);
+}
+.theme-pick-grid ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.35rem 0.75rem;
+}
+.theme-pick-grid label {
+  font-size: 0.9rem;
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
 }
 </style>
 {% endblock %}

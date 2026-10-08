@@ -23,6 +23,7 @@ from .models import (
     PrivateMessage,
     Shelf,
     UserClientProfile,
+    UserSubProfile,
 )
 
 admin.site.site_header = "Реченець"
@@ -71,7 +72,20 @@ class CustomUserAdmin(UserAdmin):
     list_filter = ("is_active", "email_confirmed", "is_staff", "date_joined")
     actions = ("purge_expired_unconfirmed",)
     fieldsets = UserAdmin.fieldsets + (
-        (None, {"fields": ("biography", "avatar", "email_confirmed", "last_watched_post")}),
+        (
+            None,
+            {
+                "fields": (
+                    "biography",
+                    "avatar",
+                    "age",
+                    "place",
+                    "preferred_subjects",
+                    "email_confirmed",
+                    "last_watched_post",
+                )
+            },
+        ),
     )
 
     @admin.action(description="Видалити прострочених непідтверджених (email_confirmed=False)")
@@ -83,6 +97,13 @@ class CustomUserAdmin(UserAdmin):
 
 
 admin.site.register(CustomUser, CustomUserAdmin)
+
+
+@admin.register(UserSubProfile)
+class UserSubProfileAdmin(admin.ModelAdmin):
+    list_display = ("name", "user", "age", "place", "sort_order")
+    list_filter = ("user",)
+    search_fields = ("name", "user__username", "place")
 
 
 @admin.register(UserClientProfile)
