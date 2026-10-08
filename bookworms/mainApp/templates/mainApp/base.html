@@ -492,7 +492,7 @@
 </nav>
 
 <main class="site-main">
-<div class="collapse site-advanced-collapse{% if request.GET.isbn or request.GET.authors or request.GET.publisher or request.GET.publish_date or request.GET.year_from or request.GET.year_to or request.GET.language or request.GET.age_min or request.GET.age_max %} show{% endif %}"
+<div class="collapse site-advanced-collapse{% if request.GET.isbn or request.GET.authors or request.GET.publisher or request.GET.publish_date or request.GET.year_from or request.GET.year_to or request.GET.language or request.GET.subject or request.GET.age_min or request.GET.age_max %} show{% endif %}"
      id="advancedSearch">
     <div class="container site-advanced-collapse__inner">
         <form class="home-advanced"
@@ -554,6 +554,15 @@
                             <option value="">Усі мови</option>
                             {% for code, label in european_languages %}
                             <option value="{{ code }}"{% if request.GET.language == code %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-0" for="adv-subject">Тема / жанр</label>
+                        <select id="adv-subject" class="form-select" name="subject">
+                            <option value="">Усі теми</option>
+                            {% for theme in catalog_subjects %}
+                            <option value="{{ theme }}"{% if request.GET.subject == theme %} selected{% endif %}>{{ theme }}</option>
                             {% endfor %}
                         </select>
                     </div>

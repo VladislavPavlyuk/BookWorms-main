@@ -17,6 +17,7 @@ export const EMPTY_FEED_SEARCH: FeedSearch = {
   year_from: "",
   year_to: "",
   language: "",
+  subject: "",
   age_min: "",
   age_max: "",
 };
@@ -47,6 +48,7 @@ export function FeedSearchProvider({ children }: { children: ReactNode }) {
       year_from: (s.year_from || "").trim(),
       year_to: (s.year_to || "").trim(),
       language: (s.language || "").trim(),
+      subject: (s.subject || "").trim(),
       age_min: (s.age_min || "").trim(),
       age_max: (s.age_max || "").trim(),
     });

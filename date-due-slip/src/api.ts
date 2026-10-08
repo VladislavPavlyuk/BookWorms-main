@@ -214,6 +214,8 @@ export type FeedSearch = {
   year_from?: string;
   year_to?: string;
   language?: string;
+  /** Theme/Genre — exact match in Book.subjects */
+  subject?: string;
   age_min?: string;
   age_max?: string;
 };
@@ -254,6 +256,8 @@ export const FeedApi = {
 export const BooksApi = {
   search: (page = 1, search?: FeedSearch) =>
     api<Paginated<Book>>(`/api/books/?${bookQuery(page, search)}`),
+  subjects: () =>
+    api<{ subjects: string[] }>("/api/books/subjects/", { auth: false }),
 };
 
 export const ShelfApi = {

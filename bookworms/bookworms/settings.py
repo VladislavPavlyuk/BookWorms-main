@@ -193,6 +193,7 @@ TEMPLATES = [
                 'mainApp.context_processors.notifications',
                 'mainApp.context_processors.reader_age_scale',
                 'mainApp.context_processors.book_search_languages',
+                'mainApp.context_processors.book_search_subjects',
             ],
         },
     },

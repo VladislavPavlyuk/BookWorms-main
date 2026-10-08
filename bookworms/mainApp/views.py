@@ -181,6 +181,7 @@ def home(request):
             "year_from": (request.GET.get("year_from") or "").strip(),
             "year_to": (request.GET.get("year_to") or "").strip(),
             "language": (request.GET.get("language") or "").strip(),
+            "subject": (request.GET.get("subject") or "").strip(),
             "age_min": (request.GET.get("age_min") or "").strip(),
             "age_max": (request.GET.get("age_max") or "").strip(),
             "scroll_post_id": scroll_post_id,

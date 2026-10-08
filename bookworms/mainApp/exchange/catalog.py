@@ -155,6 +155,10 @@ def sync_book_from_payload(
         # unique + stable order
         uniq = list(dict.fromkeys(changed_fields))
         book.save(update_fields=uniq)
+        if "subjects" in uniq:
+            from mainApp.book_subjects import invalidate_catalog_subjects_cache
+
+            invalidate_catalog_subjects_cache()
 
     # Mirror best available cover into MEDIA. On refresh failure, keep local.
     ok = persist_catalog_cover(

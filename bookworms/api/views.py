@@ -383,6 +383,15 @@ def book_search(request):
     return paginator.get_paginated_response(ser.data)
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def book_subjects(request):
+    """Distinct Theme/Genre values from internal Book.subjects (for Advanced Search)."""
+    from mainApp.book_subjects import catalog_subjects
+
+    return Response({"subjects": catalog_subjects()})
+
+
 @api_view(["POST"])
 def post_create(request):
     ser = PostWriteSerializer(data=request.data)

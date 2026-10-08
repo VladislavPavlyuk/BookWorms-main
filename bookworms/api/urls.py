@@ -13,6 +13,7 @@ urlpatterns = [
     path("contact/config/", views.contact_config),
     path("posts/", views.post_list),
     path("books/", views.book_search),
+    path("books/subjects/", views.book_subjects),
     path("posts/create/", views.post_create),
     path("posts/<int:post_id>/", views.post_detail),
     path("posts/<int:post_id>/like/", views.post_like),

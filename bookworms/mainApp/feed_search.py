@@ -16,6 +16,7 @@ BOOK_SEARCH_KEYS = (
     "year_from",
     "year_to",
     "language",
+    "subject",  # Theme/Genre — exact membership in Book.subjects
     "age_min",
     "age_max",
 )
@@ -71,6 +72,7 @@ def apply_book_search(qs: QuerySet | None = None, params=None) -> QuerySet:
     isbn, authors, publisher — icontains.
     year_from / year_to — рік видання (діапазон); legacy publish_date — icontains.
     language — exact/alias match.
+    subject — exact Theme/Genre in Book.subjects JSON list.
     age_min / age_max — перетин з рекомендованим віком.
     """
     if qs is None:
@@ -110,6 +112,10 @@ def apply_book_search(qs: QuerySet | None = None, params=None) -> QuerySet:
         lang_q = language_search_q(language)
         if lang_q is not None:
             qs = qs.filter(lang_q)
+
+    subject = (params.get("subject") or params.get("theme") or "").strip()
+    if subject:
+        qs = qs.filter(subjects__contains=[subject])
 
     age_min = _int_or_none(params.get("age_min"))
     age_max = _int_or_none(params.get("age_max"))

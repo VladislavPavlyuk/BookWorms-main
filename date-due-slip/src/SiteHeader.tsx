@@ -11,6 +11,7 @@ import {
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { FeedSearch } from "./api";
+import { BooksApi } from "./api";
 import { HeaderActions } from "./BurgerMenu";
 import { EMPTY_FEED_SEARCH, useFeedSearch } from "./feedSearch";
 import { FilterGlyph } from "./HeaderGlyphs";
@@ -155,10 +156,12 @@ export function SiteHeader() {
     year_from: search.year_from || "",
     year_to: search.year_to || "",
     language: search.language || "",
+    subject: search.subject || "",
     age_min: search.age_min || "",
     age_max: search.age_max || "",
   });
   const [advOpen, setAdvOpen] = useState(false);
+  const [catalogSubjects, setCatalogSubjects] = useState<string[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingRef = useRef(false);
   const chromeApi = useRef<ChromeApi | null>(null);
@@ -179,6 +182,22 @@ export function SiteHeader() {
     if (!onHome) setAdvOpen(false);
   }, [onHome]);
 
+  // Refresh Theme/Genre list from internal DB whenever Advanced Search opens
+  useEffect(() => {
+    if (!advOpen) return;
+    let cancelled = false;
+    BooksApi.subjects()
+      .then((r) => {
+        if (!cancelled) setCatalogSubjects(r.subjects || []);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogSubjects([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [advOpen]);
+
   // sync from context only when not typing (Скинути etc.)
   useEffect(() => {
     if (typingRef.current) return;
@@ -191,6 +210,7 @@ export function SiteHeader() {
       year_from: search.year_from || "",
       year_to: search.year_to || "",
       language: search.language || "",
+      subject: search.subject || "",
       age_min: search.age_min || "",
       age_max: search.age_max || "",
     };
@@ -228,6 +248,7 @@ export function SiteHeader() {
             year_from: a.year_from,
             year_to: a.year_to,
             language: a.language,
+            subject: a.subject,
             age_min: a.age_min,
             age_max: a.age_max,
           });
@@ -249,6 +270,7 @@ export function SiteHeader() {
       year_from: a.year_from,
       year_to: a.year_to,
       language: a.language,
+      subject: a.subject,
       age_min: a.age_min,
       age_max: a.age_max,
     });
@@ -342,6 +364,11 @@ export function SiteHeader() {
           <AdvLanguageSelect
             value={adv.language || ""}
             onChange={(code) => setAdvField("language", code)}
+          />
+          <AdvSubjectSelect
+            value={adv.subject || ""}
+            subjects={catalogSubjects}
+            onChange={(theme) => setAdvField("subject", theme)}
           />
           <View style={styles.advRow}>
             <View style={styles.advYearWrap}>
@@ -474,6 +501,67 @@ const AdvLanguageSelect = memo(function AdvLanguageSelect({
                   >
                     <Text style={[styles.langRowText, on ? styles.langRowTextOn : null]}>
                       {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              }}
+            />
+          </View>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+});
+
+const AdvSubjectSelect = memo(function AdvSubjectSelect({
+  value,
+  subjects,
+  onChange,
+}: {
+  value: string;
+  subjects: string[];
+  onChange: (theme: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const data = ["", ...subjects];
+  const label = value || "Усі теми";
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>Тема / жанр</Text>
+      <Pressable
+        style={styles.advSelect}
+        onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Тема / жанр"
+      >
+        <Text style={styles.advSelectText} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.advSelectChevron}>▾</Text>
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.langModalBackdrop} onPress={() => setOpen(false)}>
+          <View style={styles.langModalCard}>
+            <Text style={styles.langModalTitle}>Тема / жанр</Text>
+            <FlatList
+              data={data}
+              keyExtractor={(item) => item || "_all"}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <Text style={[styles.langRowText, { padding: s(12) }]}>Немає тем у базі</Text>
+              }
+              renderItem={({ item }) => {
+                const on = (value || "") === (item || "");
+                return (
+                  <Pressable
+                    style={[styles.langRow, on ? styles.langRowOn : null]}
+                    onPress={() => {
+                      onChange(item);
+                      setOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.langRowText, on ? styles.langRowTextOn : null]}>
+                      {item || "Усі теми"}
                     </Text>
                   </Pressable>
                 );

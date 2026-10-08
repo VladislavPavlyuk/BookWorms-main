@@ -1,6 +1,7 @@
 """Context processors для навбару."""
 
 from .book_languages import european_language_choices
+from .book_subjects import catalog_subjects
 from .models import READER_AGE_MAX, READER_AGE_MIN
 
 
@@ -21,3 +22,7 @@ def reader_age_scale(request):
 
 def book_search_languages(request):
     return {"european_languages": european_language_choices()}
+
+
+def book_search_subjects(request):
+    return {"catalog_subjects": catalog_subjects()}
