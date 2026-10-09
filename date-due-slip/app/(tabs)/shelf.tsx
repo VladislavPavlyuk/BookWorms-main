@@ -941,6 +941,7 @@ export default function ShelfScreen() {
               {detailShelf.pending_return_shelf_id && !detailShelf.borrowed_from ? (
                 <ShelfDetailActionBtn
                   primary
+                  icon={detailShelf.requires_qr_scan ? "qr" : "check"}
                   title={
                     detailShelf.requires_qr_scan
                       ? "Скан QR → повернуто"
@@ -960,6 +961,7 @@ export default function ShelfScreen() {
               {detailShelf.borrowed_from && !detailShelf.return_pending ? (
                 <ShelfDetailActionBtn
                   primary
+                  icon="return"
                   title="Повернути власнику"
                   subtitle="Повідомити про повернення книги"
                   onPress={async () => {
@@ -969,6 +971,7 @@ export default function ShelfScreen() {
                 />
               ) : null}
               <ShelfDetailActionBtn
+                icon="add"
                 title="Написати пост"
                 subtitle="Відгук про цю книгу"
                 onPress={() =>
@@ -982,6 +985,7 @@ export default function ShelfScreen() {
                 }
               />
               <ShelfDetailActionBtn
+                icon="library"
                 title="Усі примірники ISBN"
                 subtitle="Інші копії з цим ISBN"
                 onPress={() => {
@@ -990,12 +994,14 @@ export default function ShelfScreen() {
                 }}
               />
               <ShelfDetailActionBtn
+                icon="barcode"
                 title="Дані ISBN"
                 subtitle="Повна картка з каталогу"
                 onPress={() => setIsbnInfoOpen(true)}
               />
               {detailShelf.copy_id ? (
                 <ShelfDetailActionBtn
+                  icon="history"
                   title="Історія подій"
                   subtitle="Хто тримав цей примірник"
                   onPress={() => {
@@ -1007,6 +1013,7 @@ export default function ShelfScreen() {
               ) : null}
               {!detailShelf.borrowed_from && detailShelf.copy_id ? (
                 <ShelfDetailActionBtn
+                  icon="qr"
                   title="Скан QR"
                   subtitle="Прив’язати або перевірити наклейку"
                   onPress={() => {
@@ -1018,6 +1025,7 @@ export default function ShelfScreen() {
               ) : null}
               {detailShelf.borrowed_from ? (
                 <ShelfDetailActionBtn
+                  icon="chat"
                   title="Чат з власником"
                   subtitle={detailShelf.borrowed_from.username}
                   onPress={() => router.push(`/chat/${detailShelf.borrowed_from!.id}`)}
@@ -1025,6 +1033,7 @@ export default function ShelfScreen() {
               ) : null}
               {!detailShelf.borrowed_from ? (
                 <ShelfDetailActionBtn
+                  icon="tags"
                   title="Статуси"
                   subtitle="Продаж, оренда, обмін, видимість"
                   onPress={() => {
@@ -1036,6 +1045,7 @@ export default function ShelfScreen() {
               ) : null}
               {!detailShelf.borrowed_from && detailShelf.can_edit_manual ? (
                 <ShelfDetailActionBtn
+                  icon="edit"
                   title="Редагувати"
                   subtitle="Назва, автори, фото вручну"
                   onPress={() => {
@@ -1046,6 +1056,7 @@ export default function ShelfScreen() {
               ) : null}
               {!detailShelf.borrowed_from ? (
                 <ShelfDetailActionBtn
+                  icon="people"
                   title="Вік читача"
                   subtitle="Рекомендований діапазон віку"
                   onPress={() => {
@@ -1063,12 +1074,14 @@ export default function ShelfScreen() {
               !detailShelf.book.isbn.startsWith("9799") &&
               !detailShelf.book.isbn_missing ? (
                 <ShelfDetailActionBtn
+                  icon="cloud"
                   title="Оновити з каталогу"
                   subtitle="Метадані з ISBNdb / Open Library"
                   onPress={() => refreshMetadata(detailShelf.book.id)}
                 />
               ) : null}
               <ShelfDetailActionBtn
+                icon="cash"
                 title={
                   detailShelf.price_eval?.status === "ready"
                     ? "Оновити оцінку ціни"
@@ -1086,6 +1099,7 @@ export default function ShelfScreen() {
               {detailShelf.price_eval?.status === "ready" &&
               (detailShelf.price_eval.quotes || []).length > 0 ? (
                 <ShelfDetailActionBtn
+                  icon="list"
                   title={`Price sources (${detailShelf.price_eval.source_count})`}
                   subtitle="Джерела ринкової оцінки"
                   onPress={() => setSourcesOpen(detailShelf.price_eval?.quotes || [])}
@@ -1094,6 +1108,7 @@ export default function ShelfScreen() {
               {!detailShelf.borrowed_from ? (
                 <ShelfDetailActionBtn
                   danger
+                  icon="trash"
                   title="Видалити з полиці"
                   subtitle="Прибрати цей примірник"
                   onPress={() => {

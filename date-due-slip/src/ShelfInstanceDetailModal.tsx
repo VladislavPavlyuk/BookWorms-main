@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BookCover } from "./BookCover";
 import { BookIsbnDetailsBody } from "./BookIsbnDetailsBody";
 import { bookCoverFromDb } from "./mediaUrl";
+import { ShelfActionGlyph, type ShelfActionIcon } from "./ShelfActionGlyphs";
 import { colors, fs, s } from "./theme";
 import type { Book } from "./types";
 
@@ -90,16 +91,45 @@ export function ShelfInstanceDetailModal({
 export function ShelfDetailActionBtn({
   title,
   subtitle,
+  icon,
   onPress,
   danger,
   primary,
 }: {
   title: string;
   subtitle?: string;
+  /** Classic View-drawn glyph on the right (no icon font). */
+  icon: ShelfActionIcon;
   onPress: () => void;
   danger?: boolean;
   primary?: boolean;
 }) {
+  const iconSize = s(28);
+  const iconColor = danger ? colors.stamp : colors.white;
+
+  const body = (
+    <View style={styles.actionRow}>
+      <View style={styles.actionTextCol}>
+        <Text
+          style={[
+            danger ? styles.actionBtnTitle : styles.actionBtnTitleOnGradient,
+            danger && styles.actionBtnTitleDanger,
+          ]}
+        >
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={danger ? styles.actionBtnSubDanger : styles.actionBtnSubOnGradient}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <View style={[styles.actionIconWrap, danger && styles.actionIconWrapDanger]}>
+        <ShelfActionGlyph name={icon} color={iconColor} size={iconSize} />
+      </View>
+    </View>
+  );
+
   if (danger) {
     return (
       <Pressable
@@ -111,8 +141,7 @@ export function ShelfDetailActionBtn({
         onPress={onPress}
         accessibilityRole="button"
       >
-        <Text style={[styles.actionBtnTitle, styles.actionBtnTitleDanger]}>{title}</Text>
-        {subtitle ? <Text style={styles.actionBtnSubDanger}>{subtitle}</Text> : null}
+        {body}
       </Pressable>
     );
   }
@@ -133,10 +162,7 @@ export function ShelfDetailActionBtn({
         imageStyle={styles.actionBtnBgImg}
       >
         <View style={[styles.actionBtnInner, primary && styles.actionBtnInnerPrimary]}>
-          <Text style={styles.actionBtnTitleOnGradient}>{title}</Text>
-          {subtitle ? (
-            <Text style={styles.actionBtnSubOnGradient}>{subtitle}</Text>
-          ) : null}
+          {body}
         </View>
       </ImageBackground>
     </Pressable>
@@ -209,6 +235,27 @@ const styles = StyleSheet.create({
   },
   actionBtnInnerPrimary: {
     paddingVertical: s(16),
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: s(12),
+  },
+  actionTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  actionIconWrap: {
+    width: s(36),
+    height: s(36),
+    borderRadius: s(18),
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  actionIconWrapDanger: {
+    backgroundColor: "rgba(194,59,34,0.12)",
   },
   actionBtn: {
     borderWidth: 2,
