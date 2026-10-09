@@ -22,7 +22,6 @@ type Link = {
 const LINKS: Link[] = [
   { label: "Головна", href: "/(tabs)" },
   { label: "Моя полиця", href: "/(tabs)/shelf" },
-  { label: "Спільна бібліотека", href: "/library" },
   { label: "Реченець", href: "/(tabs)/slips" },
   { label: "Чужі полиці", href: "/(tabs)/browse" },
   { label: "Обміни", href: "/exchanges" },

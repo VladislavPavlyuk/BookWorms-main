@@ -13,6 +13,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { shareComment, sharePost } from "../../src/shareContent";
+import { ShelfLogoChip } from "../../src/ShelfLogoChip";
 import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Post } from "../../src/types";
@@ -103,12 +104,13 @@ export default function PostDetail() {
         <>
           <CyrillicTextInput style={styles.input} value={title} onChangeText={setTitle} />
           <CyrillicTextInput style={[styles.input, { minHeight: 120 }]} multiline value={text} onChangeText={setText} />
-          <Pressable style={styles.btn} onPress={saveEdit}>
-            <Text style={styles.btnText}>Зберегти</Text>
-          </Pressable>
-          <Pressable onPress={() => setEditing(false)}>
-            <Text style={styles.link}>Скасувати</Text>
-          </Pressable>
+          <ShelfLogoChip title="Зберегти" icon="check" style={{ marginTop: 12 }} onPress={saveEdit} />
+          <ShelfLogoChip
+            title="Скасувати"
+            icon="close"
+            style={{ marginTop: 10 }}
+            onPress={() => setEditing(false)}
+          />
         </>
       ) : (
         <>

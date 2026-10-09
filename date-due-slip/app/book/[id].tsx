@@ -5,11 +5,12 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, BrowseApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { BookIsbnInfoModal } from "../../src/BookIsbnInfoModal";
-import { HistoryLink } from "../../src/HistoryLink";
 import { RequestModal } from "../../src/RequestModal";
 import { useAuth } from "../../src/auth";
+import { bookCoverFromDb } from "../../src/mediaUrl";
 import { sharePost } from "../../src/shareContent";
-import { colors, btnRadius } from "../../src/theme";
+import { ShelfLogoChip } from "../../src/ShelfLogoChip";
+import { colors } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Book, Post, Shelf, User } from "../../src/types";
 
@@ -49,7 +50,7 @@ export default function BookScreen() {
         accessibilityRole="button"
         accessibilityLabel="Деталі книги"
       >
-        <BookCover uri={book.cover_url} size="full" bleed={0} />
+        <BookCover uri={bookCoverFromDb(book)} size="full" bleed={0} />
       </Pressable>
       <View style={styles.body}>
       <Text style={styles.title} onPress={() => setInfoOpen(true)}>
@@ -65,9 +66,32 @@ export default function BookScreen() {
       {(book.subjects || []).length ? (
         <Text style={styles.meta}>Теми: {(book.subjects || []).join(", ")}</Text>
       ) : null}
-      <Pressable onPress={() => setInfoOpen(true)}>
-        <Text style={styles.link}>Дані ISBN</Text>
-      </Pressable>
+      <View style={styles.actions}>
+        <ShelfLogoChip
+          title="Дані ISBN"
+          icon="barcode"
+          style={styles.chip}
+          onPress={() => setInfoOpen(true)}
+        />
+        {!!book.info_url ? (
+          <ShelfLogoChip
+            title="Open Library"
+            icon="cloud"
+            style={styles.chip}
+            onPress={() => Linking.openURL(book.info_url)}
+          />
+        ) : null}
+        {onMyShelf ? (
+          <ShelfLogoChip
+            title="Написати пост"
+            icon="add"
+            style={styles.chip}
+            onPress={() =>
+              router.push({ pathname: "/post/new", params: { book_id: String(book.id) } })
+            }
+          />
+        ) : null}
+      </View>
       {owners.length > 0 && (
         <View style={styles.ownersRow}>
           <Text style={styles.meta}>Власники: </Text>
@@ -78,20 +102,6 @@ export default function BookScreen() {
             </View>
           ))}
         </View>
-      )}
-      {!!book.info_url && (
-        <Pressable onPress={() => Linking.openURL(book.info_url)}>
-          <Text style={styles.link}>Open Library</Text>
-        </Pressable>
-      )}
-
-      {onMyShelf && (
-        <Pressable
-          style={styles.btn}
-          onPress={() => router.push({ pathname: "/post/new", params: { book_id: String(book.id) } })}
-        >
-          <Text style={styles.btnText}>Написати пост про цю книгу</Text>
-        </Pressable>
       )}
 
       <Text style={styles.h}>Де зараз (фізично)</Text>
@@ -110,32 +120,40 @@ export default function BookScreen() {
             ) : null}
             {!!s.due_date && <Text style={styles.row}>{` до ${s.due_date}`}</Text>}
           </View>
-          <HistoryLink copyId={s.copy_id} style={styles.act} />
-          {user && s.user.id !== user.id && (
-            <Pressable
-              onPress={() => {
-                const rid = s.request_shelf_id ?? s.id;
-                if (s.borrowed_from) {
-                  setTarget({
-                    ...s,
-                    id: rid,
-                    user: s.borrowed_from,
-                    borrowed_from: null,
-                    is_lent_out: true,
-                    lent_to: s.user,
-                    loan_due_date: s.due_date,
-                    request_shelf_id: rid,
-                  });
-                } else {
-                  setTarget(s);
-                }
-              }}
-            >
-              <Text style={styles.act}>
-                {s.borrowed_from ? "Просити передачу" : "Позичити / обмін"}
-              </Text>
-            </Pressable>
-          )}
+          <View style={styles.actions}>
+            {s.copy_id ? (
+              <ShelfLogoChip
+                title="Історія"
+                icon="history"
+                style={styles.chip}
+                onPress={() => router.push(`/copy/${s.copy_id}`)}
+              />
+            ) : null}
+            {user && s.user.id !== user.id ? (
+              <ShelfLogoChip
+                title={s.borrowed_from ? "Просити передачу" : "Позичити / обмін"}
+                icon="tags"
+                style={styles.chip}
+                onPress={() => {
+                  const rid = s.request_shelf_id ?? s.id;
+                  if (s.borrowed_from) {
+                    setTarget({
+                      ...s,
+                      id: rid,
+                      user: s.borrowed_from,
+                      borrowed_from: null,
+                      is_lent_out: true,
+                      lent_to: s.user,
+                      loan_due_date: s.due_date,
+                      request_shelf_id: rid,
+                    });
+                  } else {
+                    setTarget(s);
+                  }
+                }}
+              />
+            ) : null}
+          </View>
         </View>
       ))}
 
@@ -184,12 +202,10 @@ const styles = StyleSheet.create({
   meta: { color: colors.muted, marginTop: 4 },
   ownersRow: { flexDirection: "row", flexWrap: "wrap", marginTop: 8, alignItems: "center" },
   ownerLink: { color: colors.stamp, fontWeight: "700" },
-  link: { color: colors.stamp, fontWeight: "700", marginTop: 8 },
-  btn: { backgroundColor: colors.ink, padding: 12, marginTop: 16, borderRadius: btnRadius },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700" },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  chip: { flexGrow: 1, flexBasis: "40%" },
   h: { marginTop: 24, fontWeight: "800", color: colors.ink, marginBottom: 8 },
   card: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, padding: 12, marginBottom: 8 },
   row: { color: colors.ink, fontWeight: "600" },
-  act: { color: colors.stamp, fontWeight: "800", marginTop: 8 },
   ptitle: { fontWeight: "700", color: colors.ink },
 });

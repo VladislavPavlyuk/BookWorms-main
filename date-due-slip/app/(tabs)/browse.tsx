@@ -11,9 +11,9 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, BrowseApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
-import { HistoryLink } from "../../src/HistoryLink";
 import { RequestModal } from "../../src/RequestModal";
-import { colors, btnRadius } from "../../src/theme";
+import { ShelfLogoChip } from "../../src/ShelfLogoChip";
+import { colors } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { BookBrowseGroup, Shelf } from "../../src/types";
 
@@ -167,18 +167,33 @@ export default function Browse() {
                       <Text style={styles.free}> · вільний</Text>
                     )}
                   </View>
-                  <Pressable onPress={() => openRequest(c)}>
-                    <Text style={styles.miniAct}>
-                      {c.borrowed_from ? "Передача" : "Позичити"}
-                    </Text>
-                  </Pressable>
-                  <HistoryLink copyId={c.copy_id} />
+                  <View style={styles.copyActions}>
+                    <ShelfLogoChip
+                      title={c.borrowed_from ? "Передача" : "Позичити"}
+                      icon="tags"
+                      style={styles.copyChip}
+                      onPress={() => openRequest(c)}
+                    />
+                    {c.copy_id ? (
+                      <ShelfLogoChip
+                        title="Історія"
+                        icon="history"
+                        style={styles.copyChip}
+                        onPress={() => router.push(`/copy/${c.copy_id}`)}
+                      />
+                    ) : null}
+                  </View>
                 </View>
               ))}
             </View>
-            <Pressable style={[styles.btn, styles.cardBody]} onPress={() => requestFrom(g)}>
-              <Text style={styles.btnText}>Позичити / передача / обмін</Text>
-            </Pressable>
+            <View style={styles.cardBody}>
+              <ShelfLogoChip
+                title="Позичити / передача / обмін"
+                icon="tags"
+                style={styles.mainChip}
+                onPress={() => requestFrom(g)}
+              />
+            </View>
           </View>
         )}
       />
@@ -216,19 +231,16 @@ const styles = StyleSheet.create({
   ownersLabel: { color: colors.muted, fontSize: 13 },
   owner: { color: colors.stamp, fontWeight: "700", fontSize: 13 },
   copyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     gap: 8,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.line,
   },
+  copyActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  copyChip: { flexGrow: 1, flexBasis: "40%" },
+  mainChip: { alignSelf: "stretch" },
   title: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4 },
   lent: { color: colors.stamp, fontWeight: "700", fontSize: 12 },
   free: { color: colors.muted, fontSize: 12 },
-  miniAct: { color: colors.stamp, fontWeight: "800", fontSize: 12 },
-  btn: { marginTop: 10, alignSelf: "flex-start", backgroundColor: colors.ink, paddingHorizontal: 12, paddingVertical: 6, borderRadius: btnRadius },
-  btnText: { color: colors.white, fontWeight: "700" },
 });

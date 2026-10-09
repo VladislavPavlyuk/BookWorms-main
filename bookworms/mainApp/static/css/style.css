@@ -947,6 +947,27 @@ input[type="button"].btn {
     color: rgba(244, 240, 230, 0.92) !important;
 }
 
+/* Налаштування → Звук сповіщень (dropdown switch) */
+.site-navbar .nav-notif-sound-item {
+    cursor: default;
+    white-space: normal;
+    min-width: 14rem;
+}
+.site-navbar .nav-notif-sound-item:hover,
+.site-navbar .nav-notif-sound-item:focus {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+.site-navbar .nav-notif-sound-item .form-check-input {
+    cursor: pointer;
+    width: 2.4em;
+    height: 1.25em;
+    margin-top: 0;
+}
+.site-navbar .nav-notif-sound-item .form-check-input:checked {
+    background-color: #6c9b6e;
+    border-color: #6c9b6e;
+}
+
 .site-navbar #nav-notif-link:hover,
 .site-navbar #nav-notif-link:focus {
     background: rgba(255, 255, 255, 0.08) !important;

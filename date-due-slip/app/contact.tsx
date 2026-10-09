@@ -13,7 +13,8 @@ import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../src/auth";
 import { ApiError, ContactApi, getApiBase } from "../src/api";
 import { CyrillicTextInput } from "../src/CyrillicTextInput";
-import { colors, fs, s, btnRadius } from "../src/theme";
+import { ShelfLogoChip } from "../src/ShelfLogoChip";
+import { colors, fs, s } from "../src/theme";
 
 type Shot = { uri: string; name: string; type: string };
 
@@ -178,9 +179,12 @@ export default function Contact() {
         multiline
       />
 
-      <Pressable style={styles.rowBtn} onPress={pickShots}>
-        <Text style={styles.rowBtnText}>Додати скріншоти ({shots.length})</Text>
-      </Pressable>
+      <ShelfLogoChip
+        title={`Додати скріншоти (${shots.length})`}
+        icon="add"
+        style={styles.chip}
+        onPress={pickShots}
+      />
       <View style={styles.thumbs}>
         {shots.map((shot) => (
           <Pressable
@@ -192,16 +196,19 @@ export default function Contact() {
         ))}
       </View>
 
-      <Pressable
-        style={[styles.btn, busy && { opacity: 0.6 }]}
-        onPress={submit}
+      <ShelfLogoChip
+        title={busy ? "Надсилаю…" : "Надіслати"}
+        icon="send"
+        style={styles.chip}
         disabled={busy}
-      >
-        <Text style={styles.btnText}>{busy ? "Надсилаю…" : "Надіслати"}</Text>
-      </Pressable>
-      <Pressable onPress={openWeb}>
-        <Text style={styles.link}>Відкрити веб-форму</Text>
-      </Pressable>
+        onPress={submit}
+      />
+      <ShelfLogoChip
+        title="Відкрити веб-форму"
+        icon="cloud"
+        style={styles.chip}
+        onPress={openWeb}
+      />
     </ScrollView>
   );
 }
@@ -219,23 +226,7 @@ const styles = StyleSheet.create({
     minHeight: s(48),
   },
   area: { minHeight: s(120), textAlignVertical: "top" },
-  rowBtn: { marginTop: s(16), paddingVertical: s(12), borderBottomWidth: 1, borderColor: colors.line },
-  rowBtnText: { color: colors.ink, fontWeight: "700", fontSize: fs(15) },
+  chip: { marginTop: s(16), alignSelf: "stretch" },
   thumbs: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   thumb: { width: s(64), height: s(64), borderRadius: 6, backgroundColor: colors.paperDark },
-  btn: {
-    backgroundColor: colors.ink,
-    padding: s(14),
-    marginTop: s(20),
-    minHeight: s(54),
-    borderRadius: btnRadius,
-  },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(16) },
-  link: {
-    color: colors.muted,
-    textAlign: "center",
-    marginTop: s(14),
-    fontWeight: "700",
-    fontSize: fs(14),
-  },
 });

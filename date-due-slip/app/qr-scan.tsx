@@ -3,7 +3,8 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, CopyApi, HandoffApi, ShelfApi } from "../src/api";
 import { CopyQrScanModal } from "../src/CopyQrScanModal";
-import { colors, btnRadius } from "../src/theme";
+import { ShelfLogoChip } from "../src/ShelfLogoChip";
+import { colors } from "../src/theme";
 
 export default function QrScanScreen() {
   const router = useRouter();
@@ -67,12 +68,18 @@ export default function QrScanScreen() {
     <View style={styles.root}>
       <Text style={styles.h}>Скан QR примірника</Text>
       <Text style={styles.meta}>{meta}</Text>
-      <Pressable style={styles.btn} onPress={() => setOpen(true)}>
-        <Text style={styles.btnText}>Відкрити камеру</Text>
-      </Pressable>
-      <Pressable onPress={() => router.back()}>
-        <Text style={styles.link}>← Назад</Text>
-      </Pressable>
+      <ShelfLogoChip
+        title="Відкрити камеру"
+        icon="qr"
+        style={styles.chip}
+        onPress={() => setOpen(true)}
+      />
+      <ShelfLogoChip
+        title="Назад"
+        icon="return"
+        style={styles.chip}
+        onPress={() => router.back()}
+      />
       <CopyQrScanModal
         visible={open}
         onClose={() => {
@@ -89,12 +96,5 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.screen, padding: 20 },
   h: { fontWeight: "800", fontSize: 20, color: colors.ink, marginBottom: 8 },
   meta: { color: colors.muted, marginBottom: 20, lineHeight: 20 },
-  btn: {
-    backgroundColor: colors.stamp,
-    padding: 14,
-    borderRadius: btnRadius,
-    marginBottom: 16,
-  },
-  btnText: { color: "#fff", fontWeight: "800", textAlign: "center" },
-  link: { color: colors.stamp, fontWeight: "700" },
+  chip: { marginBottom: 12, alignSelf: "stretch" },
 });

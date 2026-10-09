@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { ApiError, ExchangeApi } from "./api";
 import { CyrillicTextInput } from "./CyrillicTextInput";
+import { ShelfLogoChip } from "./ShelfLogoChip";
 import { colors, btnRadius } from "./theme";
 import type { Shelf } from "./types";
 
@@ -214,12 +215,20 @@ export function RequestModal({
           ) : null}
 
           <View style={styles.row}>
-            <Pressable style={styles.cancel} onPress={onClose} disabled={busy}>
-              <Text style={styles.cancelText}>Скасувати</Text>
-            </Pressable>
-            <Pressable style={styles.ok} onPress={submit} disabled={busy}>
-              <Text style={styles.okText}>{busy ? "…" : "Надіслати"}</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Скасувати"
+              icon="close"
+              style={styles.chip}
+              disabled={busy}
+              onPress={onClose}
+            />
+            <ShelfLogoChip
+              title={busy ? "…" : "Надіслати"}
+              icon="send"
+              style={styles.chip}
+              disabled={busy}
+              onPress={submit}
+            />
           </View>
         </View>
       </View>
@@ -257,9 +266,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   quickText: { color: colors.ink, fontWeight: "600", fontSize: 13 },
-  row: { flexDirection: "row", gap: 12, marginTop: 16 },
-  cancel: { flex: 1, padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: btnRadius },
-  cancelText: { textAlign: "center", color: colors.muted, fontWeight: "700" },
-  ok: { flex: 1, padding: 12, backgroundColor: colors.ink, borderRadius: btnRadius },
-  okText: { textAlign: "center", color: colors.white, fontWeight: "700" },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 16 },
+  chip: { flexGrow: 1, flexBasis: "40%" },
 });

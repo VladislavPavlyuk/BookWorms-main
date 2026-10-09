@@ -12,7 +12,9 @@ import { ApiError, CopyApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { BookCover } from "../../src/BookCover";
 import { BookIsbnInfoModal } from "../../src/BookIsbnInfoModal";
-import { colors, btnRadius } from "../../src/theme";
+import { bookCoverFromDb } from "../../src/mediaUrl";
+import { ShelfLogoChip } from "../../src/ShelfLogoChip";
+import { colors, fs, s } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { BookCopyDetail, CopyEvent, QueueEntry, Shelf } from "../../src/types";
 
@@ -106,9 +108,16 @@ export default function CopyHistoryScreen() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ paddingBottom: 32 }}>
-      <Pressable onPress={() => setInfoOpen(true)} accessibilityRole="button" accessibilityLabel="Деталі книги">
-        <BookCover uri={book.cover_url} size="full" bleed={0} />
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.screen }}
+      contentContainerStyle={{ paddingBottom: 32 }}
+    >
+      <Pressable
+        onPress={() => setInfoOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Деталі книги"
+      >
+        <BookCover uri={bookCoverFromDb(book)} size="full" bleed={0} />
       </Pressable>
       <View style={styles.body}>
         <Text style={styles.copyTag}>Примірник #{copy.id}</Text>
@@ -126,6 +135,25 @@ export default function CopyHistoryScreen() {
           QR: {copy.qr_attached ? "приклеєно / прив’язано" : "ще не прив’язано"}
         </Text>
 
+        <Text style={styles.h}>Поточний стан полиць (цей примірник)</Text>
+        {holders.length === 0 ? (
+          <Text style={styles.meta}>Ні на чиїй полиці.</Text>
+        ) : (
+          holders.map((s) => (
+            <View key={s.id} style={styles.card}>
+              <View style={styles.row}>
+                <UserNameLink user={s.user} style={styles.link} />
+                <Text style={styles.meta}>
+                  {s.borrowed_from
+                    ? ` · позика у ${s.borrowed_from.username}`
+                    : " · власник · вільний"}
+                </Text>
+                {!!s.due_date && <Text style={styles.meta}>{` · до ${s.due_date}`}</Text>}
+              </View>
+            </View>
+          ))
+        )}
+
         {isOwner ? (
           <>
             <Text style={styles.h}>QR-наклейка</Text>
@@ -133,15 +161,32 @@ export default function CopyHistoryScreen() {
               Пізня прив’язка: друк не прив’язує код до книги. Наклейте наклейку → «Скан QR» у
               вікні опцій на полиці.
             </Text>
-            <View style={styles.qActions}>
+            <View style={[styles.qActions, busy && styles.busy]}>
               {copy.qr_attached ? (
-                <Pressable style={styles.btn} onPress={rotateQr} disabled={busy}>
-                  <Text style={styles.btnText}>Оновити QR-код</Text>
-                </Pressable>
+                <ShelfLogoChip
+                  title="Оновити QR-код"
+                  icon="qr"
+                  danger
+                  style={styles.chip}
+                  onPress={rotateQr}
+                />
               ) : null}
-              <Pressable style={styles.btnGhost} onPress={() => router.push("/qr-print")}>
-                <Text style={styles.btnGhostText}>Друк наклейок A4</Text>
-              </Pressable>
+              {!copy.qr_attached ? (
+                <ShelfLogoChip
+                  title="Скан QR"
+                  icon="qr"
+                  style={styles.chip}
+                  onPress={() =>
+                    router.push(`/qr-scan?attach_copy_id=${copy.id}`)
+                  }
+                />
+              ) : null}
+              <ShelfLogoChip
+                title="Друк наклейок A4"
+                icon="list"
+                style={styles.chip}
+                onPress={() => router.push("/qr-print")}
+              />
             </View>
           </>
         ) : null}
@@ -154,24 +199,31 @@ export default function CopyHistoryScreen() {
         {myPos != null ? (
           <Text style={styles.myPos}>Ваша позиція: {myPos}</Text>
         ) : null}
-        <View style={styles.qActions}>
+        <View style={[styles.qActions, busy && styles.busy]}>
           {canJoin ? (
-            <Pressable style={styles.btn} onPress={join} disabled={busy}>
-              <Text style={styles.btnText}>Стати в чергу</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Стати в чергу"
+              icon="people"
+              style={styles.chip}
+              onPress={join}
+            />
           ) : null}
           {myPos != null ? (
-            <Pressable style={styles.btnGhost} onPress={leave} disabled={busy}>
-              <Text style={styles.btnGhostText}>Вийти з черги</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Вийти з черги"
+              icon="close"
+              danger
+              style={styles.chip}
+              onPress={leave}
+            />
           ) : null}
           {myPos != null ? (
-            <Pressable
-              style={styles.btnGhost}
+            <ShelfLogoChip
+              title="Чат з власником"
+              icon="chat"
+              style={styles.chip}
               onPress={() => router.push(`/chat/${copy.owner.id}`)}
-            >
-              <Text style={styles.btnGhostText}>Чат з власником</Text>
-            </Pressable>
+            />
           ) : null}
         </View>
         {queue.length === 0 ? (
@@ -188,6 +240,9 @@ export default function CopyHistoryScreen() {
         )}
 
         <Text style={styles.h}>Хронологія подій</Text>
+        <Text style={[styles.meta, { marginBottom: 8 }]}>
+          Додавання, зняття, позика, повернення, обмін цього примірника.
+        </Text>
         {events.length === 0 ? (
           <Text style={styles.meta}>Подій ще немає.</Text>
         ) : (
@@ -227,25 +282,14 @@ export default function CopyHistoryScreen() {
                   <UserNameLink user={ev.actor} style={styles.meta} />
                 </View>
               ) : null}
-            </View>
-          ))
-        )}
-
-        <Text style={styles.h}>Де зараз (фізично)</Text>
-        {holders.length === 0 ? (
-          <Text style={styles.meta}>Ні на чиїй полиці.</Text>
-        ) : (
-          holders.map((s) => (
-            <View key={s.id} style={styles.card}>
-              <View style={styles.row}>
-                <UserNameLink user={s.user} style={styles.link} />
-                <Text style={styles.meta}>
-                  {s.borrowed_from
-                    ? ` · позика у ${s.borrowed_from.username}`
-                    : " · власник · вільний"}
-                </Text>
-                {!!s.due_date && <Text style={styles.meta}>{` · до ${s.due_date}`}</Text>}
-              </View>
+              {ev.exchange_request_id ? (
+                <ShelfLogoChip
+                  title={`Запит обміну #${ev.exchange_request_id}`}
+                  icon="tags"
+                  style={[styles.chip, { marginTop: 8 }]}
+                  onPress={() => router.push("/exchanges")}
+                />
+              ) : null}
             </View>
           ))
         )}
@@ -256,15 +300,15 @@ export default function CopyHistoryScreen() {
         visible={infoOpen}
         onClose={() => setInfoOpen(false)}
         footer={
-          <Pressable
-            style={[styles.btn, { marginTop: 16, marginBottom: 8, alignSelf: "flex-start" }]}
+          <ShelfLogoChip
+            title="Усі примірники ISBN"
+            icon="library"
+            style={{ marginTop: 16, marginBottom: 8, alignSelf: "stretch" }}
             onPress={() => {
               setInfoOpen(false);
               router.push(`/book/${book.id}`);
             }}
-          >
-            <Text style={styles.btnText}>Усі примірники ISBN</Text>
-          </Pressable>
+          />
         }
       />
     </ScrollView>
@@ -273,30 +317,39 @@ export default function CopyHistoryScreen() {
 
 const styles = StyleSheet.create({
   body: { paddingHorizontal: 16, paddingTop: 12 },
-  copyTag: { color: colors.stamp, fontWeight: "800", letterSpacing: 0.5, marginBottom: 4 },
-  title: { fontSize: 22, fontWeight: "800", color: colors.ink },
-  meta: { color: colors.muted, marginTop: 2 },
+  copyTag: {
+    color: colors.stamp,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+    fontSize: fs(13),
+  },
+  title: { fontSize: fs(22), fontWeight: "800", color: colors.ink },
+  meta: { color: colors.muted, marginTop: 2, fontSize: fs(13) },
   lent: { color: colors.stamp, fontWeight: "700", marginTop: 8 },
   myPos: { color: colors.ink, fontWeight: "800", marginTop: 8 },
   link: { color: colors.stamp, fontWeight: "700" },
-  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", marginTop: 2 },
-  h: { marginTop: 24, fontWeight: "800", color: colors.ink, marginBottom: 8 },
-  qActions: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginVertical: 10 },
-  btn: {
-    backgroundColor: colors.stamp,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: btnRadius,
+  row: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    marginTop: 2,
   },
-  btnText: { color: "#fff", fontWeight: "800" },
-  btnGhost: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: btnRadius,
+  h: {
+    marginTop: s(24),
+    fontWeight: "800",
+    color: colors.ink,
+    marginBottom: 8,
+    fontSize: fs(16),
   },
-  btnGhostText: { color: colors.ink, fontWeight: "700" },
+  qActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginVertical: 10,
+  },
+  chip: { flexGrow: 1, flexBasis: "40%" },
+  busy: { opacity: 0.55 },
   card: {
     borderWidth: 1,
     borderColor: colors.line,

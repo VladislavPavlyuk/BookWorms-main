@@ -6,6 +6,7 @@ import { useAuth } from "../../src/auth";
 import { ApiError, AuthApi, BooksApi, getApiBase, setApiBase } from "../../src/api";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import type { UserSubProfile } from "../../src/types";
+import { ShelfLogoChip } from "../../src/ShelfLogoChip";
 import { colors, fs, s, btnRadius } from "../../src/theme";
 import { useUnread } from "../../src/unread";
 
@@ -286,12 +287,18 @@ export default function More() {
             })
           }
         />
-        <Pressable style={styles.btn} onPress={saveSubprofile}>
-          <Text style={styles.btnText}>Зберегти підпрофіль</Text>
-        </Pressable>
-        <Pressable onPress={() => setSubDraft(null)}>
-          <Text style={styles.cancel}>Скасувати</Text>
-        </Pressable>
+        <ShelfLogoChip
+          title="Зберегти підпрофіль"
+          icon="check"
+          style={styles.chip}
+          onPress={saveSubprofile}
+        />
+        <ShelfLogoChip
+          title="Скасувати"
+          icon="close"
+          style={[styles.chip, { marginTop: 10 }]}
+          onPress={() => setSubDraft(null)}
+        />
       </ScrollView>
     );
   }
@@ -352,17 +359,21 @@ export default function More() {
           <Text style={styles.label}>Теми / жанри</Text>
           <Text style={styles.hint}>Список з каталогу книг — оновлюється автоматично.</Text>
           <ThemeBoxes selected={themes} onToggle={(theme) => toggleTheme(theme, themes, setThemes)} />
-          <Pressable style={styles.btn} onPress={saveProfile}>
-            <Text style={styles.btnText}>Зберегти профіль</Text>
-          </Pressable>
-          <Pressable
+          <ShelfLogoChip
+            title="Зберегти профіль"
+            icon="check"
+            style={styles.chip}
+            onPress={saveProfile}
+          />
+          <ShelfLogoChip
+            title="Скасувати"
+            icon="close"
+            style={[styles.chip, { marginTop: 10 }]}
             onPress={() => {
               setEditing(false);
               setAvatarLocal(null);
             }}
-          >
-            <Text style={styles.cancel}>Скасувати</Text>
-          </Pressable>
+          />
         </>
       ) : (
         <>
@@ -496,15 +507,19 @@ export default function More() {
         Має бути http://192.168.0.213:18088 (та сама Wi‑Fi, що NAS). Unread: {unread}
         {pollError ? `\nБейдж: помилка — ${pollError}` : " · poll ok"}
       </Text>
-      <Pressable style={styles.btn} onPress={saveApi}>
-        <Text style={styles.btnText}>Зберегти URL</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.btn, { backgroundColor: colors.stamp, marginTop: 24 }]}
+      <ShelfLogoChip
+        title="Зберегти URL"
+        icon="cloud"
+        style={styles.chip}
+        onPress={saveApi}
+      />
+      <ShelfLogoChip
+        title="Вийти"
+        icon="trash"
+        danger
+        style={[styles.chip, { marginTop: 24 }]}
         onPress={logout}
-      >
-        <Text style={styles.btnText}>Вийти</Text>
-      </Pressable>
+      />
     </ScrollView>
   );
 }
@@ -571,20 +586,7 @@ const styles = StyleSheet.create({
     fontSize: fs(16),
     minHeight: s(48),
   },
-  btn: {
-    backgroundColor: colors.ink,
-    padding: s(14),
-    marginTop: s(12),
-    minHeight: s(54),
-    borderRadius: btnRadius,
-  },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(16) },
-  cancel: {
-    color: colors.muted,
-    textAlign: "center",
-    marginTop: s(12),
-    fontWeight: "700",
-  },
+  chip: { marginTop: s(12), alignSelf: "stretch" },
   themeGrid: { marginTop: 8, gap: 6 },
   themeChip: {
     borderWidth: 1,

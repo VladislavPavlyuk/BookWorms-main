@@ -12,7 +12,8 @@ import { useAuth } from "../../src/auth";
 import { ApiError } from "../../src/api";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { PasswordField } from "../../src/PasswordField";
-import { colors, fs, s, btnRadius } from "../../src/theme";
+import { ShelfLogoChip } from "../../src/ShelfLogoChip";
+import { colors, fs, s } from "../../src/theme";
 
 export default function Login() {
   const { login } = useAuth();
@@ -54,9 +55,13 @@ export default function Login() {
         value={password}
         onChangeText={setPassword}
       />
-      <Pressable style={styles.btn} onPress={onSubmit} disabled={busy}>
-        <Text style={styles.btnText}>{busy ? "…" : "Увійти"}</Text>
-      </Pressable>
+      <ShelfLogoChip
+        title={busy ? "…" : "Увійти"}
+        icon="check"
+        style={styles.chip}
+        disabled={busy}
+        onPress={onSubmit}
+      />
       <Link href="/(auth)/register" style={styles.link}>
         Реєстрація
       </Link>
@@ -89,7 +94,6 @@ const styles = StyleSheet.create({
     fontSize: fs(16),
     minHeight: s(48),
   },
-  btn: { backgroundColor: colors.ink, padding: s(14), marginTop: s(8), minHeight: s(54), borderRadius: btnRadius },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(18) },
+  chip: { marginTop: s(8), alignSelf: "stretch" },
   link: { color: colors.stamp, textAlign: "center", marginTop: s(18), fontSize: fs(16) },
 });

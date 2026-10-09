@@ -16,6 +16,7 @@ type Props = {
   onPress: () => void;
   /** Stamp outline (e.g. delete) instead of logo gradient. */
   danger?: boolean;
+  disabled?: boolean;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 };
@@ -29,6 +30,7 @@ export function ShelfLogoChip({
   icon,
   onPress,
   danger,
+  disabled,
   accessibilityLabel,
   style,
 }: Props) {
@@ -55,11 +57,14 @@ export function ShelfLogoChip({
         style={({ pressed }) => [
           styles.chip,
           styles.chipDanger,
-          pressed && styles.pressed,
+          pressed && !disabled && styles.pressed,
+          disabled && styles.disabled,
           style,
         ]}
         onPress={onPress}
+        disabled={disabled}
         accessibilityRole="button"
+        accessibilityState={{ disabled: !!disabled }}
         accessibilityLabel={accessibilityLabel || title}
       >
         {row}
@@ -69,9 +74,16 @@ export function ShelfLogoChip({
 
   return (
     <Pressable
-      style={({ pressed }) => [styles.chipOuter, pressed && styles.pressed, style]}
+      style={({ pressed }) => [
+        styles.chipOuter,
+        pressed && !disabled && styles.pressed,
+        disabled && styles.disabled,
+        style,
+      ]}
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
       accessibilityLabel={accessibilityLabel || title}
     >
       <ImageBackground
@@ -119,6 +131,9 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.9,
     transform: [{ scale: 0.97 }],
+  },
+  disabled: {
+    opacity: 0.5,
   },
   row: {
     flexDirection: "row",

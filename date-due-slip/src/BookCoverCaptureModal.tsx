@@ -11,6 +11,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { Audio } from "expo-av";
+import { ShelfLogoChip } from "./ShelfLogoChip";
 import { colors, fs, s, btnRadius } from "./theme";
 
 const MAX = 8;
@@ -248,12 +249,13 @@ export function BookCoverCaptureModal({ visible, onClose, onCaptured, count }: P
         ) : !permission.granted ? (
           <View style={styles.perm}>
             <Text style={styles.permText}>Потрібен доступ до камери для фото обкладинки.</Text>
-            <Pressable style={styles.btn} onPress={requestPermission}>
-              <Text style={styles.btnText}>Дозволити</Text>
-            </Pressable>
-            <Pressable onPress={onClose}>
-              <Text style={styles.link}>Скасувати</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Дозволити"
+              icon="qr"
+              style={{ marginBottom: 12 }}
+              onPress={requestPermission}
+            />
+            <ShelfLogoChip title="Скасувати" icon="close" onPress={onClose} />
           </View>
         ) : (
           <>

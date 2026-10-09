@@ -5,7 +5,8 @@ import {
   isNotifySoundEnabled,
   setNotifySoundEnabled,
 } from "../src/notifySound";
-import { colors, btnRadius } from "../src/theme";
+import { ShelfLogoChip } from "../src/ShelfLogoChip";
+import { colors, btnRadius, s } from "../src/theme";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -38,6 +39,19 @@ export default function SettingsScreen() {
             thumbColor={colors.white}
           />
         </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Спільна бібліотека</Text>
+        <Text style={styles.cardBody}>
+          Об’єднання полиць, код merge, голосування за адміна, поділ.
+        </Text>
+        <ShelfLogoChip
+          title="Спільна бібліотека"
+          icon="library"
+          style={styles.chip}
+          onPress={() => router.push("/library")}
+        />
       </View>
 
       <Pressable
@@ -78,5 +92,6 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, minWidth: 0 },
   cardTitle: { fontWeight: "800", color: colors.ink, fontSize: 16, marginBottom: 6 },
   cardBody: { color: colors.muted, lineHeight: 20, fontSize: 13 },
+  chip: { alignSelf: "flex-start", marginTop: s(12) },
   link: { color: colors.stamp, fontWeight: "700", marginTop: 8 },
 });

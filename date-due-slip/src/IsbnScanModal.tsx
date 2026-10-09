@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
 import { Audio } from "expo-av";
+import { ShelfLogoChip } from "./ShelfLogoChip";
 import { colors, fs, s, btnRadius } from "./theme";
 
 /** Digits only; keep 10 or 13 for ISBN-10 / EAN-13 (978/979). */
@@ -98,12 +99,13 @@ export function IsbnScanModal({ visible, onClose, onScan }: Props) {
             <Text style={styles.permText}>
               Потрібен доступ до камери, щоб сканувати ISBN на обкладинці.
             </Text>
-            <Pressable style={styles.btn} onPress={requestPermission}>
-              <Text style={styles.btnText}>Дозволити камеру</Text>
-            </Pressable>
-            <Pressable onPress={onClose}>
-              <Text style={styles.link}>Скасувати</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Дозволити камеру"
+              icon="qr"
+              style={{ marginBottom: 12 }}
+              onPress={requestPermission}
+            />
+            <ShelfLogoChip title="Скасувати" icon="close" onPress={onClose} />
           </View>
         ) : (
           <>

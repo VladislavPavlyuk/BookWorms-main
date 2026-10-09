@@ -2397,6 +2397,36 @@ def notifications_unread_count_view(request):
 
 
 @login_required
+def my_queues(request):
+    """Мої активні позиції в чергах (як mobile /queues)."""
+    from . import queue_service
+    from .models import CopyQueueEntry
+
+    entries = (
+        CopyQueueEntry.objects.filter(
+            user=request.user,
+            status__in=queue_service.ACTIVE,
+        )
+        .select_related("copy", "copy__book", "copy__owner")
+        .order_by("created_at")
+    )
+    items = [
+        {
+            "id": e.pk,
+            "copy_id": e.copy_id,
+            "book_title": e.copy.book.title,
+            "owner_username": e.copy.owner.username,
+            "status": e.status,
+            "status_label": e.get_status_display(),
+            "position": queue_service.queue_position(e),
+            "created_at": e.created_at,
+        }
+        for e in entries
+    ]
+    return render(request, "mainApp/my_queues.html", {"items": items})
+
+
+@login_required
 def notifications_inbox(request):
     """
     Скринька сповіщень (запити на книги тощо) з переходом у чат.

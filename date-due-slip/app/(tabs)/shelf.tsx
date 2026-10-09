@@ -770,15 +770,6 @@ export default function ShelfScreen() {
                 : ""}
             </Text>
             {sharedNote ? <Text style={styles.sharedHint}>{sharedNote}</Text> : null}
-            {isSharedLibrary ? (
-              <Pressable onPress={() => router.push("/library")} style={styles.slipsLink}>
-                <Text style={styles.link}>Керувати спільною бібліотекою</Text>
-              </Pressable>
-            ) : (
-              <Pressable onPress={() => router.push("/library")} style={styles.slipsLink}>
-                <Text style={styles.link}>Спільна бібліотека / merge</Text>
-              </Pressable>
-            )}
             <Text style={styles.selectHint}>
               Обкладинка · назва · автор · вибір. Натисніть обкладинку для деталей.
               {isSharedLibrary && iAmLibraryAdmin
@@ -837,9 +828,12 @@ export default function ShelfScreen() {
                         <Text style={styles.meta}>від </Text>
                         <UserNameLink user={s.user} style={styles.meta} />
                       </View>
-                      <Pressable style={styles.confirmBtn} onPress={() => confirm(s)}>
-                        <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
-                      </Pressable>
+                      <ShelfLogoChip
+                        title="Підтвердити повернення"
+                        icon="check"
+                        style={{ marginTop: 10 }}
+                        onPress={() => confirm(s)}
+                      />
                     </View>
                   </View>
                 ))}
@@ -1314,17 +1308,14 @@ export default function ShelfScreen() {
             >
               <Ionicons name="camera" size={22} color={colors.white} />
             </Pressable>
-            <Pressable
-              style={[styles.add, { backgroundColor: colors.stamp }, aiBusy && { opacity: 0.5 }]}
+            <ShelfLogoChip
+              title={aiBusy ? "AI…" : "AI розпізнати"}
+              icon="cloud"
+              disabled={aiBusy || manualPhotos.length === 0}
               onPress={() => {
                 void recognizeFromPhotos();
               }}
-              disabled={aiBusy || manualPhotos.length === 0}
-              accessibilityRole="button"
-              accessibilityLabel="AI розпізнати"
-            >
-              <Text style={styles.addText}>{aiBusy ? "AI…" : "AI розпізнати"}</Text>
-            </Pressable>
+            />
             {manualPhotos.length > 0 ? (
               <Text style={styles.photoCount}>
                 {manualPhotos.length} / {MAX_MANUAL_PHOTOS}
@@ -1346,29 +1337,33 @@ export default function ShelfScreen() {
               </View>
             ))}
           </View>
-          <Pressable style={styles.btn} onPress={addManual}>
-            <Text style={styles.addText}>{editShelfId ? "Оновити" : "Зберегти"}</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.btn, { backgroundColor: colors.stamp, marginTop: 8 }]}
+          <ShelfLogoChip
+            title={editShelfId ? "Оновити" : "Зберегти"}
+            icon="check"
+            style={{ marginTop: 8 }}
+            onPress={addManual}
+          />
+          <ShelfLogoChip
+            title="Очистити всі поля"
+            icon="trash"
+            danger
+            style={{ marginTop: 8 }}
             onPress={() => {
               const keepEdit = editShelfId;
               resetManualForm();
               if (keepEdit) setEditShelfId(keepEdit);
               setAiStatus("");
             }}
-          >
-            <Text style={styles.addText}>Очистити всі поля</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.btn, { backgroundColor: colors.muted, marginTop: 8 }]}
+          />
+          <ShelfLogoChip
+            title="Закрити"
+            icon="close"
+            style={{ marginTop: 8 }}
             onPress={() => {
               setManualOpen(false);
               resetManualForm();
             }}
-          >
-            <Text style={styles.addText}>Закрити</Text>
-          </Pressable>
+          />
         </ScrollView>
       </Modal>
 
@@ -1383,9 +1378,12 @@ export default function ShelfScreen() {
               <TextInput style={styles.age} keyboardType="number-pad" value={ageMax} onChangeText={setAgeMax} />
             </View>
             <Text style={styles.meta}>0–18 (18 = 18+) · зберігається автоматично</Text>
-            <Pressable onPress={() => setAgeShelf(null)}>
-              <Text style={[styles.link, { marginTop: 12, textAlign: "center" }]}>Закрити</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Закрити"
+              icon="close"
+              style={{ marginTop: 12 }}
+              onPress={() => setAgeShelf(null)}
+            />
           </View>
         </View>
       </Modal>
@@ -1525,9 +1523,12 @@ export default function ShelfScreen() {
                 <Text style={styles.meta}>Немає збережених джерел.</Text>
               ) : null}
             </ScrollView>
-            <Pressable onPress={() => setSourcesOpen(null)} style={{ marginTop: 12 }}>
-              <Text style={[styles.link, { textAlign: "center" }]}>Закрити</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Закрити"
+              icon="close"
+              style={{ marginTop: 12 }}
+              onPress={() => setSourcesOpen(null)}
+            />
           </View>
         </View>
       </Modal>

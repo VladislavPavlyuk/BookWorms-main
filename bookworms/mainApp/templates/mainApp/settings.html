@@ -17,7 +17,7 @@
             </div>
         </div>
         <div class="form-check form-switch m-0 align-self-center">
-            <input class="form-check-input"
+            <input class="form-check-input js-notif-sound-toggle"
                    type="checkbox"
                    role="switch"
                    id="notifSoundToggle"
@@ -47,25 +47,4 @@
         <span class="badge text-bg-dark align-self-center">A4</span>
     </a>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-(function () {
-    var KEY = "dds_notif_sound";
-    var el = document.getElementById("notifSoundToggle");
-    if (!el) return;
-    try {
-        var v = localStorage.getItem(KEY);
-        el.checked = v !== "0";
-    } catch (e) {
-        el.checked = true;
-    }
-    el.addEventListener("change", function () {
-        try {
-            localStorage.setItem(KEY, el.checked ? "1" : "0");
-        } catch (e) { /* ignore */ }
-    });
-})();
-</script>
 {% endblock %}

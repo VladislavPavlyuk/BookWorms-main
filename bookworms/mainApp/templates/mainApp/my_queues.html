@@ -1,0 +1,31 @@
+{% extends "mainApp/base.html" %}
+
+{% block title %}Мої черги{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <h1 class="h4 mb-1">Мої черги</h1>
+    <p class="text-muted small mb-0">
+        Активні позиції в чергах на примірники. Натисніть рядок — історія / черга примірника.
+    </p>
+</div>
+
+{% if not items %}
+    <div class="alert alert-light border">Немає активних черг.</div>
+{% else %}
+    <div class="list-group shadow-sm">
+        {% for it in items %}
+        <a href="{% url 'copy_history' it.copy_id %}"
+           class="list-group-item list-group-item-action">
+            <div class="fw-semibold">{{ it.book_title }}</div>
+            <div class="small text-muted mt-1">
+                власник @{{ it.owner_username }}
+                · місце {{ it.position }}
+                · {{ it.status_label }}
+            </div>
+            <div class="small text-muted">#{{ it.copy_id }}</div>
+        </a>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endblock %}

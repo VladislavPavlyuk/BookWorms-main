@@ -17,6 +17,7 @@ import { useAuth } from "../../src/auth";
 import { ApiError } from "../../src/api";
 import { PasswordField } from "../../src/PasswordField";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
+import { ShelfLogoChip } from "../../src/ShelfLogoChip";
 import { colors, fs, s, btnRadius } from "../../src/theme";
 
 export default function Register() {
@@ -288,13 +289,13 @@ export default function Register() {
           autoCapitalize="sentences"
           keyboardType="default"
         />
-        <Pressable
-          style={[styles.btn, (!canSubmit || busy) && { opacity: 0.5 }]}
-          onPress={onSubmit}
+        <ShelfLogoChip
+          title={busy ? "…" : "Зареєструватись"}
+          icon="check"
+          style={styles.submitChip}
           disabled={busy || !canSubmit}
-        >
-          <Text style={styles.btnText}>{busy ? "…" : "Зареєструватись"}</Text>
-        </Pressable>
+          onPress={onSubmit}
+        />
         <Link href="/(auth)/login" style={styles.link}>
           Вже є акаунт
         </Link>
@@ -339,13 +340,6 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: colors.stampOk, borderColor: colors.stampOk },
   chipText: { color: colors.ink, fontWeight: "700", fontSize: fs(13) },
   chipTextOn: { color: colors.white },
-  btn: {
-    backgroundColor: colors.stamp,
-    padding: s(14),
-    marginTop: s(8),
-    minHeight: s(54),
-    borderRadius: btnRadius,
-  },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(18) },
+  submitChip: { marginTop: s(8), alignSelf: "stretch" },
   link: { color: colors.muted, textAlign: "center", marginTop: s(18), fontSize: fs(16) },
 });

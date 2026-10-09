@@ -14,6 +14,7 @@ from .views import (
     notification_open_chat,
     notification_confirm_return,
     notifications_unread_count_view,
+    my_queues,
     CustomLoginView,
     CustomRegisterView,
     register_check_availability,
@@ -140,6 +141,7 @@ urlpatterns = [
     path('library/qr/scan/', copy_qr_scan, name='copy_qr_scan'),
     path('library/exchange/new/', create_exchange, name='create_exchange'),
     path('library/exchange/', exchange_requests, name='exchange_requests'),
+    path('library/queues/', my_queues, name='my_queues'),
     path('library/exchange/<int:request_id>/accept/', exchange_accept, name='exchange_accept'),
     path(
         'library/exchange/<int:request_id>/pick-offer/',

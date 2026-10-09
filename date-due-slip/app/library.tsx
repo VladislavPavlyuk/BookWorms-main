@@ -10,7 +10,9 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, LibraryApi } from "../src/api";
 import { CyrillicTextInput } from "../src/CyrillicTextInput";
-import { colors, fs, s, btnRadius } from "../src/theme";
+import { ShelfLogoChip } from "../src/ShelfLogoChip";
+import { ShelfCheckRow } from "../src/ShelfSelectRow";
+import { colors, fs, s } from "../src/theme";
 import type { LibraryOverlap, LibrarySnapshot } from "../src/types";
 
 function emptyIsbnEdits(rows: LibraryOverlap[]): Record<string, string> {
@@ -176,7 +178,9 @@ export default function SharedLibraryScreen() {
                   {c.is_current_admin ? " · поточний" : ""}
                   {el.my_candidate_id === c.user_id ? " · ваш голос" : ""}
                 </Text>
-                <Pressable
+                <ShelfLogoChip
+                  title={el.my_candidate_id === c.user_id ? "Ваш голос" : "Голос"}
+                  icon="check"
                   onPress={() =>
                     LibraryApi.voteElection(el.election_id, c.user_id)
                       .then(load)
@@ -184,17 +188,15 @@ export default function SharedLibraryScreen() {
                         Alert.alert("Голос", e instanceof ApiError ? e.message : String(e))
                       )
                   }
-                >
-                  <Text style={styles.link}>
-                    {el.my_candidate_id === c.user_id ? "✓" : "Голос"}
-                  </Text>
-                </Pressable>
+                />
               </View>
             ))}
             <View style={styles.rowBtns}>
               {el.can_finalize ? (
-                <Pressable
-                  style={styles.btn}
+                <ShelfLogoChip
+                  title="Завершити"
+                  icon="check"
+                  style={styles.chipFlex}
                   onPress={() =>
                     LibraryApi.finalizeElection(el.election_id)
                       .then(load)
@@ -203,12 +205,12 @@ export default function SharedLibraryScreen() {
                         Alert.alert("Вибори", e instanceof ApiError ? e.message : String(e))
                       )
                   }
-                >
-                  <Text style={styles.btnText}>Завершити</Text>
-                </Pressable>
+                />
               ) : null}
-              <Pressable
-                style={[styles.btn, styles.btnGhost]}
+              <ShelfLogoChip
+                title="Скасувати"
+                icon="close"
+                style={styles.chipFlex}
                 onPress={() =>
                   LibraryApi.cancelElection(el.election_id)
                     .then(load)
@@ -216,14 +218,14 @@ export default function SharedLibraryScreen() {
                       Alert.alert("Вибори", e instanceof ApiError ? e.message : String(e))
                     )
                 }
-              >
-                <Text style={[styles.btnText, { color: colors.ink }]}>Скасувати</Text>
-              </Pressable>
+              />
             </View>
           </>
         ) : snap.library.is_shared ? (
-          <Pressable
-            style={styles.btn}
+          <ShelfLogoChip
+            title="Відкрити голосування"
+            icon="people"
+            style={styles.chipBlock}
             onPress={() =>
               LibraryApi.startElection()
                 .then(load)
@@ -231,9 +233,7 @@ export default function SharedLibraryScreen() {
                   Alert.alert("Вибори", e instanceof ApiError ? e.message : String(e))
                 )
             }
-          >
-            <Text style={styles.btnText}>Відкрити голосування</Text>
-          </Pressable>
+          />
         ) : (
           <Text style={styles.meta}>Доступно після merge з іншим користувачем.</Text>
         )}
@@ -253,18 +253,18 @@ export default function SharedLibraryScreen() {
               </Text>
             </>
           ) : null}
-          <Pressable
-            style={[styles.btn, busy && { opacity: 0.6 }]}
-            onPress={generateCode}
-            disabled={busy}
-          >
-            <Text style={styles.btnText}>
-              {snap.active_merge_code ? "Новий код" : "Згенерувати код"}
-            </Text>
-          </Pressable>
+          <ShelfLogoChip
+            title={snap.active_merge_code ? "Новий код" : "Згенерувати код"}
+            icon="barcode"
+            style={[styles.chipBlock, busy && styles.chipDisabled]}
+            onPress={() => {
+              if (!busy) generateCode();
+            }}
+          />
           {snap.invites_out.map((i) => (
             <View key={i.id} style={styles.inviteRow}>
               <Pressable
+                style={{ flex: 1 }}
                 onPress={() =>
                   i.to_user_id != null
                     ? router.push(`/chat/${i.to_user_id}`)
@@ -276,9 +276,11 @@ export default function SharedLibraryScreen() {
                   {i.status === "awaiting_isbn" ? " (ISBN)" : ""}
                 </Text>
               </Pressable>
-              <Pressable onPress={() => LibraryApi.cancelInvite(i.id).then(load)}>
-                <Text style={styles.link}>Скасувати</Text>
-              </Pressable>
+              <ShelfLogoChip
+                title="Скасувати"
+                icon="close"
+                onPress={() => LibraryApi.cancelInvite(i.id).then(load)}
+              />
             </View>
           ))}
         </View>
@@ -290,9 +292,12 @@ export default function SharedLibraryScreen() {
           Натисніть Merge Library і введіть код адміністратора іншої бібліотеки.
         </Text>
         {!showRedeem ? (
-          <Pressable style={styles.btn} onPress={() => setShowRedeem(true)}>
-            <Text style={styles.btnText}>Merge Library</Text>
-          </Pressable>
+          <ShelfLogoChip
+            title="Merge Library"
+            icon="library"
+            style={styles.chipBlock}
+            onPress={() => setShowRedeem(true)}
+          />
         ) : (
           <>
             <CyrillicTextInput
@@ -306,22 +311,26 @@ export default function SharedLibraryScreen() {
               autoFocus
             />
             <View style={styles.rowBtns}>
-              <Pressable
-                style={[styles.btn, (busy || mergeCode.length !== 4) && { opacity: 0.6 }]}
-                onPress={redeemCode}
-                disabled={busy || mergeCode.length !== 4}
-              >
-                <Text style={styles.btnText}>Підтвердити код</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.btn, styles.btnGhost]}
+              <ShelfLogoChip
+                title="Підтвердити код"
+                icon="check"
+                style={[
+                  styles.chipFlex,
+                  (busy || mergeCode.length !== 4) && styles.chipDisabled,
+                ]}
+                onPress={() => {
+                  if (!busy && mergeCode.length === 4) redeemCode();
+                }}
+              />
+              <ShelfLogoChip
+                title="Скасувати"
+                icon="close"
+                style={styles.chipFlex}
                 onPress={() => {
                   setShowRedeem(false);
                   setMergeCode("");
                 }}
-              >
-                <Text style={[styles.btnText, { color: colors.ink }]}>Скасувати</Text>
-              </Pressable>
+              />
             </View>
           </>
         )}
@@ -370,9 +379,12 @@ export default function SharedLibraryScreen() {
               ))
             : null}
           {mergeInviteId != null ? (
-            <Pressable style={styles.btn} onPress={confirmMerge}>
-              <Text style={styles.btnText}>Підтвердити кількість і об'єднати</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Підтвердити кількість і об'єднати"
+              icon="check"
+              style={styles.chipBlock}
+              onPress={confirmMerge}
+            />
           ) : null}
         </View>
       ) : null}
@@ -382,9 +394,12 @@ export default function SharedLibraryScreen() {
           <Text style={styles.h2}>Запрошення від @{i.from_username}</Text>
           <Text style={styles.meta}>{i.library_name}</Text>
           {i.from_user_id != null ? (
-            <Pressable onPress={() => router.push(`/chat/${i.from_user_id}`)}>
-              <Text style={styles.link}>Відповісти в чаті</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Відповісти в чаті"
+              icon="chat"
+              style={styles.chipBlock}
+              onPress={() => router.push(`/chat/${i.from_user_id}`)}
+            />
           ) : null}
           {i.overlap?.length ? (
             <Text style={styles.warn}>
@@ -392,15 +407,19 @@ export default function SharedLibraryScreen() {
             </Text>
           ) : null}
           <View style={styles.rowBtns}>
-            <Pressable style={styles.btn} onPress={() => doAccept(i.id)}>
-              <Text style={styles.btnText}>Прийняти</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.btn, styles.btnGhost]}
+            <ShelfLogoChip
+              title="Прийняти"
+              icon="check"
+              style={styles.chipFlex}
+              onPress={() => doAccept(i.id)}
+            />
+            <ShelfLogoChip
+              title="Відхилити"
+              icon="close"
+              danger
+              style={styles.chipFlex}
               onPress={() => LibraryApi.rejectInvite(i.id).then(load)}
-            >
-              <Text style={[styles.btnText, { color: colors.ink }]}>Відхилити</Text>
-            </Pressable>
+            />
           </View>
         </View>
       ))}
@@ -413,18 +432,19 @@ export default function SharedLibraryScreen() {
           <Text style={styles.meta}>{JSON.stringify(a.payload)}</Text>
           {snap.library.i_am_admin ? (
             <View style={styles.rowBtns}>
-              <Pressable
-                style={styles.btn}
+              <ShelfLogoChip
+                title="Схвалити"
+                icon="check"
+                style={styles.chipFlex}
                 onPress={() => LibraryApi.resolveAction(a.id, true).then(load)}
-              >
-                <Text style={styles.btnText}>Схвалити</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.btn, styles.btnGhost]}
+              />
+              <ShelfLogoChip
+                title="Відхилити"
+                icon="close"
+                danger
+                style={styles.chipFlex}
                 onPress={() => LibraryApi.resolveAction(a.id, false).then(load)}
-              >
-                <Text style={[styles.btnText, { color: colors.ink }]}>Відхилити</Text>
-              </Pressable>
+              />
             </View>
           ) : null}
         </View>
@@ -435,21 +455,20 @@ export default function SharedLibraryScreen() {
           <Text style={styles.h2}>Поділ / вихід</Text>
           <Text style={styles.meta}>Оберіть примірники, які забираєте:</Text>
           {(snap.splittable_copies || []).map((c) => (
-            <Pressable
+            <ShelfCheckRow
               key={c.id}
-              style={styles.checkRow}
+              label={`${c.title} · #${c.id}${c.added_by_me ? " (ви додали)" : ""}`}
+              checked={!!splitPick[c.id]}
               onPress={() =>
                 setSplitPick((prev) => ({ ...prev, [c.id]: !prev[c.id] }))
               }
-            >
-              <Text style={styles.row}>
-                {splitPick[c.id] ? "☑" : "☐"} {c.title} · #{c.id}
-                {c.added_by_me ? " (ви додали)" : ""}
-              </Text>
-            </Pressable>
+            />
           ))}
-          <Pressable
-            style={[styles.btn, { backgroundColor: colors.stamp, marginTop: 12 }]}
+          <ShelfLogoChip
+            title="Запит на поділ"
+            icon="return"
+            danger
+            style={[styles.chipBlock, { marginTop: 12 }]}
             onPress={() => {
               const ids = Object.entries(splitPick)
                 .filter(([, on]) => on)
@@ -483,9 +502,7 @@ export default function SharedLibraryScreen() {
                 ]
               );
             }}
-          >
-            <Text style={styles.btnText}>Запит на поділ</Text>
-          </Pressable>
+          />
         </View>
       ) : snap.library.is_shared ? (
         <View style={styles.block}>
@@ -518,21 +535,23 @@ const styles = StyleSheet.create({
     paddingVertical: s(12),
     fontSize: fs(16),
   },
-  btn: {
-    backgroundColor: colors.ink,
-    padding: s(12),
+  rowBtns: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
     marginTop: s(10),
-    borderRadius: btnRadius,
-    minHeight: s(48),
-    justifyContent: "center",
-    flex: 1,
   },
-  btnGhost: { backgroundColor: colors.paperDark },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(15) },
-  rowBtns: { flexDirection: "row", gap: 10 },
-  inviteRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
+  chipFlex: { flexGrow: 1, flexBasis: "40%" },
+  chipBlock: { alignSelf: "stretch", marginTop: s(10) },
+  chipDisabled: { opacity: 0.55 },
+  inviteRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+  },
   link: { color: colors.stamp, fontWeight: "700", paddingHorizontal: 8 },
-  checkRow: { paddingVertical: 6 },
   code: {
     fontSize: fs(36),
     fontWeight: "800",

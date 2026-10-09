@@ -18,6 +18,7 @@ import { FilterGlyph } from "./HeaderGlyphs";
 import { CyrillicTextInput } from "./CyrillicTextInput";
 import { AgeRangeDual, ageFilterParams, parseAgeParam } from "./AgeRangeDual";
 import { EUROPEAN_LANGUAGES, languageLabel } from "./europeanLanguages";
+import { ShelfLogoChip } from "./ShelfLogoChip";
 import { colors, fs, s, btnRadius } from "./theme";
 
 const CHROME_IDLE_MS = 2000;
@@ -414,17 +415,21 @@ export function SiteHeader() {
             </View>
           </View>
           <View style={styles.advActions}>
-            <Pressable style={styles.searchBtnWide} onPress={applyAdvanced}>
-              <Text style={styles.searchBtnText}>Застосувати</Text>
-            </Pressable>
-            <Pressable
+            <ShelfLogoChip
+              title="Застосувати"
+              icon="check"
+              style={{ flexGrow: 1, flexBasis: "40%" }}
+              onPress={applyAdvanced}
+            />
+            <ShelfLogoChip
+              title="Скинути"
+              icon="close"
+              style={{ flexGrow: 1, flexBasis: "40%" }}
               onPress={() => {
                 resetAll();
                 if (!inTabs) router.push("/(tabs)" as never);
               }}
-            >
-              <Text style={styles.clear}>Скинути</Text>
-            </Pressable>
+            />
           </View>
         </View>
       ) : null}

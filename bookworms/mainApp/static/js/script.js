@@ -326,6 +326,51 @@
         initNotifBadgePoll();
     }
 
+    /** Toggle «Звук сповіщень» (navbar Settings + /settings/). Same key as mobile. */
+    function initNotifSoundToggles() {
+        var KEY = "dds_notif_sound";
+        var els = document.querySelectorAll(".js-notif-sound-toggle");
+        if (!els.length) return;
+
+        function readOn() {
+            try {
+                return localStorage.getItem(KEY) !== "0";
+            } catch (e) {
+                return true;
+            }
+        }
+
+        function writeOn(on) {
+            try {
+                localStorage.setItem(KEY, on ? "1" : "0");
+            } catch (e) {
+                /* ignore */
+            }
+        }
+
+        function syncAll(on) {
+            els.forEach(function (el) {
+                el.checked = on;
+            });
+        }
+
+        syncAll(readOn());
+        els.forEach(function (el) {
+            if (el.getAttribute("data-bound") === "1") return;
+            el.setAttribute("data-bound", "1");
+            el.addEventListener("change", function () {
+                writeOn(el.checked);
+                syncAll(el.checked);
+            });
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initNotifSoundToggles);
+    } else {
+        initNotifSoundToggles();
+    }
+
     /** Показати / сховати пароль (login + register). */
     function initPasswordToggles() {
         document.querySelectorAll("[data-password-toggle]").forEach(function (btn) {

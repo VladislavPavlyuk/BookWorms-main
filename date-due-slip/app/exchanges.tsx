@@ -14,7 +14,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, ExchangeApi, MsgApi } from "../src/api";
 import { useAuth } from "../src/auth";
 import { exchangeChatPartnerId } from "../src/chat";
-import { colors, fs, s, btnRadius } from "../src/theme";
+import { ShelfLogoChip } from "../src/ShelfLogoChip";
+import { colors, fs, s } from "../src/theme";
 import { UserNameLink } from "../src/UserNameLink";
 import type { Exchange, Shelf, User } from "../src/types";
 
@@ -221,14 +222,20 @@ export default function Exchanges() {
         />
         <View style={styles.dueBtns}>
           {e.can_propose_due !== false ? (
-            <Pressable style={styles.btnGhost} onPress={() => proposeDue(e)}>
-              <Text style={styles.chat}>Запропонувати дату</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Запропонувати дату"
+              icon="edit"
+              style={styles.chip}
+              onPress={() => proposeDue(e)}
+            />
           ) : null}
           {e.can_confirm_due ? (
-            <Pressable style={styles.btnOk} onPress={() => confirmDue(e)}>
-              <Text style={styles.ok}>Погодити термін</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Погодити термін"
+              icon="check"
+              style={styles.chip}
+              onPress={() => confirmDue(e)}
+            />
           ) : null}
         </View>
       </View>
@@ -286,9 +293,12 @@ export default function Exchanges() {
         <Text style={styles.cond}>{conditionText(e, asOwner)}</Text>
         {role !== "hist" ? dueControls(e) : null}
         <View style={styles.row}>
-          <Pressable style={styles.btnGhost} onPress={() => openChat(e)}>
-            <Text style={styles.chat}>Чат</Text>
-          </Pressable>
+          <ShelfLogoChip
+            title="Чат"
+            icon="chat"
+            style={styles.chip}
+            onPress={() => openChat(e)}
+          />
           {actions}
         </View>
       </View>
@@ -325,24 +335,27 @@ export default function Exchanges() {
             actions={
               <>
                 {e.can_pick_offer ? (
-                  <Pressable
-                    style={styles.btnGhost}
-                    onPress={() => openPickOffer(e)}
+                  <ShelfLogoChip
+                    title={pickBusy ? "…" : "Обрати з його полиці"}
+                    icon="library"
+                    style={styles.chip}
                     disabled={pickBusy}
-                  >
-                    <Text style={styles.chat}>
-                      {pickBusy ? "…" : "Обрати з його полиці"}
-                    </Text>
-                  </Pressable>
+                    onPress={() => openPickOffer(e)}
+                  />
                 ) : null}
-                <Pressable style={styles.btnOk} onPress={() => confirmAccept(e)}>
-                  <Text style={styles.ok}>
-                    {e.offer_open && !e.offer_shelf ? "Як позику" : "Прийняти"}
-                  </Text>
-                </Pressable>
-                <Pressable style={styles.btnGhost} onPress={() => confirmReject(e)}>
-                  <Text style={styles.no}>Відхилити</Text>
-                </Pressable>
+                <ShelfLogoChip
+                  title={e.offer_open && !e.offer_shelf ? "Як позику" : "Прийняти"}
+                  icon="check"
+                  style={styles.chip}
+                  onPress={() => confirmAccept(e)}
+                />
+                <ShelfLogoChip
+                  title="Відхилити"
+                  icon="close"
+                  danger
+                  style={styles.chip}
+                  onPress={() => confirmReject(e)}
+                />
               </>
             }
           />
@@ -359,8 +372,11 @@ export default function Exchanges() {
             e={e}
             role="out"
             actions={
-              <Pressable
-                style={styles.btnGhost}
+              <ShelfLogoChip
+                title="Скасувати"
+                icon="close"
+                danger
+                style={styles.chip}
                 onPress={() =>
                   Alert.alert("Скасувати запит?", undefined, [
                     { text: "Ні", style: "cancel" },
@@ -371,9 +387,7 @@ export default function Exchanges() {
                     },
                   ])
                 }
-              >
-                <Text style={styles.no}>Скасувати</Text>
-              </Pressable>
+              />
             }
           />
         ))
@@ -424,9 +438,12 @@ export default function Exchanges() {
                 </Pressable>
               ))}
             </ScrollView>
-            <Pressable style={styles.btnGhost} onPress={() => setPickFor(null)}>
-              <Text style={styles.no}>Скасувати</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Скасувати"
+              icon="close"
+              style={{ marginTop: 12 }}
+              onPress={() => setPickFor(null)}
+            />
           </View>
         </View>
       </Modal>
@@ -506,25 +523,7 @@ const styles = StyleSheet.create({
     marginTop: s(12),
     alignItems: "center",
   },
-  btnOk: {
-    backgroundColor: colors.stampOk,
-    paddingHorizontal: s(14),
-    paddingVertical: s(10),
-    minHeight: s(44),
-    borderRadius: btnRadius,
-  },
-  btnGhost: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: s(14),
-    paddingVertical: s(10),
-    backgroundColor: colors.paper,
-    minHeight: s(44),
-    borderRadius: btnRadius,
-  },
-  chat: { color: colors.ink, fontWeight: "800", fontSize: fs(14) },
-  ok: { color: "#fff", fontWeight: "800", fontSize: fs(14) },
-  no: { color: colors.stamp, fontWeight: "800", fontSize: fs(14) },
+  chip: { flexGrow: 1, flexBasis: "40%" },
   pickBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",

@@ -9,7 +9,8 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, FeedApi, ShelfApi } from "../../src/api";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
-import { colors, fs, s, btnRadius } from "../../src/theme";
+import { ShelfLogoChip } from "../../src/ShelfLogoChip";
+import { colors, fs, s } from "../../src/theme";
 import type { Shelf } from "../../src/types";
 
 type Mode = "event" | "feedback";
@@ -109,13 +110,13 @@ export default function NewPost() {
         </>
       )}
 
-      <Pressable
-        style={[styles.btn, mode === "feedback" && !bookId && styles.btnDisabled]}
-        onPress={() => submit(false)}
+      <ShelfLogoChip
+        title="Опублікувати"
+        icon="send"
+        style={styles.chip}
         disabled={mode === "feedback" && !bookId}
-      >
-        <Text style={styles.btnText}>Опублікувати</Text>
-      </Pressable>
+        onPress={() => submit(false)}
+      />
     </ScrollView>
   );
 }
@@ -143,13 +144,5 @@ const styles = StyleSheet.create({
   },
   optOn: { borderColor: colors.stamp, backgroundColor: colors.paperDark },
   optText: { color: colors.ink, fontSize: fs(16) },
-  btn: {
-    backgroundColor: colors.ink,
-    padding: s(14),
-    marginTop: s(16),
-    minHeight: s(54),
-    borderRadius: btnRadius,
-  },
-  btnDisabled: { opacity: 0.45 },
-  btnText: { color: colors.white, textAlign: "center", fontWeight: "700", fontSize: fs(16) },
+  chip: { marginTop: s(16), alignSelf: "stretch" },
 });

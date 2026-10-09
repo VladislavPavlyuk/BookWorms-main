@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import {
   Alert,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -11,39 +10,49 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, ShelfApi, SlipApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
-import { HistoryLink } from "../../src/HistoryLink";
 import { useAuth } from "../../src/auth";
-import { colors, fs, s, btnRadius } from "../../src/theme";
+import { bookCoverFromDb } from "../../src/mediaUrl";
+import { ShelfLogoChip } from "../../src/ShelfLogoChip";
+import { colors, fs, s } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { Shelf } from "../../src/types";
 
 function Slip({
-  s,
+  shelf,
   role,
   onChat,
   onConfirm,
+  onReturn,
 }: {
-  s: Shelf;
+  shelf: Shelf;
   role: "borrowed" | "lent";
   onChat?: () => void;
   onConfirm?: () => void;
+  onReturn?: () => void;
 }) {
-  const overdue = s.is_overdue;
+  const router = useRouter();
+  const overdue = shelf.is_overdue;
   return (
-    <View style={[styles.slip, overdue && styles.overdue, s.return_pending && role === "lent" && styles.pending]}>
+    <View
+      style={[
+        styles.slip,
+        overdue && styles.overdue,
+        shelf.return_pending && role === "lent" && styles.pending,
+      ]}
+    >
       <Text style={styles.library}>РЕЧЕНЕЦЬ</Text>
-      <BookCover uri={s.book.cover_url} size="full" bleed={0} />
-      <Text style={styles.title}>{s.book.title}</Text>
-      <Text style={styles.meta}>{s.book.authors || "—"}</Text>
+      <BookCover uri={bookCoverFromDb(shelf.book)} size="full" bleed={0} />
+      <Text style={styles.title}>{shelf.book.title}</Text>
+      <Text style={styles.meta}>{shelf.book.authors || "—"}</Text>
       <View style={styles.stampBox}>
         <Text style={[styles.stamp, overdue && { color: colors.danger }]}>
-          {overdue ? "OVERDUE" : s.due_date ? `DUE ${s.due_date}` : "NO DATE"}
+          {overdue ? "OVERDUE" : shelf.due_date ? `DUE ${shelf.due_date}` : "NO DATE"}
         </Text>
-        {s.days_left != null && (
+        {shelf.days_left != null && (
           <Text style={styles.days}>
             {overdue
-              ? `${Math.abs(s.days_left)} дн. прострочено`
-              : `${s.days_left} дн. лишилось`}
+              ? `${Math.abs(shelf.days_left)} дн. прострочено`
+              : `${shelf.days_left} дн. лишилось`}
           </Text>
         )}
       </View>
@@ -51,37 +60,58 @@ function Slip({
         {role === "borrowed" ? (
           <>
             <Text style={styles.footer}>Позичено у </Text>
-            <UserNameLink user={s.borrowed_from} style={styles.footer} />
+            <UserNameLink user={shelf.borrowed_from} style={styles.footer} />
           </>
         ) : (
           <>
             <Text style={styles.footer}>У </Text>
-            <UserNameLink user={s.user} style={styles.footer} />
+            <UserNameLink user={shelf.user} style={styles.footer} />
           </>
         )}
         <Text style={styles.footer}>
-          {s.return_pending
+          {shelf.return_pending
             ? role === "lent"
               ? " · чекає вашого підтвердження"
               : " · повернення надіслано"
             : ""}
         </Text>
       </View>
-      {role === "lent" && s.return_pending && onConfirm ? (
-        <Pressable style={styles.confirmBtn} onPress={onConfirm}>
-          <Text style={styles.confirmBtnText}>Підтвердити повернення</Text>
-        </Pressable>
-      ) : null}
-      <View style={{ paddingHorizontal: 16, marginTop: 10 }}>
-        <HistoryLink copyId={s.copy_id} />
+      <View style={styles.actions}>
+        {shelf.copy_id ? (
+          <ShelfLogoChip
+            title="Історія подій"
+            icon="history"
+            style={styles.actionChip}
+            onPress={() => router.push(`/copy/${shelf.copy_id}`)}
+          />
+        ) : null}
+        {onChat ? (
+          <ShelfLogoChip
+            title={role === "borrowed" ? "Чат з власником" : "Чат з позичальником"}
+            icon="chat"
+            style={styles.actionChip}
+            onPress={onChat}
+          />
+        ) : null}
+        {role === "borrowed" && !shelf.return_pending && onReturn ? (
+          <ShelfLogoChip
+            title="Повернути власнику"
+            icon="return"
+            style={styles.actionChip}
+            onPress={onReturn}
+          />
+        ) : null}
+        {role === "lent" && shelf.return_pending && onConfirm ? (
+          <ShelfLogoChip
+            title={
+              shelf.requires_qr_scan ? "Скан QR → повернуто" : "Підтвердити повернення"
+            }
+            icon={shelf.requires_qr_scan ? "qr" : "check"}
+            style={styles.actionChip}
+            onPress={onConfirm}
+          />
+        ) : null}
       </View>
-      {onChat && (
-        <Pressable onPress={onChat}>
-          <Text style={styles.chat}>
-            {role === "borrowed" ? "Чат з власником" : "Чат з позичальником"}
-          </Text>
-        </Pressable>
-      )}
     </View>
   );
 }
@@ -109,22 +139,32 @@ export default function Slips() {
     }, [])
   );
 
-  const confirmReturn = async (s: Shelf) => {
+  const confirmReturn = async (shelf: Shelf) => {
     try {
-      if (s.requires_qr_scan) {
-        router.push(`/qr-scan?return_shelf_id=${s.id}`);
+      if (shelf.requires_qr_scan) {
+        router.push(`/qr-scan?return_shelf_id=${shelf.id}`);
         return;
       }
-      await ShelfApi.confirmReturn(s.id);
+      await ShelfApi.confirmReturn(shelf.id);
       Alert.alert("Повернення", "Підтверджено.");
       await load();
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : String(e);
       if (/Відскануйте QR|QR-наклейк/i.test(msg)) {
-        router.push(`/qr-scan?return_shelf_id=${s.id}`);
+        router.push(`/qr-scan?return_shelf_id=${shelf.id}`);
         return;
       }
       Alert.alert("Повернення", msg);
+    }
+  };
+
+  const returnToOwner = async (shelf: Shelf) => {
+    try {
+      await ShelfApi.returnBook(shelf.id);
+      Alert.alert("Повернення", "Запит надіслано власнику.");
+      await load();
+    } catch (e) {
+      Alert.alert("Повернення", e instanceof ApiError ? e.message : String(e));
     }
   };
 
@@ -150,14 +190,17 @@ export default function Slips() {
       {borrowed.length === 0 ? (
         <Text style={styles.empty}>Немає позичених книг</Text>
       ) : (
-        borrowed.map((s) => (
+        borrowed.map((shelf) => (
           <Slip
-            key={s.id}
-            s={s}
+            key={shelf.id}
+            shelf={shelf}
             role="borrowed"
+            onReturn={
+              !shelf.return_pending ? () => returnToOwner(shelf) : undefined
+            }
             onChat={
-              s.borrowed_from
-                ? () => router.push(`/chat/${s.borrowed_from!.id}`)
+              shelf.borrowed_from
+                ? () => router.push(`/chat/${shelf.borrowed_from!.id}`)
                 : undefined
             }
           />
@@ -167,15 +210,15 @@ export default function Slips() {
       {lent.length === 0 ? (
         <Text style={styles.empty}>Ніхто не тримає ваші книги</Text>
       ) : (
-        lent.map((s) => (
+        lent.map((shelf) => (
           <Slip
-            key={s.id}
-            s={s}
+            key={shelf.id}
+            shelf={shelf}
             role="lent"
-            onConfirm={s.return_pending ? () => confirmReturn(s) : undefined}
+            onConfirm={shelf.return_pending ? () => confirmReturn(shelf) : undefined}
             onChat={
-              s.user.id !== user?.id
-                ? () => router.push(`/chat/${s.user.id}`)
+              shelf.user.id !== user?.id
+                ? () => router.push(`/chat/${shelf.user.id}`)
                 : undefined
             }
           />
@@ -202,7 +245,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: s(16),
     fontSize: fs(15),
   },
-  empty: { color: colors.muted, marginBottom: s(16), paddingHorizontal: s(16), fontSize: fs(14) },
+  empty: {
+    color: colors.muted,
+    marginBottom: s(16),
+    paddingHorizontal: s(16),
+    fontSize: fs(14),
+  },
   slip: {
     borderWidth: 0,
     borderBottomWidth: 2,
@@ -231,8 +279,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: s(16),
   },
-  meta: { color: colors.muted, marginTop: 2, paddingHorizontal: s(16), fontSize: fs(13) },
-  stampBox: { marginTop: s(12), alignItems: "flex-end", paddingHorizontal: s(16) },
+  meta: {
+    color: colors.muted,
+    marginTop: 2,
+    paddingHorizontal: s(16),
+    fontSize: fs(13),
+  },
+  stampBox: {
+    marginTop: s(12),
+    alignItems: "flex-end",
+    paddingHorizontal: s(16),
+  },
   days: { color: colors.muted, fontSize: fs(12), marginTop: 2 },
   footerRow: {
     flexDirection: "row",
@@ -248,26 +305,21 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: fs(12),
   },
-  stamp: { color: colors.stampOk, fontWeight: "900", fontSize: fs(18), letterSpacing: 1 },
-  confirmBtn: {
+  stamp: {
+    color: colors.stampOk,
+    fontWeight: "900",
+    fontSize: fs(18),
+    letterSpacing: 1,
+  },
+  actions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     marginTop: s(12),
-    marginHorizontal: s(16),
-    backgroundColor: colors.stampOk,
-    paddingVertical: s(12),
-    minHeight: s(48),
-    borderRadius: btnRadius,
-  },
-  confirmBtnText: {
-    color: "#fff",
-    fontWeight: "800",
-    textAlign: "center",
-    fontSize: fs(15),
-  },
-  chat: {
-    color: colors.stamp,
-    fontWeight: "800",
-    marginTop: s(10),
     paddingHorizontal: s(16),
-    fontSize: fs(15),
+  },
+  actionChip: {
+    flexGrow: 1,
+    flexBasis: "40%",
   },
 });

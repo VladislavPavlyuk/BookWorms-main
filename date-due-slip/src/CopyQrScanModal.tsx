@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
+import { ShelfLogoChip } from "./ShelfLogoChip";
 import { colors, fs, s, btnRadius } from "./theme";
 
 type Props = {
@@ -55,12 +56,13 @@ export function CopyQrScanModal({
             <Text style={styles.permText}>
               Потрібен доступ до камери, щоб сканувати QR примірника.
             </Text>
-            <Pressable style={styles.btn} onPress={requestPermission}>
-              <Text style={styles.btnText}>Дозволити камеру</Text>
-            </Pressable>
-            <Pressable onPress={onClose}>
-              <Text style={styles.link}>Скасувати</Text>
-            </Pressable>
+            <ShelfLogoChip
+              title="Дозволити камеру"
+              icon="qr"
+              style={{ marginBottom: 12 }}
+              onPress={requestPermission}
+            />
+            <ShelfLogoChip title="Скасувати" icon="close" onPress={onClose} />
           </View>
         ) : (
           <>

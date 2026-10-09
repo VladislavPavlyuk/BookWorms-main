@@ -10,7 +10,8 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, CopyApi } from "../src/api";
-import { colors, btnRadius } from "../src/theme";
+import { ShelfLogoChip } from "../src/ShelfLogoChip";
+import { colors } from "../src/theme";
 
 type Label = {
   copy_id: number | null;
@@ -69,9 +70,12 @@ export default function QrPrintScreen() {
       {!loading && page.length === 0 && !err ? (
         <Text style={styles.meta}>Немає наклейок для прев’ю.</Text>
       ) : null}
-      <Pressable style={styles.btn} onPress={() => router.back()}>
-        <Text style={styles.btnText}>← Назад</Text>
-      </Pressable>
+      <ShelfLogoChip
+        title="Назад"
+        icon="return"
+        style={styles.chip}
+        onPress={() => router.back()}
+      />
     </ScrollView>
   );
 }
@@ -95,13 +99,5 @@ const styles = StyleSheet.create({
   cellBrand: { fontSize: 7, fontWeight: "800", color: colors.ink, marginBottom: 2 },
   cellEmpty: { backgroundColor: colors.paper },
   qr: { width: 36, height: 36, backgroundColor: "#fff" },
-  btn: {
-    marginTop: 24,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: 12,
-    borderRadius: btnRadius,
-    alignSelf: "flex-start",
-  },
-  btnText: { color: colors.ink, fontWeight: "700" },
+  chip: { marginTop: 24, alignSelf: "stretch" },
 });

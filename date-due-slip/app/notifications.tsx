@@ -11,7 +11,8 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, NotifApi, ShelfApi, type AppNotification } from "../src/api";
 import { formatMsgTime } from "../src/chat";
-import { colors, fs, s, btnRadius } from "../src/theme";
+import { ShelfLogoChip } from "../src/ShelfLogoChip";
+import { colors, fs, s } from "../src/theme";
 import { useUnread } from "../src/unread";
 
 export default function NotificationsScreen() {
@@ -136,14 +137,20 @@ export default function NotificationsScreen() {
       </Text>
 
       <View style={styles.actions}>
-        <Pressable onPress={() => openExchanges()}>
-          <Text style={styles.link}>Обміни</Text>
-        </Pressable>
-        {unread > 0 && (
-          <Pressable onPress={markAll}>
-            <Text style={styles.link}>Прочитати все</Text>
-          </Pressable>
-        )}
+        <ShelfLogoChip
+          title="Обміни"
+          icon="tags"
+          style={styles.chip}
+          onPress={() => openExchanges()}
+        />
+        {unread > 0 ? (
+          <ShelfLogoChip
+            title="Прочитати все"
+            icon="check"
+            style={styles.chip}
+            onPress={markAll}
+          />
+        ) : null}
       </View>
 
       {items.length === 0 ? (
@@ -165,20 +172,32 @@ export default function NotificationsScreen() {
             <Text style={styles.body}>{n.body}</Text>
             <View style={styles.row}>
               {n.kind === "return" && n.confirm_return_shelf_id != null ? (
-                <Pressable style={styles.confirmBtn} onPress={() => confirmReturn(n)}>
-                  <Text style={styles.confirmBtnText}>Підтвердити</Text>
-                </Pressable>
+                <ShelfLogoChip
+                  title="Підтвердити"
+                  icon="check"
+                  style={styles.chip}
+                  onPress={() => confirmReturn(n)}
+                />
               ) : null}
               {n.exchange_request_id != null ? (
-                <Pressable onPress={() => openExchanges(n)}>
-                  <Text style={styles.chat}>До обмінів</Text>
-                </Pressable>
+                <ShelfLogoChip
+                  title="До обмінів"
+                  icon="tags"
+                  style={styles.chip}
+                  onPress={() => openExchanges(n)}
+                />
               ) : null}
-              <Pressable onPress={() => openChat(n)}>
-                <Text style={styles.ex}>Чат</Text>
-              </Pressable>
-              {n.is_unread && (
-                <Pressable
+              <ShelfLogoChip
+                title="Чат"
+                icon="chat"
+                style={styles.chip}
+                onPress={() => openChat(n)}
+              />
+              {n.is_unread ? (
+                <ShelfLogoChip
+                  title="Прочитано"
+                  icon="check"
+                  style={styles.chip}
                   onPress={async () => {
                     try {
                       const r = await NotifApi.markRead([n.id]);
@@ -201,10 +220,8 @@ export default function NotificationsScreen() {
                       );
                     }
                   }}
-                >
-                  <Text style={styles.ex}>Прочитано</Text>
-                </Pressable>
-              )}
+                />
+              ) : null}
             </View>
           </View>
         ))
@@ -222,8 +239,7 @@ const styles = StyleSheet.create({
     lineHeight: fs(18),
     fontSize: fs(14),
   },
-  actions: { flexDirection: "row", gap: s(16), marginBottom: s(12) },
-  link: { color: colors.stamp, fontWeight: "800", fontSize: fs(15) },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: s(10), marginBottom: s(12) },
   empty: { color: colors.muted, marginTop: s(24), fontSize: fs(15) },
   card: {
     borderWidth: 1,
@@ -238,18 +254,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: s(12),
+    gap: s(10),
     marginTop: s(10),
     alignItems: "center",
   },
-  confirmBtn: {
-    backgroundColor: colors.stampOk,
-    paddingVertical: s(10),
-    paddingHorizontal: s(14),
-    minHeight: s(44),
-    borderRadius: btnRadius,
-  },
-  confirmBtnText: { color: "#fff", fontWeight: "800", fontSize: fs(14) },
-  chat: { color: colors.ink, fontWeight: "800", fontSize: fs(15) },
-  ex: { color: colors.stampOk, fontWeight: "800", fontSize: fs(15) },
+  chip: { flexGrow: 1, flexBasis: "40%" },
 });

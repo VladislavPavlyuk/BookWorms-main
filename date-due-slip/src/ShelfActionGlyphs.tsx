@@ -17,7 +17,8 @@ export type ShelfActionIcon =
   | "cash"
   | "list"
   | "trash"
-  | "close";
+  | "close"
+  | "send";
 
 type GlyphProps = { color?: string; size?: number };
 
@@ -531,6 +532,27 @@ function ListGlyph({ color = "#fff", size = 24 }: GlyphProps) {
   );
 }
 
+/** Classic paper-plane / send. */
+function SendGlyph({ color = "#fff", size = 24 }: GlyphProps) {
+  return (
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      <View
+        style={{
+          width: 0,
+          height: 0,
+          borderTopWidth: size * 0.22,
+          borderBottomWidth: size * 0.22,
+          borderLeftWidth: size * 0.55,
+          borderTopColor: "transparent",
+          borderBottomColor: "transparent",
+          borderLeftColor: color,
+          transform: [{ rotate: "-20deg" }],
+        }}
+      />
+    </View>
+  );
+}
+
 /** Classic ✕ close / cancel. */
 function CloseGlyph({ color = "#fff", size = 24 }: GlyphProps) {
   const t = Math.max(2.5, size * 0.12);
@@ -616,6 +638,7 @@ const GLYPHS: Record<ShelfActionIcon, (p: GlyphProps) => ReactElement> = {
   list: ListGlyph,
   trash: TrashGlyph,
   close: CloseGlyph,
+  send: SendGlyph,
 };
 
 /** View-drawn classic glyphs — no icon font (Ionicons blanks on some builds). */
