@@ -3,6 +3,7 @@ import {
   Alert,
   FlatList,
   Image,
+  ImageBackground,
   Modal,
   Pressable,
   RefreshControl,
@@ -14,15 +15,17 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, ShelfApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
 import { HistoryLink } from "../../src/HistoryLink";
+import { CameraGlyph } from "../../src/HeaderGlyphs";
 import { IsbnScanModal, isbnReadyToAdd, normalizeIsbn } from "../../src/IsbnScanModal";
 import { BookCoverCaptureModal } from "../../src/BookCoverCaptureModal";
 import { htmlToPlain } from "../../src/htmlText";
-import { colors, btnRadius } from "../../src/theme";
+import { colors, btnRadius, fs, s } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { BookPriceEval, BookPriceQuote, SaleGift, Shelf } from "../../src/types";
 import { LISTING_CHECKBOX_OPTIONS, SALE_GIFT_OPTIONS } from "../../src/types";
@@ -33,6 +36,7 @@ type ManualPhoto = { uri: string; name: string; type: string };
 
 export default function ShelfScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
   const gridCols = winW >= 992 ? 5 : 2;
   const gridGap = 8;
@@ -657,7 +661,7 @@ export default function ShelfScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.screen }}>
-      <View style={styles.row}>
+      <View style={styles.toolbar}>
         <CyrillicTextInput
           placeholder={adding ? "Шукаємо в каталогах…" : "ISBN 10/13 — додається сам"}
           placeholderTextColor={colors.muted}
@@ -670,15 +674,7 @@ export default function ShelfScreen() {
           editable={!adding}
         />
         <Pressable
-          style={[styles.add, styles.scanBtn]}
-          onPress={() => setScanOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Сканувати ISBN камерою"
-        >
-          <Ionicons name="camera" size={22} color={colors.white} />
-        </Pressable>
-        <Pressable
-          style={[styles.add, { backgroundColor: colors.stamp }]}
+          style={styles.manualBtn}
           onPress={() => {
             resetManualForm();
             setManualOpen(true);
@@ -824,14 +820,12 @@ export default function ShelfScreen() {
                 {selectable ? (
                   <Pressable
                     onPress={() => toggleSelect(item.id)}
-                    style={styles.selectCheck}
+                    style={[styles.selectCheck, selected && styles.selectCheckOn]}
                     hitSlop={8}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
                   >
-                    <Ionicons
-                      name={selected ? "checkbox" : "square-outline"}
-                      size={22}
-                      color={selected ? colors.stamp : colors.muted}
-                    />
+                    {selected ? <View style={styles.selectCheckMark} /> : null}
                   </Pressable>
                 ) : null}
               </View>
@@ -1467,12 +1461,76 @@ export default function ShelfScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Scan FAB — same chrome as Create Post, classic camera instead of + */}
+      <Pressable
+        style={({ pressed }) => [
+          styles.scanFab,
+          { bottom: Math.max(16, insets.bottom + 12), right: 16 },
+          pressed && styles.scanFabPressed,
+        ]}
+        onPress={() => setScanOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Сканувати ISBN камерою"
+      >
+        <ImageBackground
+          source={require("../../assets/fab-gradient.png")}
+          style={styles.scanFabBg}
+          imageStyle={styles.scanFabBgImg}
+        >
+          <CameraGlyph color={colors.white} size={s(30)} />
+        </ImageBackground>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", padding: 12, gap: 8 },
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    gap: 10,
+  },
+  manualBtn: {
+    backgroundColor: colors.stamp,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: btnRadius,
+    marginLeft: "auto",
+    justifyContent: "center",
+  },
+  scanFab: {
+    position: "absolute",
+    width: s(64),
+    height: s(64),
+    borderRadius: s(32),
+    zIndex: 40,
+    elevation: 12,
+    shadowColor: "#E83E8C",
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.55)",
+    overflow: "hidden",
+    backgroundColor: "#E83E8C",
+  },
+  scanFabBg: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scanFabBgImg: {
+    borderRadius: s(32),
+  },
+  scanFabPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.96 }],
+  },
   empty: { color: colors.muted, textAlign: "center", marginTop: 40, paddingHorizontal: 24 },
   physHint: {
     color: colors.muted,

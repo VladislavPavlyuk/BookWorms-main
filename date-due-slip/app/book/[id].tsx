@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, BrowseApi } from "../../src/api";
 import { BookCover } from "../../src/BookCover";
+import { BookIsbnInfoModal } from "../../src/BookIsbnInfoModal";
 import { HistoryLink } from "../../src/HistoryLink";
 import { RequestModal } from "../../src/RequestModal";
 import { useAuth } from "../../src/auth";
@@ -22,6 +23,7 @@ export default function BookScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [myOwned, setMyOwned] = useState<Shelf[]>([]);
   const [target, setTarget] = useState<Shelf | null>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   const load = async () => {
     const [d, browse] = await Promise.all([BrowseApi.book(Number(id)), BrowseApi.list()]);
@@ -42,9 +44,17 @@ export default function BookScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ paddingBottom: 24 }}>
-      <BookCover uri={book.cover_url} size="full" bleed={0} />
+      <Pressable
+        onPress={() => setInfoOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Деталі книги"
+      >
+        <BookCover uri={book.cover_url} size="full" bleed={0} />
+      </Pressable>
       <View style={styles.body}>
-      <Text style={styles.title}>{book.title}</Text>
+      <Text style={styles.title} onPress={() => setInfoOpen(true)}>
+        {book.title}
+      </Text>
       <Text style={styles.meta}>{book.authors || "—"}</Text>
       <Text style={styles.meta}>ISBN {book.isbn}</Text>
       <Text style={styles.meta}>
@@ -52,6 +62,12 @@ export default function BookScreen() {
         {book.publish_date ? ` · ${book.publish_date}` : ""}
       </Text>
       <Text style={styles.meta}>Вік: {book.reader_age_summary}</Text>
+      {(book.subjects || []).length ? (
+        <Text style={styles.meta}>Теми: {(book.subjects || []).join(", ")}</Text>
+      ) : null}
+      <Pressable onPress={() => setInfoOpen(true)}>
+        <Text style={styles.link}>Дані ISBN</Text>
+      </Pressable>
       {owners.length > 0 && (
         <View style={styles.ownersRow}>
           <Text style={styles.meta}>Власники: </Text>
@@ -153,6 +169,11 @@ export default function BookScreen() {
 
       </View>
       <RequestModal target={target} myOwned={myOwned} onClose={() => setTarget(null)} onDone={load} />
+      <BookIsbnInfoModal
+        book={book}
+        visible={infoOpen}
+        onClose={() => setInfoOpen(false)}
+      />
     </ScrollView>
   );
 }

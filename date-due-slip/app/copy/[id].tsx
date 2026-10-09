@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import {
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,7 +11,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ApiError, CopyApi } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { BookCover } from "../../src/BookCover";
-import { htmlToPlain } from "../../src/htmlText";
+import { BookIsbnInfoModal } from "../../src/BookIsbnInfoModal";
 import { colors, btnRadius } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { BookCopyDetail, CopyEvent, QueueEntry, Shelf } from "../../src/types";
@@ -105,19 +104,6 @@ export default function CopyHistoryScreen() {
       ]
     );
   };
-
-  const isbnRows = (
-    [
-      ["Видавець", book.publisher],
-      ["Дата видання", book.publish_date],
-      ["Палітурка", book.binding],
-      ["Мова", book.language],
-      ["Видання", book.edition],
-      ["Сторінок", book.pages != null ? String(book.pages) : ""],
-      ["Розміри", book.dimensions],
-      ["Джерело", book.catalog_source || ""],
-    ] as [string, string][]
-  ).filter(([, v]) => !!(v && String(v).trim()));
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.screen }} contentContainerStyle={{ paddingBottom: 32 }}>
@@ -265,68 +251,22 @@ export default function CopyHistoryScreen() {
         )}
       </View>
 
-      <Modal
+      <BookIsbnInfoModal
+        book={book}
         visible={infoOpen}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setInfoOpen(false)}
-      >
-        <View style={styles.infoBackdrop}>
-          <View style={styles.infoCard}>
-            <View style={styles.infoHeader}>
-              <Text style={styles.infoTitle} numberOfLines={2}>
-                {book.title}
-              </Text>
-              <Pressable onPress={() => setInfoOpen(false)} hitSlop={8}>
-                <Text style={styles.infoClose}>Закрити</Text>
-              </Pressable>
-            </View>
-            <ScrollView style={styles.infoScroll} nestedScrollEnabled>
-              <BookCover uri={book.cover_url} size="md" />
-              <Text style={styles.meta}>{book.authors || "—"}</Text>
-              <Text style={styles.meta}>
-                {book.isbn?.startsWith("9799") || book.isbn_missing
-                  ? book.note || "ISBN code not exists"
-                  : `ISBN ${book.isbn}${book.isbn10 ? ` · ${book.isbn10}` : ""}`}
-              </Text>
-              <Text style={[styles.h, { marginTop: 12 }]}>Дані ISBN</Text>
-              {isbnRows.map(([k, v]) => (
-                <Text key={k} style={styles.meta}>
-                  <Text style={{ fontWeight: "700" }}>{k}: </Text>
-                  {v}
-                </Text>
-              ))}
-              {(book.subjects || []).length ? (
-                <Text style={styles.meta}>
-                  <Text style={{ fontWeight: "700" }}>Теми: </Text>
-                  {(book.subjects || []).join(", ")}
-                </Text>
-              ) : null}
-              {book.synopsis || book.overview ? (
-                <View style={styles.proseWrap}>
-                  <Text style={[styles.meta, { fontWeight: "700", marginBottom: 4 }]}>
-                    {book.synopsis ? "Синопсис" : "Огляд"}
-                  </Text>
-                  <ScrollView style={styles.proseScroll} nestedScrollEnabled>
-                    <Text style={styles.meta}>
-                      {htmlToPlain(book.synopsis || book.overview)}
-                    </Text>
-                  </ScrollView>
-                </View>
-              ) : null}
-              <Pressable
-                style={[styles.btn, { marginTop: 16, alignSelf: "flex-start" }]}
-                onPress={() => {
-                  setInfoOpen(false);
-                  router.push(`/book/${book.id}`);
-                }}
-              >
-                <Text style={styles.btnText}>Усі примірники ISBN</Text>
-              </Pressable>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setInfoOpen(false)}
+        footer={
+          <Pressable
+            style={[styles.btn, { marginTop: 16, marginBottom: 8, alignSelf: "flex-start" }]}
+            onPress={() => {
+              setInfoOpen(false);
+              router.push(`/book/${book.id}`);
+            }}
+          >
+            <Text style={styles.btnText}>Усі примірники ISBN</Text>
+          </Pressable>
+        }
+      />
     </ScrollView>
   );
 }
@@ -336,42 +276,6 @@ const styles = StyleSheet.create({
   copyTag: { color: colors.stamp, fontWeight: "800", letterSpacing: 0.5, marginBottom: 4 },
   title: { fontSize: 22, fontWeight: "800", color: colors.ink },
   meta: { color: colors.muted, marginTop: 2 },
-  infoBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
-  },
-  infoCard: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: "88%",
-    paddingBottom: 24,
-  },
-  infoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  infoTitle: { flex: 1, color: colors.ink, fontWeight: "800", fontSize: 18 },
-  infoClose: { color: colors.stamp, fontWeight: "700" },
-  infoScroll: { paddingHorizontal: 16, paddingTop: 12 },
-  proseWrap: { marginTop: 10 },
-  proseScroll: {
-    maxHeight: 160,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: "#F7F7F5",
-  },
   lent: { color: colors.stamp, fontWeight: "700", marginTop: 8 },
   myPos: { color: colors.ink, fontWeight: "800", marginTop: 8 },
   link: { color: colors.stamp, fontWeight: "700" },

@@ -110,6 +110,57 @@ export function FilterGlyph({
   );
 }
 
+/** Classic camera — body + lens + viewfinder bump (desktop Scan FAB). */
+export function CameraGlyph({
+  color = colors.ink,
+  size = 24,
+}: {
+  color?: string;
+  size?: number;
+}) {
+  const s = size;
+  const bodyW = s * 0.92;
+  const bodyH = s * 0.58;
+  const lens = s * 0.36;
+  const bumpW = s * 0.28;
+  const bumpH = s * 0.14;
+  return (
+    <View style={{ width: s, height: s, alignItems: "center", justifyContent: "center" }}>
+      <View
+        style={{
+          width: bumpW,
+          height: bumpH,
+          borderTopLeftRadius: bumpH * 0.4,
+          borderTopRightRadius: bumpH * 0.4,
+          backgroundColor: color,
+          marginBottom: -1,
+        }}
+      />
+      <View
+        style={{
+          width: bodyW,
+          height: bodyH,
+          borderRadius: s * 0.1,
+          backgroundColor: color,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <View
+          style={{
+            width: lens,
+            height: lens,
+            borderRadius: lens / 2,
+            borderWidth: Math.max(2, Math.round(s * 0.08)),
+            borderColor: "#fff",
+            backgroundColor: "transparent",
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
 /** Close ✕ for menu panel. */
 export function CloseGlyph({
   color = colors.ink,

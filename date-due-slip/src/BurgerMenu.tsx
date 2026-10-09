@@ -10,7 +10,6 @@ import {
 import { usePathname, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BurgerGlyph, CloseGlyph } from "./HeaderGlyphs";
-import { NotifBell } from "./NotifBell";
 import { colors, fs, s } from "./theme";
 import { useUnread } from "./unread";
 
@@ -162,11 +161,10 @@ export function BurgerMenu() {
   );
 }
 
-/** Bell + burger for stack/tab headers — theme paper chrome app-wide. */
+/** Burger for stack/tab headers — unread badge on ☰ is enough (no bell). */
 export function HeaderActions() {
   return (
     <View style={styles.actions}>
-      <NotifBell variant="paper" />
       <BurgerMenu />
     </View>
   );

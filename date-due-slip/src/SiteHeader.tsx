@@ -78,7 +78,7 @@ const SearchField = memo(function SearchField({
   );
 });
 
-/** Filter + bell + burger — own state so search IME is not interrupted. */
+/** Filter + burger — own state so search IME is not interrupted. */
 const HeaderTrailing = memo(function HeaderTrailing({
   apiRef,
   onToggleFilter,
@@ -138,7 +138,7 @@ function isHomeFeed(segments: string[]) {
 }
 
 /**
- * Спільний хром: [‹] logo | search | ⧩ filter | 🔔 | ☰
+ * Спільний хром: [‹] logo | search | ⧩ filter | ☰ (unread badge on burger)
  * Advanced Search stays open until toggle again / Reset / leave home.
  */
 export function SiteHeader() {
@@ -606,7 +606,7 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   logoHit: { flexShrink: 0, marginRight: 2 },
-  logo: { width: s(72), height: s(72) },
+  logo: { width: s(54), height: s(54) },
   searchInput: {
     flex: 1,
     minWidth: 0,

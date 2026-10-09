@@ -400,6 +400,7 @@ const styles = StyleSheet.create({
   filterBar: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-end",
     flexWrap: "wrap",
     gap: s(10),
     paddingHorizontal: s(12),
