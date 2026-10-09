@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from mainApp.age_utils import approx_birthday_from_age
 from mainApp.models import UserSubProfile
 
 User = get_user_model()
@@ -19,7 +20,7 @@ class UserProfileRepositoryTestBase(TestCase):
         self.user = User.objects.create_user(
             username="profile_user",
             password="x",
-            age=30,
+            birthday=approx_birthday_from_age(30),
             place="Kyiv",
             preferred_subjects=["Fiction", "History"],
         )
@@ -51,18 +52,19 @@ class CustomUserProfileFieldsTests(UserProfileRepositoryTestBase):
 
 class UserSubProfileRepositoryTests(UserProfileRepositoryTestBase):
     def test_create_subprofile_when_valid_returns_related_on_user(self):
+        bday = approx_birthday_from_age(7)
         sp = UserSubProfile.objects.create(
             user=self.user,
             name="Для сина",
-            age=7,
+            birthday=bday,
             place="Kyiv",
             preferred_subjects=["Children"],
         )
 
         actualResult = list(
-            self.user.subprofiles.values_list("id", "name", "age", flat=False)
+            self.user.subprofiles.values_list("id", "name", "birthday", flat=False)
         )
-        expectedResult = [(sp.id, "Для сина", 7)]
+        expectedResult = [(sp.id, "Для сина", bday)]
 
         self.assertEqual(actualResult, expectedResult)
 

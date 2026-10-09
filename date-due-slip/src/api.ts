@@ -189,9 +189,10 @@ export const AuthApi = {
       | {
           username?: string;
           biography?: string;
-          age?: number | null;
+          birthday?: string | null;
           place?: string;
           preferred_subjects?: string[];
+          avatar_choice?: number | null;
         }
       | FormData
   ) =>
@@ -200,11 +201,13 @@ export const AuthApi = {
       body,
       formData: body instanceof FormData,
     }),
+  avatars: () =>
+    api<{ results: { id: number; name: string; image_url: string }[] }>("/api/avatars/"),
   listSubprofiles: () =>
     api<import("./types").UserSubProfile[]>("/api/auth/me/subprofiles/"),
   createSubprofile: (body: {
     name: string;
-    age?: number | null;
+    birthday?: string | null;
     place?: string;
     preferred_subjects?: string[];
   }) =>
@@ -216,7 +219,7 @@ export const AuthApi = {
     id: number,
     body: {
       name?: string;
-      age?: number | null;
+      birthday?: string | null;
       place?: string;
       preferred_subjects?: string[];
     }
@@ -238,8 +241,18 @@ export const ContactApi = {
       max_file_bytes: number;
       message_max: number;
       to_hint: string;
+      topics?: { value: string; label: string }[];
     }>("/api/contact/config/", { auth: false }),
 };
+
+/** Same as desktop CONTACT_TOPIC_CHOICES (fallback if API omits topics). */
+export const CONTACT_TOPIC_FALLBACK: { value: string; label: string }[] = [
+  { value: "bug", label: "Bug / Помилка" },
+  { value: "feature", label: "Feature / Ідея" },
+  { value: "account", label: "Account / Акаунт" },
+  { value: "books", label: "Books / Полиця / ISBN" },
+  { value: "other", label: "Other / Інше" },
+];
 
 export type FeedSearch = {
   q?: string;

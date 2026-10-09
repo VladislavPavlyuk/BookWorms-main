@@ -100,8 +100,10 @@ class ApplyProfileFeedFilterTests(FeedProfileRepositoryTestBase):
         self.assertEqual(actualResult, expectedResult)
 
     def test_apply_profile_feed_filter_when_age_5_returns_kids_and_bookless(self):
-        self.reader.age = 5
-        self.reader.save(update_fields=["age"])
+        from mainApp.age_utils import approx_birthday_from_age
+
+        self.reader.birthday = approx_birthday_from_age(5)
+        self.reader.save(update_fields=["birthday"])
         qs = Post.objects.all()
 
         actualResult = set(
@@ -112,9 +114,11 @@ class ApplyProfileFeedFilterTests(FeedProfileRepositoryTestBase):
         self.assertEqual(actualResult, expectedResult)
 
     def test_apply_profile_feed_filter_when_age_and_theme_and_returns_intersection(self):
-        self.reader.age = 12
+        from mainApp.age_utils import approx_birthday_from_age
+
+        self.reader.birthday = approx_birthday_from_age(12)
         self.reader.preferred_subjects = ["Fiction"]
-        self.reader.save(update_fields=["age", "preferred_subjects"])
+        self.reader.save(update_fields=["birthday", "preferred_subjects"])
         qs = Post.objects.all()
 
         actualResult = set(
@@ -125,12 +129,14 @@ class ApplyProfileFeedFilterTests(FeedProfileRepositoryTestBase):
         self.assertEqual(actualResult, expectedResult)
 
     def test_apply_profile_feed_filter_when_subprofile_matches_returns_union(self):
+        from mainApp.age_utils import approx_birthday_from_age
+
         self.reader.preferred_subjects = ["Science"]
         self.reader.save(update_fields=["preferred_subjects"])
         UserSubProfile.objects.create(
             user=self.reader,
             name="Kid",
-            age=5,
+            birthday=approx_birthday_from_age(5),
             preferred_subjects=["Children"],
         )
         qs = Post.objects.all()

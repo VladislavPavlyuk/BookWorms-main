@@ -1,16 +1,24 @@
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../../src/auth";
 import { ApiError, AuthApi, BooksApi, getApiBase, setApiBase } from "../../src/api";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
+import { useResolvedMediaUrl } from "../../src/mediaUrl";
 import type { UserSubProfile } from "../../src/types";
 import { ShelfLogoChip } from "../../src/ShelfLogoChip";
 import { colors, fs, s, btnRadius } from "../../src/theme";
 import { useUnread } from "../../src/unread";
 
 const MAX_SUBPROFILES = 8;
+
+type AvatarOpt = { id: number; name: string; image_url: string };
+
+function AvatarImg({ uri, style }: { uri: string | null; style: object }) {
+  const src = useResolvedMediaUrl(uri);
+  if (!src) return null;
+  return <Image source={{ uri: src }} style={style} />;
+}
 
 export default function More() {
   const { user, logout, reload } = useAuth();
@@ -19,20 +27,24 @@ export default function More() {
   const [api, setApi] = useState("");
   const [username, setUsername] = useState(user?.username || "");
   const [biography, setBiography] = useState(user?.biography || "");
-  const [age, setAge] = useState(user?.age != null ? String(user.age) : "");
+  const [birthday, setBirthday] = useState(user?.birthday || "");
   const [place, setPlace] = useState(user?.place || "");
   const [themes, setThemes] = useState<string[]>(user?.preferred_subjects || []);
   const [catalogThemes, setCatalogThemes] = useState<string[]>([]);
   const [subprofiles, setSubprofiles] = useState<UserSubProfile[]>(user?.subprofiles || []);
   const [editing, setEditing] = useState(false);
-  const [avatarLocal, setAvatarLocal] = useState<string | null>(null);
+  const [avatars, setAvatars] = useState<AvatarOpt[]>([]);
+  const [avatarChoice, setAvatarChoice] = useState<number | null>(null);
   const [subDraft, setSubDraft] = useState<{
     id?: number;
     name: string;
-    age: string;
+    birthday: string;
     place: string;
     preferred_subjects: string[];
   } | null>(null);
+
+  const canAddSub = subprofiles.length < MAX_SUBPROFILES;
+  const avatarUri = user?.avatar_url || null;
 
   useEffect(() => {
     getApiBase().then(setApi);
@@ -41,11 +53,11 @@ export default function More() {
   useEffect(() => {
     setUsername(user?.username || "");
     setBiography(user?.biography || "");
-    setAge(user?.age != null ? String(user.age) : "");
+    setBirthday(user?.birthday || "");
     setPlace(user?.place || "");
     setThemes(user?.preferred_subjects || []);
     setSubprofiles(user?.subprofiles || []);
-    setAvatarLocal(null);
+    setAvatarChoice(null);
   }, [user]);
 
   useEffect(() => {
@@ -63,6 +75,21 @@ export default function More() {
     };
   }, [editing, subDraft]);
 
+  useEffect(() => {
+    if (!editing) return;
+    let cancelled = false;
+    AuthApi.avatars()
+      .then((r) => {
+        if (!cancelled) setAvatars(r.results || []);
+      })
+      .catch(() => {
+        if (!cancelled) setAvatars([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editing]);
+
   const saveApi = async () => {
     await setApiBase(api.trim());
     const next = await getApiBase();
@@ -71,58 +98,42 @@ export default function More() {
     Alert.alert("API", `Збережено:\n${next}\nПерелогінься якщо токен від іншого хоста.`);
   };
 
-  const pickAvatar = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.85,
-    });
-    if (res.canceled || !res.assets?.[0]) return;
-    setAvatarLocal(res.assets[0].uri);
-  };
-
-  const parseAge = (raw: string): number | null => {
+  const parseBirthday = (raw: string): string | null | false => {
     const t = raw.trim();
     if (!t) return null;
-    const n = parseInt(t, 10);
-    if (Number.isNaN(n) || n < 0 || n > 120) return null;
-    return n;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return false;
+    const d = new Date(`${t}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (d > today) return false;
+    return t;
+  };
+
+  const formatBday = (iso: string | null | undefined) => {
+    if (!iso) return "";
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
   };
 
   const saveProfile = async () => {
     try {
-      const ageVal = age.trim() === "" ? null : parseAge(age);
-      if (age.trim() && ageVal === null) {
-        Alert.alert("Профіль", "Вік: 0–120.");
+      const bday = parseBirthday(birthday);
+      if (bday === false) {
+        Alert.alert("Профіль", "Дата народження: РРРР-ММ-ДД, не в майбутньому.");
         return;
       }
-      if (avatarLocal) {
-        const fd = new FormData();
-        fd.append("username", username.trim());
-        fd.append("biography", biography);
-        if (ageVal !== null) fd.append("age", String(ageVal));
-        else fd.append("age", "");
-        fd.append("place", place.trim());
-        fd.append("preferred_subjects", JSON.stringify(themes));
-        fd.append("avatar", {
-          uri: avatarLocal,
-          name: "avatar.jpg",
-          type: "image/jpeg",
-        } as unknown as Blob);
-        await AuthApi.updateMe(fd);
-      } else {
-        await AuthApi.updateMe({
-          username: username.trim(),
-          biography,
-          age: ageVal,
-          place: place.trim(),
-          preferred_subjects: themes,
-        });
-      }
+      await AuthApi.updateMe({
+        username: username.trim(),
+        biography,
+        birthday: bday,
+        place: place.trim(),
+        preferred_subjects: themes,
+        ...(avatarChoice != null ? { avatar_choice: avatarChoice } : {}),
+      });
       await reload();
       setEditing(false);
-      setAvatarLocal(null);
+      setAvatarChoice(null);
       Alert.alert("Профіль", "Збережено.");
     } catch (e) {
       Alert.alert("Профіль", e instanceof ApiError ? e.message : String(e));
@@ -157,23 +168,23 @@ export default function More() {
       Alert.alert("Підпрофіль", "Назва обов’язкова.");
       return;
     }
-    const ageVal = subDraft.age.trim() === "" ? null : parseAge(subDraft.age);
-    if (subDraft.age.trim() && ageVal === null) {
-      Alert.alert("Підпрофіль", "Вік: 0–120.");
+    const bday = parseBirthday(subDraft.birthday);
+    if (bday === false) {
+      Alert.alert("Підпрофіль", "Дата народження: РРРР-ММ-ДД, не в майбутньому.");
       return;
     }
     try {
       if (subDraft.id) {
         await AuthApi.updateSubprofile(subDraft.id, {
           name,
-          age: ageVal,
+          birthday: bday,
           place: subDraft.place.trim(),
           preferred_subjects: subDraft.preferred_subjects,
         });
       } else {
         await AuthApi.createSubprofile({
           name,
-          age: ageVal,
+          birthday: bday,
           place: subDraft.place.trim(),
           preferred_subjects: subDraft.preferred_subjects,
         });
@@ -204,7 +215,27 @@ export default function More() {
     ]);
   };
 
-  const avatarUri = avatarLocal || user?.avatar_url || null;
+  const startEdit = () => {
+    setUsername(user?.username || "");
+    setBiography(user?.biography || "");
+    setBirthday(user?.birthday || "");
+    setPlace(user?.place || "");
+    setThemes(user?.preferred_subjects || []);
+    setAvatarChoice(null);
+    setEditing(true);
+  };
+
+  const emptySubDraft = () =>
+    setSubDraft({ name: "", birthday: "", place: "", preferred_subjects: [] });
+
+  const editSubDraft = (sp: UserSubProfile) =>
+    setSubDraft({
+      id: sp.id,
+      name: sp.name,
+      birthday: sp.birthday || "",
+      place: sp.place || "",
+      preferred_subjects: sp.preferred_subjects || [],
+    });
 
   const ThemeBoxes = ({
     selected,
@@ -215,7 +246,9 @@ export default function More() {
   }) => (
     <View style={styles.themeGrid}>
       {themeChoices.length === 0 ? (
-        <Text style={styles.hint}>Немає тем у каталозі — з’являться після книг із subjects.</Text>
+        <Text style={styles.hint}>
+          У каталозі ще немає тем — з’являться після додавання книг із subjects.
+        </Text>
       ) : (
         themeChoices.map((theme) => {
           const on = selected.some((t) => t.toLowerCase() === theme.toLowerCase());
@@ -243,8 +276,8 @@ export default function More() {
         contentContainerStyle={{ padding: 20 }}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.sectionTitle}>
-          {subDraft.id ? "Редагувати підпрофіль" : "Новий підпрофіль"}
+        <Text style={styles.pageTitle}>
+          {subDraft.id ? `Редагувати: ${subDraft.name}` : "Новий підпрофіль"}
         </Text>
         <Text style={styles.label}>Назва</Text>
         <CyrillicTextInput
@@ -254,23 +287,35 @@ export default function More() {
           placeholder="напр. Для сина"
           placeholderTextColor={colors.muted}
         />
-        <Text style={styles.label}>Вік</Text>
-        <CyrillicTextInput
-          style={styles.input}
-          value={subDraft.age}
-          onChangeText={(t) => setSubDraft({ ...subDraft, age: t.replace(/[^\d]/g, "").slice(0, 3) })}
-          keyboardType="number-pad"
-          placeholder="років"
-          placeholderTextColor={colors.muted}
-        />
-        <Text style={styles.label}>Місце проживання</Text>
-        <CyrillicTextInput
-          style={styles.input}
-          value={subDraft.place}
-          onChangeText={(t) => setSubDraft({ ...subDraft, place: t })}
-          placeholder="місто / країна"
-          placeholderTextColor={colors.muted}
-        />
+        <View style={styles.row2}>
+          <View style={styles.colAge}>
+            <Text style={styles.label}>Дата народження</Text>
+            <CyrillicTextInput
+              style={styles.input}
+              value={subDraft.birthday}
+              onChangeText={(t) =>
+                setSubDraft({
+                  ...subDraft,
+                  birthday: t.replace(/[^\d-]/g, "").slice(0, 10),
+                })
+              }
+              keyboardType="numbers-and-punctuation"
+              placeholder="РРРР-ММ-ДД"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+            />
+          </View>
+          <View style={styles.colPlace}>
+            <Text style={styles.label}>Місце проживання</Text>
+            <CyrillicTextInput
+              style={styles.input}
+              value={subDraft.place}
+              onChangeText={(t) => setSubDraft({ ...subDraft, place: t })}
+              placeholder="місто / країна"
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+        </View>
         <Text style={styles.label}>Теми / жанри</Text>
         <ThemeBoxes
           selected={subDraft.preferred_subjects}
@@ -287,18 +332,180 @@ export default function More() {
             })
           }
         />
-        <ShelfLogoChip
-          title="Зберегти підпрофіль"
-          icon="check"
-          style={styles.chip}
-          onPress={saveSubprofile}
+        <View style={styles.actions}>
+          <ShelfLogoChip
+            title="Зберегти"
+            icon="check"
+            style={styles.actionChip}
+            onPress={saveSubprofile}
+          />
+          <ShelfLogoChip
+            title="Назад до профілю"
+            icon="close"
+            style={styles.actionChip}
+            onPress={() => setSubDraft(null)}
+          />
+        </View>
+      </ScrollView>
+    );
+  }
+
+  if (editing) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.screen }}
+        contentContainerStyle={{ padding: 20 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.pageTitle}>Редагувати профіль</Text>
+
+        <Text style={styles.label}>Логін</Text>
+        <CyrillicTextInput
+          style={styles.input}
+          value={username}
+          onChangeText={setUsername}
+          autoCapitalize="none"
+          keyboardType="default"
+          textContentType="username"
         />
-        <ShelfLogoChip
-          title="Скасувати"
-          icon="close"
-          style={[styles.chip, { marginTop: 10 }]}
-          onPress={() => setSubDraft(null)}
+
+        <Text style={styles.label}>Про себе</Text>
+        <CyrillicTextInput
+          style={[styles.input, styles.bioInput]}
+          value={biography}
+          onChangeText={setBiography}
+          multiline
+          autoCapitalize="sentences"
+          keyboardType="default"
         />
+
+        <View style={styles.row2}>
+          <View style={styles.colAge}>
+            <Text style={styles.label}>Дата народження</Text>
+            <CyrillicTextInput
+              style={styles.input}
+              value={birthday}
+              onChangeText={(t) => setBirthday(t.replace(/[^\d-]/g, "").slice(0, 10))}
+              keyboardType="numbers-and-punctuation"
+              placeholder="РРРР-ММ-ДД"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+            />
+            {user?.age != null ? (
+              <Text style={styles.hint}>Зараз: {user.age} р.</Text>
+            ) : null}
+          </View>
+          <View style={styles.colPlace}>
+            <Text style={styles.label}>Місце проживання</Text>
+            <CyrillicTextInput
+              style={styles.input}
+              value={place}
+              onChangeText={setPlace}
+              placeholder="місто / країна"
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+        </View>
+
+        <Text style={styles.label}>Теми / жанри</Text>
+        <Text style={styles.hint}>Список зростає разом із темами в каталозі книг.</Text>
+        <ThemeBoxes selected={themes} onToggle={(theme) => toggleTheme(theme, themes, setThemes)} />
+
+        <Text style={styles.label}>Оберіть аватар</Text>
+        {avatarUri ? (
+          <View style={styles.currentAvatarRow}>
+            <Text style={styles.hint}>Поточний:</Text>
+            <AvatarImg uri={avatarUri} style={styles.avatarSm} />
+          </View>
+        ) : null}
+        {avatars.length === 0 ? (
+          <Text style={styles.hint}>
+            Колекція аватарів порожня — запустіть sync_avatar_collection на сервері.
+          </Text>
+        ) : (
+          <View style={styles.avatarPick}>
+            {avatars.map((a) => {
+              const on = avatarChoice === a.id;
+              return (
+                <Pressable
+                  key={a.id}
+                  style={[styles.avatarPickItem, on ? styles.avatarPickItemOn : null]}
+                  onPress={() => setAvatarChoice(a.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={a.name}
+                >
+                  <AvatarImg uri={a.image_url} style={styles.avatarPickImg} />
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        <View style={styles.actions}>
+          <ShelfLogoChip
+            title="Зберегти профіль"
+            icon="check"
+            style={styles.actionChip}
+            onPress={saveProfile}
+          />
+          <ShelfLogoChip
+            title="Скасувати"
+            icon="close"
+            style={styles.actionChip}
+            onPress={() => {
+              setEditing(false);
+              setAvatarChoice(null);
+            }}
+          />
+        </View>
+
+        <Text style={styles.sectionTitle}>Підпрофілі</Text>
+        <Text style={styles.hint}>
+          До {MAX_SUBPROFILES} шт. Стрічка = книги для вас або будь-якого підпрофілю.
+        </Text>
+        {subprofiles.map((sp) => (
+          <View key={sp.id} style={styles.subCard}>
+            <View style={styles.subMain}>
+              <Text style={styles.subName}>{sp.name}</Text>
+              <Text style={styles.metaLeft}>
+                {sp.birthday ? `${formatBday(sp.birthday)}` : ""}
+                {sp.age != null ? `${sp.birthday ? " · " : ""}${sp.age} р.` : sp.birthday ? "" : "—"}
+                {sp.place ? ` · ${sp.place}` : ""}
+              </Text>
+              <Text style={styles.metaLeft}>
+                {(sp.preferred_subjects || []).length
+                  ? sp.preferred_subjects.join(", ")
+                  : "Теми не обрано"}
+              </Text>
+            </View>
+            <View style={styles.subActions}>
+              <ShelfLogoChip
+                title="Редагувати"
+                icon="edit"
+                style={styles.subChip}
+                onPress={() => editSubDraft(sp)}
+              />
+              <ShelfLogoChip
+                title="Видалити"
+                icon="trash"
+                danger
+                style={styles.subChip}
+                onPress={() => deleteSubprofile(sp)}
+              />
+            </View>
+          </View>
+        ))}
+        {canAddSub ? (
+          <ShelfLogoChip
+            title="+ Додати підпрофіль"
+            icon="add"
+            style={styles.chipStretch}
+            onPress={emptySubDraft}
+          />
+        ) : (
+          <Text style={styles.hint}>Досягнуто ліміт підпрофілів.</Text>
+        )}
       </ScrollView>
     );
   }
@@ -309,147 +516,144 @@ export default function More() {
       contentContainerStyle={{ padding: 20 }}
       keyboardShouldPersistTaps="handled"
     >
-      {editing ? (
-        <>
-          <Pressable style={styles.avatarWrap} onPress={pickAvatar}>
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarEmpty]}>
-                <Text style={styles.avatarPlus}>+</Text>
-              </View>
-            )}
-            <Text style={styles.avatarHint}>Змінити аватар</Text>
-          </Pressable>
-          <Text style={styles.label}>Логін</Text>
-          <CyrillicTextInput
-            style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            keyboardType="default"
-            textContentType="username"
-          />
-          <Text style={styles.label}>Про себе</Text>
-          <CyrillicTextInput
-            style={styles.input}
-            value={biography}
-            onChangeText={setBiography}
-            multiline
-            autoCapitalize="sentences"
-            keyboardType="default"
-          />
-          <Text style={styles.label}>Вік</Text>
-          <CyrillicTextInput
-            style={styles.input}
-            value={age}
-            onChangeText={(t) => setAge(t.replace(/[^\d]/g, "").slice(0, 3))}
-            keyboardType="number-pad"
-            placeholder="років"
-            placeholderTextColor={colors.muted}
-          />
-          <Text style={styles.label}>Місце проживання</Text>
-          <CyrillicTextInput
-            style={styles.input}
-            value={place}
-            onChangeText={setPlace}
-            placeholder="місто / країна"
-            placeholderTextColor={colors.muted}
-          />
-          <Text style={styles.label}>Теми / жанри</Text>
-          <Text style={styles.hint}>Список з каталогу книг — оновлюється автоматично.</Text>
-          <ThemeBoxes selected={themes} onToggle={(theme) => toggleTheme(theme, themes, setThemes)} />
-          <ShelfLogoChip
-            title="Зберегти профіль"
-            icon="check"
-            style={styles.chip}
-            onPress={saveProfile}
-          />
-          <ShelfLogoChip
-            title="Скасувати"
-            icon="close"
-            style={[styles.chip, { marginTop: 10 }]}
-            onPress={() => {
-              setEditing(false);
-              setAvatarLocal(null);
-            }}
-          />
-        </>
-      ) : (
-        <>
-          <View style={styles.avatarWrap}>
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarEmpty]}>
-                <Text style={styles.avatarLetter}>
-                  {(user?.username || "?").slice(0, 1).toUpperCase()}
-                </Text>
-              </View>
-            )}
+      <View style={styles.headerRow}>
+        <Text style={styles.pageTitle}>Профіль</Text>
+        <View style={styles.headerActions}>
+          <ShelfLogoChip title="Редагувати" icon="edit" style={styles.headerChip} onPress={startEdit} />
+          {canAddSub ? (
+            <ShelfLogoChip
+              title="+ Підпрофіль"
+              icon="add"
+              style={styles.headerChip}
+              onPress={emptySubDraft}
+            />
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.identity}>
+        {avatarUri ? (
+          <AvatarImg uri={avatarUri} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarEmpty]}>
+            <Text style={styles.avatarLetter}>
+              {(user?.username || "?").slice(0, 1).toUpperCase()}
+            </Text>
           </View>
-          <Text style={styles.name}>{user?.username}</Text>
-          <Text style={styles.bio}>{user?.biography || "немає біографії"}</Text>
-          <Text style={styles.email}>{user?.email}</Text>
-          <Text style={styles.meta}>
-            Вік: {user?.age != null ? user.age : "—"} · Місце: {user?.place || "—"}
+        )}
+        <View style={styles.identityText}>
+          <Text style={styles.fieldLine}>
+            <Text style={styles.fieldKey}>Ім'я: </Text>
+            {user?.username || "—"}
           </Text>
-          {(user?.preferred_subjects || []).length > 0 ? (
-            <Text style={styles.meta}>Теми: {(user?.preferred_subjects || []).join(", ")}</Text>
-          ) : (
-            <Text style={styles.meta}>Теми: не обрано</Text>
-          )}
-          <Pressable style={styles.row} onPress={() => setEditing(true)}>
-            <Text style={styles.rowText}>Редагувати профіль</Text>
+          <Text style={styles.fieldLine}>
+            <Text style={styles.fieldKey}>Про себе: </Text>
+            {user?.biography || "—"}
+          </Text>
+          <Text style={styles.fieldLine}>
+            <Text style={styles.fieldKey}>Дата народження: </Text>
+            {user?.birthday ? formatBday(user.birthday) : "—"}
+          </Text>
+          <Text style={styles.fieldLine}>
+            <Text style={styles.fieldKey}>Вік: </Text>
+            {user?.age != null ? `${user.age} р.` : "—"}
+          </Text>
+          <Text style={styles.fieldLine}>
+            <Text style={styles.fieldKey}>Місце проживання: </Text>
+            {user?.place || "—"}
+          </Text>
+          <Pressable onPress={startEdit}>
+            <Text style={styles.editLink}>
+              Змінити логін, біографію, дату народження, місце, теми, аватар →
+            </Text>
           </Pressable>
-        </>
+        </View>
+      </View>
+
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionTitleInline}>Теми / жанри</Text>
+        <ShelfLogoChip title="Обрати теми" icon="tags" style={styles.headerChip} onPress={startEdit} />
+      </View>
+      {(user?.preferred_subjects || []).length > 0 ? (
+        <View style={styles.badgeRow}>
+          {(user?.preferred_subjects || []).map((t) => (
+            <View key={t} style={styles.badge}>
+              <Text style={styles.badgeText}>{t}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.hint}>
+          Не обрано — стрічка без обмеження тем для основного профілю.{" "}
+          <Text style={styles.linkInline} onPress={startEdit}>
+            Обрати
+          </Text>
+        </Text>
       )}
 
-      <Text style={styles.sectionTitle}>Підпрофілі</Text>
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionTitleInline}>Підпрофілі</Text>
+        {canAddSub ? (
+          <ShelfLogoChip
+            title="+ Додати"
+            icon="add"
+            style={styles.headerChip}
+            onPress={emptySubDraft}
+          />
+        ) : null}
+      </View>
       <Text style={styles.hint}>
-        Для книг іншій людині. Стрічка = пости під ваш профіль або будь-який підпрофіль.
+        Для пошуку книг іншій людині. Стрічка = пости під ваш профіль або будь-який підпрофіль.
       </Text>
-      {subprofiles.map((sp) => (
-        <View key={sp.id} style={styles.subCard}>
-          <Text style={styles.subName}>{sp.name}</Text>
-          <Text style={styles.meta}>
-            Вік: {sp.age != null ? sp.age : "—"} · {sp.place || "—"}
-          </Text>
-          {(sp.preferred_subjects || []).length > 0 ? (
-            <Text style={styles.meta}>{sp.preferred_subjects.join(", ")}</Text>
+      {subprofiles.length === 0 ? (
+        <Text style={styles.hint}>
+          Немає підпрофілів.
+          {canAddSub ? (
+            <Text style={styles.linkInline} onPress={emptySubDraft}>
+              {" "}
+              Створити
+            </Text>
           ) : null}
-          <View style={styles.subActions}>
-            <Pressable
-              onPress={() =>
-                setSubDraft({
-                  id: sp.id,
-                  name: sp.name,
-                  age: sp.age != null ? String(sp.age) : "",
-                  place: sp.place || "",
-                  preferred_subjects: sp.preferred_subjects || [],
-                })
-              }
-            >
-              <Text style={styles.link}>Редагувати</Text>
-            </Pressable>
-            <Pressable onPress={() => deleteSubprofile(sp)}>
-              <Text style={[styles.link, { color: colors.stamp }]}>Видалити</Text>
-            </Pressable>
-          </View>
-        </View>
-      ))}
-      {subprofiles.length < MAX_SUBPROFILES ? (
-        <Pressable
-          style={styles.row}
-          onPress={() =>
-            setSubDraft({ name: "", age: "", place: "", preferred_subjects: [] })
-          }
-        >
-          <Text style={styles.rowText}>+ Додати підпрофіль</Text>
-        </Pressable>
+        </Text>
       ) : (
-        <Text style={styles.hint}>Ліміт підпрофілів ({MAX_SUBPROFILES}).</Text>
+        subprofiles.map((sp) => (
+          <View key={sp.id} style={styles.subCard}>
+            <View style={styles.subMain}>
+              <Text style={styles.subName}>{sp.name}</Text>
+              <Text style={styles.metaLeft}>
+                {sp.birthday ? formatBday(sp.birthday) : ""}
+                {sp.age != null ? `${sp.birthday ? " · " : ""}${sp.age} р.` : ""}
+                {sp.place
+                  ? `${sp.birthday || sp.age != null ? " · " : ""}${sp.place}`
+                  : ""}
+              </Text>
+              <Text style={styles.metaLeft}>
+                {(sp.preferred_subjects || []).length
+                  ? sp.preferred_subjects.join(", ")
+                  : "Теми не обрано"}
+              </Text>
+            </View>
+            <View style={styles.subActions}>
+              <ShelfLogoChip
+                title="Редагувати"
+                icon="edit"
+                style={styles.subChip}
+                onPress={() => editSubDraft(sp)}
+              />
+              <ShelfLogoChip
+                title="Видалити"
+                icon="trash"
+                danger
+                style={styles.subChip}
+                onPress={() => deleteSubprofile(sp)}
+              />
+            </View>
+          </View>
+        ))
       )}
+      {!canAddSub && subprofiles.length > 0 ? (
+        <Text style={styles.hint}>Досягнуто ліміт підпрофілів ({MAX_SUBPROFILES}).</Text>
+      ) : null}
 
       {user && (
         <Pressable style={styles.row} onPress={() => router.push(`/user/${user.id}`)}>
@@ -507,62 +711,103 @@ export default function More() {
         Має бути http://192.168.0.213:18088 (та сама Wi‑Fi, що NAS). Unread: {unread}
         {pollError ? `\nБейдж: помилка — ${pollError}` : " · poll ok"}
       </Text>
-      <ShelfLogoChip
-        title="Зберегти URL"
-        icon="cloud"
-        style={styles.chip}
-        onPress={saveApi}
-      />
-      <ShelfLogoChip
-        title="Вийти"
-        icon="trash"
-        danger
-        style={[styles.chip, { marginTop: 24 }]}
-        onPress={logout}
-      />
+      <View style={styles.actions}>
+        <ShelfLogoChip title="Зберегти URL" icon="cloud" style={styles.actionChip} onPress={saveApi} />
+        <ShelfLogoChip title="Вийти" icon="trash" danger style={styles.actionChip} onPress={logout} />
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  avatarWrap: { alignItems: "center", marginBottom: s(12) },
-  avatar: {
-    width: s(88),
-    height: s(88),
-    borderRadius: s(44),
-    backgroundColor: colors.paperDark,
+  pageTitle: {
+    fontSize: fs(22),
+    fontWeight: "800",
+    color: colors.ink,
+    marginBottom: s(4),
   },
-  avatarEmpty: {
+  headerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    gap: s(10),
+    marginBottom: s(16),
+  },
+  headerActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: s(8),
+    flexShrink: 1,
+  },
+  headerChip: { flexGrow: 0 },
+  identity: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: s(14),
+    marginBottom: s(20),
+  },
+  identityText: { flex: 1, minWidth: 0 },
+  avatar: {
+    width: s(96),
+    height: s(96),
+    borderRadius: s(48),
+    backgroundColor: colors.paperDark,
     borderWidth: 1,
     borderColor: colors.line,
   },
-  avatarPlus: { fontSize: fs(28), color: colors.muted, fontWeight: "700" },
+  avatarEmpty: { alignItems: "center", justifyContent: "center" },
   avatarLetter: { fontSize: fs(32), color: colors.ink, fontWeight: "800" },
-  avatarHint: { marginTop: 6, color: colors.muted, fontSize: fs(12), fontWeight: "600" },
-  name: { fontSize: fs(22), fontWeight: "800", color: colors.ink, textAlign: "center" },
-  bio: { color: colors.muted, marginTop: 4, fontSize: fs(15), textAlign: "center" },
-  email: {
-    color: colors.muted,
-    fontSize: fs(12),
-    marginBottom: s(8),
-    marginTop: 2,
-    textAlign: "center",
+  avatarSm: {
+    width: s(48),
+    height: s(48),
+    borderRadius: s(24),
+    backgroundColor: colors.paperDark,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
-  meta: {
-    color: colors.muted,
-    fontSize: fs(13),
-    textAlign: "center",
+  fieldLine: {
+    color: colors.ink,
+    fontSize: fs(14),
+    lineHeight: fs(20),
     marginBottom: 4,
   },
+  fieldKey: { fontWeight: "800" },
+  editLink: {
+    color: colors.stamp,
+    fontSize: fs(12),
+    fontWeight: "700",
+    marginTop: s(6),
+  },
+  sectionHead: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: s(8),
+    marginTop: s(8),
+    marginBottom: s(6),
+  },
   sectionTitle: {
-    marginTop: s(20),
+    marginTop: s(22),
     marginBottom: 4,
     fontSize: fs(17),
     fontWeight: "800",
     color: colors.ink,
   },
+  sectionTitleInline: {
+    fontSize: fs(17),
+    fontWeight: "800",
+    color: colors.ink,
+  },
+  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: s(8), marginBottom: s(8) },
+  badge: {
+    backgroundColor: colors.ink,
+    borderRadius: btnRadius,
+    paddingHorizontal: s(10),
+    paddingVertical: s(5),
+  },
+  badgeText: { color: colors.white, fontSize: fs(12), fontWeight: "600" },
   row: { borderBottomWidth: 1, borderColor: colors.line, paddingVertical: s(14) },
   rowInner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   rowText: { color: colors.ink, fontSize: fs(16), fontWeight: "600" },
@@ -576,8 +821,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   rowBadgeText: { color: "#fff", fontSize: fs(12), fontWeight: "800" },
-  label: { marginTop: s(16), color: colors.muted, fontSize: fs(12) },
-  hint: { color: colors.muted, fontSize: fs(11), marginTop: 4, lineHeight: fs(15) },
+  label: { marginTop: s(14), color: colors.muted, fontSize: fs(12), fontWeight: "600" },
+  hint: { color: colors.muted, fontSize: fs(12), marginTop: 4, lineHeight: fs(16) },
+  linkInline: { color: colors.stamp, fontWeight: "700" },
   input: {
     borderBottomWidth: 1,
     borderColor: colors.line,
@@ -586,7 +832,19 @@ const styles = StyleSheet.create({
     fontSize: fs(16),
     minHeight: s(48),
   },
-  chip: { marginTop: s(12), alignSelf: "stretch" },
+  bioInput: { minHeight: s(88), textAlignVertical: "top" },
+  row2: { flexDirection: "row", gap: s(12), alignItems: "flex-start" },
+  colAge: { width: "42%", flexShrink: 0 },
+  colPlace: { flex: 1, minWidth: 0 },
+  actions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: s(10),
+    marginTop: s(18),
+  },
+  actionChip: { flexGrow: 1, flexBasis: "40%" },
+  chipStretch: { marginTop: s(12), alignSelf: "stretch" },
   themeGrid: { marginTop: 8, gap: 6 },
   themeChip: {
     borderWidth: 1,
@@ -599,12 +857,46 @@ const styles = StyleSheet.create({
   themeChipOn: { borderColor: colors.ink, backgroundColor: colors.ink },
   themeChipText: { color: colors.ink, fontSize: fs(13), fontWeight: "600" },
   themeChipTextOn: { color: colors.white },
+  currentAvatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: s(10),
+    marginTop: s(8),
+  },
+  avatarPick: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: s(10),
+    marginTop: s(10),
+  },
+  avatarPickItem: {
+    borderRadius: s(40),
+    borderWidth: 3,
+    borderColor: "transparent",
+    padding: 2,
+  },
+  avatarPickItemOn: {
+    borderColor: colors.ink,
+  },
+  avatarPickImg: {
+    width: s(72),
+    height: s(72),
+    borderRadius: s(36),
+    backgroundColor: colors.paperDark,
+  },
   subCard: {
     borderBottomWidth: 1,
     borderColor: colors.line,
     paddingVertical: s(12),
+    gap: s(10),
   },
+  subMain: { flex: 1, minWidth: 0 },
   subName: { color: colors.ink, fontWeight: "700", fontSize: fs(15) },
-  subActions: { flexDirection: "row", gap: 16, marginTop: 8 },
-  link: { color: colors.ink, fontWeight: "700", fontSize: fs(13) },
+  metaLeft: { color: colors.muted, fontSize: fs(13), marginTop: 2 },
+  subActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: s(8),
+  },
+  subChip: { flexGrow: 1, flexBasis: "40%" },
 });

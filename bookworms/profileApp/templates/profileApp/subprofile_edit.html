@@ -14,9 +14,12 @@
   </div>
   <div class="row g-2 mb-3">
     <div class="col-md-4">
-      <label class="form-label" for="{{ form.age.id_for_label }}">{{ form.age.label }}</label>
-      {{ form.age }}
-      {% if form.age.errors %}<div class="text-danger small">{{ form.age.errors }}</div>{% endif %}
+      <label class="form-label" for="{{ form.birthday.id_for_label }}">{{ form.birthday.label }}</label>
+      {{ form.birthday }}
+      {% if form.instance.pk and form.instance.age is not None %}
+      <div class="form-text">Зараз: {{ form.instance.age }} р.</div>
+      {% endif %}
+      {% if form.birthday.errors %}<div class="text-danger small">{{ form.birthday.errors }}</div>{% endif %}
     </div>
     <div class="col-md-8">
       <label class="form-label" for="{{ form.place.id_for_label }}">{{ form.place.label }}</label>

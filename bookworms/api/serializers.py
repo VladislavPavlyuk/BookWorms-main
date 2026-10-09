@@ -38,9 +38,10 @@ class UserPublicSerializer(serializers.ModelSerializer):
 
 
 class SubProfileSerializer(serializers.ModelSerializer):
-    age = serializers.IntegerField(
-        required=False, allow_null=True, min_value=0, max_value=120
+    birthday = serializers.DateField(
+        required=False, allow_null=True, input_formats=["%Y-%m-%d", "%d.%m.%Y"]
     )
+    age = serializers.SerializerMethodField(read_only=True)
     place = serializers.CharField(
         required=False, allow_blank=True, max_length=255, default=""
     )
@@ -56,13 +57,28 @@ class SubProfileSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "name",
+            "birthday",
             "age",
             "place",
             "preferred_subjects",
             "sort_order",
             "created_at",
         )
-        read_only_fields = ("id", "created_at", "sort_order")
+        read_only_fields = ("id", "created_at", "sort_order", "age")
+
+    def get_age(self, obj):
+        return obj.age
+
+    def validate_birthday(self, value):
+        from datetime import date
+
+        if value is None or value == "":
+            return None
+        if value > date.today():
+            raise serializers.ValidationError(
+                "Дата народження не може бути в майбутньому."
+            )
+        return value
 
     def validate_preferred_subjects(self, value):
         if value is None:
@@ -91,6 +107,8 @@ class SubProfileSerializer(serializers.ModelSerializer):
 
 class MeSerializer(UserPublicSerializer):
     subprofiles = SubProfileSerializer(many=True, read_only=True)
+    birthday = serializers.DateField(read_only=True, allow_null=True)
+    age = serializers.SerializerMethodField(read_only=True)
 
     class Meta(UserPublicSerializer.Meta):
         fields = (
@@ -99,6 +117,7 @@ class MeSerializer(UserPublicSerializer):
             "email",
             "biography",
             "avatar_url",
+            "birthday",
             "age",
             "place",
             "preferred_subjects",
@@ -106,6 +125,9 @@ class MeSerializer(UserPublicSerializer):
             "date_joined",
             "last_watched_post_id",
         )
+
+    def get_age(self, obj):
+        return obj.age
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -145,8 +167,10 @@ class RegisterSerializer(serializers.Serializer):
 
 
 class MeUpdateSerializer(serializers.ModelSerializer):
-    age = serializers.IntegerField(
-        required=False, allow_null=True, min_value=0, max_value=120
+    birthday = serializers.DateField(
+        required=False,
+        allow_null=True,
+        input_formats=["%Y-%m-%d", "%d.%m.%Y"],
     )
     place = serializers.CharField(
         required=False, allow_blank=True, max_length=255
@@ -156,6 +180,8 @@ class MeUpdateSerializer(serializers.ModelSerializer):
         required=False,
         allow_empty=True,
     )
+    # Same as desktop UserUpdateForm.avatar_choice — pick from AvatarCollection.
+    avatar_choice = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = User
@@ -163,16 +189,21 @@ class MeUpdateSerializer(serializers.ModelSerializer):
             "username",
             "biography",
             "avatar",
-            "age",
+            "avatar_choice",
+            "birthday",
             "place",
             "preferred_subjects",
         )
 
     def to_internal_value(self, data):
-        # Multipart: preferred_subjects may arrive as a JSON string; age as "".
+        # Multipart: preferred_subjects may arrive as a JSON string; birthday as "".
         mutable = data.copy() if hasattr(data, "copy") else dict(data)
-        if "age" in mutable and mutable.get("age") in ("", None):
-            mutable["age"] = None
+        if "birthday" in mutable and mutable.get("birthday") in ("", None):
+            mutable["birthday"] = None
+        if "avatar_choice" in mutable and mutable.get("avatar_choice") in ("", None):
+            mutable["avatar_choice"] = None
+        # Legacy clients may still send age — ignore (birthday is source of truth).
+        mutable.pop("age", None)
         ps = mutable.get("preferred_subjects")
         if isinstance(ps, str):
             import json
@@ -205,16 +236,38 @@ class MeUpdateSerializer(serializers.ModelSerializer):
             out.append(label)
         return out
 
-    def validate_age(self, value):
+    def validate_birthday(self, value):
+        from datetime import date
+
         if value is None or value == "":
             return None
-        try:
-            age = int(value)
-        except (TypeError, ValueError):
-            raise serializers.ValidationError("Вік має бути числом.")
-        if age < 0 or age > 120:
-            raise serializers.ValidationError("Вік: 0–120.")
-        return age
+        if value > date.today():
+            raise serializers.ValidationError(
+                "Дата народження не може бути в майбутньому."
+            )
+        return value
+
+    def validate_avatar_choice(self, value):
+        if value is None or value == "":
+            return None
+        from mainApp.models import AvatarCollection
+
+        if not AvatarCollection.objects.filter(pk=value).exists():
+            raise serializers.ValidationError("Аватар з колекції не знайдено.")
+        return int(value)
+
+    def update(self, instance, validated_data):
+        from mainApp.forms import _apply_avatar_choice
+        from mainApp.models import AvatarCollection
+
+        choice_id = validated_data.pop("avatar_choice", None)
+        instance = super().update(instance, validated_data)
+        if choice_id:
+            choice = AvatarCollection.objects.filter(pk=choice_id).first()
+            if choice:
+                _apply_avatar_choice(instance, choice)
+                instance.save()
+        return instance
 
 
 class BookSerializer(serializers.ModelSerializer):

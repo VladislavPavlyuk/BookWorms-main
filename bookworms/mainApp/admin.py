@@ -78,7 +78,7 @@ class CustomUserAdmin(UserAdmin):
                 "fields": (
                     "biography",
                     "avatar",
-                    "age",
+                    "birthday",
                     "place",
                     "preferred_subjects",
                     "email_confirmed",
@@ -101,7 +101,7 @@ admin.site.register(CustomUser, CustomUserAdmin)
 
 @admin.register(UserSubProfile)
 class UserSubProfileAdmin(admin.ModelAdmin):
-    list_display = ("name", "user", "age", "place", "sort_order")
+    list_display = ("name", "user", "birthday", "place", "sort_order")
     list_filter = ("user",)
     search_fields = ("name", "user__username", "place")
 

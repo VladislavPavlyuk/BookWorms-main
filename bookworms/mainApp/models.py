@@ -23,12 +23,11 @@ class AvatarCollection(models.Model):
 class CustomUser(AbstractUser):
     biography = models.CharField(max_length=500, blank=True, verbose_name="Про себе")
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name="Аватар")
-    age = models.PositiveSmallIntegerField(
+    birthday = models.DateField(
         null=True,
         blank=True,
-        validators=[MinValueValidator(0), MaxValueValidator(120)],
-        verbose_name="Вік",
-        help_text="Вік користувача (років). Для стрічки зіставляється з рекомендованим віком книги.",
+        verbose_name="Дата народження",
+        help_text="Вік рахується з дати народження (для стрічки / рекомендацій).",
     )
     place = models.CharField(
         max_length=255,
@@ -58,6 +57,12 @@ class CustomUser(AbstractUser):
         help_text="Головна відкривається на цьому пості для залогіненого користувача.",
     )
 
+    @property
+    def age(self) -> int | None:
+        from .age_utils import age_from_birthday
+
+        return age_from_birthday(self.birthday)
+
     def __str__(self):
         return self.username
 
@@ -75,11 +80,11 @@ class UserSubProfile(models.Model):
         verbose_name="Користувач",
     )
     name = models.CharField(max_length=100, verbose_name="Назва")
-    age = models.PositiveSmallIntegerField(
+    birthday = models.DateField(
         null=True,
         blank=True,
-        validators=[MinValueValidator(0), MaxValueValidator(120)],
-        verbose_name="Вік",
+        verbose_name="Дата народження",
+        help_text="Вік рахується з дати народження.",
     )
     place = models.CharField(
         max_length=255,
@@ -98,6 +103,12 @@ class UserSubProfile(models.Model):
         verbose_name = "підпрофіль"
         verbose_name_plural = "підпрофілі"
         ordering = ["sort_order", "id"]
+
+    @property
+    def age(self) -> int | None:
+        from .age_utils import age_from_birthday
+
+        return age_from_birthday(self.birthday)
 
     def __str__(self):
         return f"{self.name} ({self.user_id})"

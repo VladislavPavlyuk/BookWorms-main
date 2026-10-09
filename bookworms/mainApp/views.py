@@ -334,6 +334,7 @@ def contact_developers_view(request):
             "max_file_mb": CONTACT_MAX_FILE_BYTES // (1024 * 1024),
             "message_max": CONTACT_MESSAGE_MAX,
             "contact_username": user.username if user else "",
+            "contact_email": (user.email or "").strip() if user else "",
         },
     )
 

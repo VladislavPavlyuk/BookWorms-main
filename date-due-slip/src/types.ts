@@ -1,6 +1,9 @@
 export type UserSubProfile = {
   id: number;
   name: string;
+  /** ISO date YYYY-MM-DD */
+  birthday: string | null;
+  /** Derived from birthday on the server */
   age: number | null;
   place: string;
   preferred_subjects: string[];
@@ -14,6 +17,9 @@ export type User = {
   email?: string;
   biography: string;
   avatar_url: string | null;
+  /** ISO date YYYY-MM-DD */
+  birthday?: string | null;
+  /** Derived from birthday on the server */
   age?: number | null;
   place?: string;
   preferred_subjects?: string[];

@@ -139,16 +139,17 @@ class UserUpdateForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ["username", "biography", "age", "place", "preferred_subjects"]
+        fields = ["username", "biography", "birthday", "place", "preferred_subjects"]
         labels = {
             "username": "Логін",
             "biography": "Про себе",
-            "age": "Вік",
+            "birthday": "Дата народження",
             "place": "Місце проживання",
         }
         widgets = {
-            "age": forms.NumberInput(
-                attrs={"min": 0, "max": 120, "inputmode": "numeric", "placeholder": "років"}
+            "birthday": forms.DateInput(
+                attrs={"type": "date", "max": "9999-12-31"},
+                format="%Y-%m-%d",
             ),
             "place": forms.TextInput(attrs={"placeholder": "місто / країна"}),
             "biography": forms.Textarea(attrs={"rows": 3}),
@@ -179,15 +180,22 @@ class UserUpdateForm(forms.ModelForm):
             field.widget.attrs["class"] = "form-control"
         if "username" in self.fields:
             self.fields["username"].widget.attrs["lang"] = "uk"
+        if "birthday" in self.fields:
+            self.fields["birthday"].input_formats = ["%Y-%m-%d"]
+            self.fields["birthday"].required = False
 
     def clean_preferred_subjects(self):
         return list(self.cleaned_data.get("preferred_subjects") or [])
 
-    def clean_age(self):
-        age = self.cleaned_data.get("age")
-        if age is None or age == "":
+    def clean_birthday(self):
+        from datetime import date
+
+        bday = self.cleaned_data.get("birthday")
+        if bday is None or bday == "":
             return None
-        return age
+        if bday > date.today():
+            raise ValidationError("Дата народження не може бути в майбутньому.")
+        return bday
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -209,16 +217,17 @@ class SubProfileForm(forms.ModelForm):
 
     class Meta:
         model = UserSubProfile
-        fields = ["name", "age", "place", "preferred_subjects"]
+        fields = ["name", "birthday", "place", "preferred_subjects"]
         labels = {
             "name": "Назва",
-            "age": "Вік",
+            "birthday": "Дата народження",
             "place": "Місце проживання",
         }
         widgets = {
             "name": forms.TextInput(attrs={"placeholder": "напр. Для сина"}),
-            "age": forms.NumberInput(
-                attrs={"min": 0, "max": 120, "inputmode": "numeric", "placeholder": "років"}
+            "birthday": forms.DateInput(
+                attrs={"type": "date", "max": "9999-12-31"},
+                format="%Y-%m-%d",
             ),
             "place": forms.TextInput(attrs={"placeholder": "місто / країна"}),
         }
@@ -245,15 +254,22 @@ class SubProfileForm(forms.ModelForm):
             if name == "preferred_subjects":
                 continue
             field.widget.attrs["class"] = "form-control"
+        if "birthday" in self.fields:
+            self.fields["birthday"].input_formats = ["%Y-%m-%d"]
+            self.fields["birthday"].required = False
 
     def clean_preferred_subjects(self):
         return list(self.cleaned_data.get("preferred_subjects") or [])
 
-    def clean_age(self):
-        age = self.cleaned_data.get("age")
-        if age is None or age == "":
+    def clean_birthday(self):
+        from datetime import date
+
+        bday = self.cleaned_data.get("birthday")
+        if bday is None or bday == "":
             return None
-        return age
+        if bday > date.today():
+            raise ValidationError("Дата народження не може бути в майбутньому.")
+        return bday
 
     def save(self, commit=True):
         obj = super().save(commit=False)
@@ -261,6 +277,8 @@ class SubProfileForm(forms.ModelForm):
         if commit:
             obj.save()
         return obj
+
+
 class AddIsbnForm(forms.Form):
     """Поле ISBN для сторінки "Моя полиця"; вікові групи задаються окремо на картці книги."""
     isbn = forms.CharField(
@@ -470,25 +488,32 @@ class ContactDevelopersForm(forms.Form):
         super().__init__(*args, **kwargs)
         self._user = user
         if user is not None and getattr(user, "is_authenticated", False):
+            # Ім’я / email з профілю — поля приховані в шаблоні.
             if not self.is_bound:
-                self.fields["name"].initial = (
-                    (getattr(user, "get_full_name", lambda: "")() or "")
-                    or user.username
-                )
-                self.fields["email"].initial = user.email or ""
+                self.fields["name"].initial = user.username or ""
+                self.fields["email"].initial = (user.email or "").strip()
+            self.fields["name"].widget = forms.HiddenInput()
+            self.fields["email"].widget = forms.HiddenInput()
             self.fields["email"].required = False
-            self.fields["email"].help_text = "Заповнено з акаунта; можна змінити."
+            self.fields["email"].help_text = ""
         else:
             self.fields["email"].required = True
             self.fields["email"].help_text = "Обов’язково для незареєстрованих."
 
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        if self._user is not None and getattr(self._user, "is_authenticated", False):
+            name = (self._user.username or "").strip() or name
+        if not name:
+            raise ValidationError("Немає імені користувача в профілі.")
+        return name
+
     def clean_email(self):
         email = (self.cleaned_data.get("email") or "").strip()
         if self._user is not None and getattr(self._user, "is_authenticated", False):
-            if not email:
-                email = (self._user.email or "").strip()
+            email = (self._user.email or "").strip() or email
         if not email:
-            raise ValidationError("Вкажіть email для відповіді.")
+            raise ValidationError("У профілі немає email для відповіді.")
         return email
 
     def clean_message(self):

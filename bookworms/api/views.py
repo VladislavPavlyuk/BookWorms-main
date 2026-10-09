@@ -308,6 +308,21 @@ def me(request):
     return Response(MeSerializer(request.user, context={"request": request}).data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def avatar_collection(request):
+    """AvatarCollection gallery — same source as desktop profile edit."""
+    from mainApp.models import AvatarCollection
+
+    items = []
+    for a in AvatarCollection.objects.all():
+        url = a.image.url if a.image else ""
+        if url and request:
+            url = request.build_absolute_uri(url)
+        items.append({"id": a.pk, "name": a.name, "image_url": url})
+    return Response({"results": items})
+
+
 _MAX_SUBPROFILES = 8
 
 
@@ -325,7 +340,7 @@ def me_subprofiles(request):
     ser = SubProfileSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
     sp = UserSubProfile(user=request.user, sort_order=request.user.subprofiles.count())
-    for field in ("name", "age", "place", "preferred_subjects"):
+    for field in ("name", "birthday", "place", "preferred_subjects"):
         if field in ser.validated_data:
             setattr(sp, field, ser.validated_data[field])
     if not sp.preferred_subjects:
@@ -360,6 +375,7 @@ def contact_config(request):
         CONTACT_MAX_FILE_BYTES,
         CONTACT_MAX_SCREENSHOTS,
         CONTACT_MESSAGE_MAX,
+        CONTACT_TOPIC_CHOICES,
     )
 
     return Response(
@@ -370,6 +386,10 @@ def contact_config(request):
             "max_file_bytes": CONTACT_MAX_FILE_BYTES,
             "message_max": CONTACT_MESSAGE_MAX,
             "to_hint": "vladpavliuk@gmail.com",
+            "topics": [
+                {"value": value, "label": label}
+                for value, label in CONTACT_TOPIC_CHOICES
+            ],
         }
     )
 

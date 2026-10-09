@@ -33,21 +33,37 @@
           data-max-files="{{ max_screenshots }}"
           data-max-bytes="{{ max_file_bytes }}"
           data-message-max="{{ message_max }}"
-          {% if contact_username %}data-username="{{ contact_username }}"{% endif %}>
+          {% if contact_username %}data-username="{{ contact_username }}"{% endif %}
+          {% if contact_email %}data-email="{{ contact_email }}"{% endif %}>
         {% csrf_token %}
 
+        {% if contact_username %}
+        <div class="mb-3 rounded border bg-light px-3 py-2 small">
+            <div class="text-muted mb-1">Відправник (з профілю)</div>
+            <div>
+                <strong>@{{ contact_username }}</strong>
+                {% if contact_email %}
+                    · <span class="text-break">{{ contact_email }}</span>
+                {% else %}
+                    · <span class="text-danger">немає email у профілі</span>
+                {% endif %}
+            </div>
+            {{ form.name }}
+            {{ form.email }}
+        </div>
+        {% else %}
         <div class="mb-3">
             <label class="form-label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
             {{ form.name }}
             {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
         </div>
-
         <div class="mb-3">
             <label class="form-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
             {{ form.email }}
             {% if form.email.help_text %}<div class="form-text">{{ form.email.help_text }}</div>{% endif %}
             {% if form.email.errors %}<div class="text-danger small">{{ form.email.errors }}</div>{% endif %}
         </div>
+        {% endif %}
 
         <div class="mb-3">
             <label class="form-label" for="{{ form.topic.id_for_label }}">{{ form.topic.label }}</label>
@@ -169,25 +185,30 @@
       setStatus("WEB3FORMS_ACCESS_KEY не налаштовано на сервері.", "danger");
       return;
     }
-    var name = (form.querySelector('[name="name"]') || {}).value || "";
-    var email = (form.querySelector('[name="email"]') || {}).value || "";
+    var profileUser = (form.getAttribute("data-username") || "").trim();
+    var profileEmail = (form.getAttribute("data-email") || "").trim();
+    var name = profileUser || ((form.querySelector('[name="name"]') || {}).value || "").trim();
+    var email = profileEmail || ((form.querySelector('[name="email"]') || {}).value || "").trim();
     var topicSel = form.querySelector('[name="topic"]');
     var topicVal = topicSel ? topicSel.value : "";
     var topicLabel = topicSel && topicSel.options[topicSel.selectedIndex]
       ? topicSel.options[topicSel.selectedIndex].text
       : topicVal;
     var message = (msg && msg.value) || "";
-    name = name.trim();
-    email = email.trim();
     message = message.trim();
-    if (!name) { setStatus("Вкажіть ім’я.", "danger"); return; }
-    if (!email) { setStatus("Вкажіть email.", "danger"); return; }
+    if (!name) { setStatus("Немає імені користувача в профілі.", "danger"); return; }
+    if (!email) { setStatus("У профілі немає email для відповіді.", "danger"); return; }
     if (!message) { setStatus("Напишіть повідомлення.", "danger"); return; }
     if (Array.from(message).length > messageMax) {
       setStatus("Повідомлення довше за " + messageMax + " символів.", "danger");
       return;
     }
     if (!validateFiles()) return;
+
+    var nameField = form.querySelector('[name="name"]');
+    var emailField = form.querySelector('[name="email"]');
+    if (nameField) nameField.value = name;
+    if (emailField) emailField.value = email;
 
     var files = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
     var fd = new FormData();
@@ -199,7 +220,7 @@
     fd.append("message",
       "Тема: " + topicLabel + "\n" +
       "Від: " + name + " <" + email + ">\n" +
-      (form.getAttribute("data-username") ? ("Логін: " + form.getAttribute("data-username") + "\n") : "") +
+      (profileUser ? ("Логін: " + profileUser + "\n") : "") +
       "\n" + message
     );
     files.forEach(function (f) {
@@ -220,6 +241,8 @@
         if (res.ok && res.j && res.j.success !== false) {
           setStatus("Надіслано. Відповімо на " + email + ".", "success");
           form.reset();
+          if (nameField && profileUser) nameField.value = profileUser;
+          if (emailField && profileEmail) emailField.value = profileEmail;
           syncCount();
           fileList.innerHTML = "";
         } else {
