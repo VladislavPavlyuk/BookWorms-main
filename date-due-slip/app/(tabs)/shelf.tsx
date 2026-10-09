@@ -27,6 +27,8 @@ import {
   ShelfDetailActionBtn,
   ShelfInstanceDetailModal,
 } from "../../src/ShelfInstanceDetailModal";
+import { ShelfLogoChip } from "../../src/ShelfLogoChip";
+import { ShelfCheckRow, ShelfRadioRow } from "../../src/ShelfSelectRow";
 import { bookCoverFromDb, useResolvedMediaUrl } from "../../src/mediaUrl";
 import { colors, btnRadius, fs, s } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
@@ -730,17 +732,16 @@ export default function ShelfScreen() {
           maxLength={13}
           editable={!adding}
         />
-        <Pressable
-          style={styles.manualBtn}
+        <ShelfLogoChip
+          title="Вручну"
+          icon="edit"
+          style={styles.manualChip}
+          accessibilityLabel="Додати книгу вручну"
           onPress={() => {
             resetManualForm();
             setManualOpen(true);
           }}
-          accessibilityRole="button"
-          accessibilityLabel="Додати книгу вручну"
-        >
-          <Text style={styles.addText}>Вручну</Text>
-        </Pressable>
+        />
       </View>
       {searchMsg ? <Text style={styles.searchMsg}>{searchMsg}</Text> : null}
       <FlatList
@@ -790,15 +791,22 @@ export default function ShelfScreen() {
               <View style={styles.selectionBar}>
                 <Text style={styles.selectionCount}>Вибрано: {selectedIds.length}</Text>
                 <View style={styles.selectionActions}>
-                  <Pressable onPress={() => openListing()} style={styles.selectionBtn}>
-                    <Text style={styles.selectionBtnText}>Статуси</Text>
-                  </Pressable>
-                  <Pressable onPress={bulkDelete} style={styles.selectionBtnDanger}>
-                    <Text style={styles.selectionBtnDangerText}>Видалити</Text>
-                  </Pressable>
-                  <Pressable onPress={() => setSelectedIds([])} style={styles.selectionBtn}>
-                    <Text style={styles.selectionBtnText}>Скасувати</Text>
-                  </Pressable>
+                  <ShelfLogoChip
+                    title="Статуси"
+                    icon="tags"
+                    onPress={() => openListing()}
+                  />
+                  <ShelfLogoChip
+                    title="Видалити"
+                    icon="trash"
+                    danger
+                    onPress={bulkDelete}
+                  />
+                  <ShelfLogoChip
+                    title="Скасувати"
+                    icon="close"
+                    onPress={() => setSelectedIds([])}
+                  />
                 </View>
               </View>
             ) : null}
@@ -1407,47 +1415,26 @@ export default function ShelfScreen() {
                 const key = opt.key as keyof typeof listingFlags;
                 const on = !!listingFlags[key];
                 return (
-                  <Pressable
+                  <ShelfCheckRow
                     key={opt.key}
+                    label={opt.label}
+                    checked={on}
                     onPress={() =>
                       setListingFlags((prev) => ({ ...prev, [key]: !prev[key] }))
                     }
-                    style={{
-                      paddingVertical: 8,
-                      borderBottomWidth: StyleSheet.hairlineWidth,
-                      borderBottomColor: colors.line,
-                    }}
-                  >
-                    <Text style={{ color: colors.ink, fontWeight: on ? "700" : "400" }}>
-                      {on ? "☑ " : "☐ "}
-                      {opt.label}
-                    </Text>
-                  </Pressable>
+                  />
                 );
               })}
               <Text style={[styles.meta, { marginTop: 12, fontWeight: "700" }]}>
                 Продаж / подарунок (взаємовиключно)
               </Text>
               {SALE_GIFT_OPTIONS.map((opt) => (
-                <Pressable
+                <ShelfRadioRow
                   key={opt.value || "neither"}
+                  label={opt.label}
+                  selected={saleGift === opt.value}
                   onPress={() => setSaleGift(opt.value)}
-                  style={{
-                    paddingVertical: 8,
-                    borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: colors.line,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: colors.ink,
-                      fontWeight: saleGift === opt.value ? "700" : "400",
-                    }}
-                  >
-                    {saleGift === opt.value ? "● " : "○ "}
-                    {opt.label}
-                  </Text>
-                </Pressable>
+                />
               ))}
               {saleGift === "for_sale" && (
                 <TextInput
@@ -1474,12 +1461,20 @@ export default function ShelfScreen() {
                   ? "Депозит не потрібен"
                   : "Позика потребує депозит до повернення"}
               </Text>
-              <Pressable style={styles.btn} onPress={saveListing}>
-                <Text style={styles.addText}>Зберегти</Text>
-              </Pressable>
-              <Pressable onPress={() => setListingShelf(null)}>
-                <Text style={[styles.link, { marginTop: 12, textAlign: "center" }]}>Скасувати</Text>
-              </Pressable>
+              <View style={styles.listingActions}>
+                <ShelfLogoChip
+                  title="Зберегти"
+                  icon="check"
+                  style={styles.listingActionChip}
+                  onPress={saveListing}
+                />
+                <ShelfLogoChip
+                  title="Скасувати"
+                  icon="close"
+                  style={styles.listingActionChip}
+                  onPress={() => setListingShelf(null)}
+                />
+              </View>
             </View>
           </ScrollView>
         </View>
@@ -1568,13 +1563,8 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
   },
-  manualBtn: {
-    backgroundColor: colors.stamp,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: btnRadius,
+  manualChip: {
     marginLeft: "auto",
-    justifyContent: "center",
   },
   scanFab: {
     position: "absolute",
@@ -1634,30 +1624,24 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 10,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.stamp,
+    borderColor: colors.line,
     backgroundColor: colors.paper,
-    gap: 8,
+    gap: 10,
   },
   selectionCount: { color: colors.ink, fontWeight: "700" },
   selectionActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  selectionBtn: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: btnRadius,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  listingActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 16,
   },
-  selectionBtnText: { color: colors.ink, fontWeight: "600", fontSize: 13 },
-  selectionBtnDanger: {
-    borderWidth: 1,
-    borderColor: colors.stamp,
-    borderRadius: btnRadius,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  listingActionChip: {
+    flexGrow: 1,
+    flexBasis: "40%",
   },
-  selectionBtnDangerText: { color: colors.stamp, fontWeight: "700", fontSize: 13 },
   cardSelected: { borderColor: colors.stamp, borderWidth: 2 },
   flexRow: {
     gap: 8,
