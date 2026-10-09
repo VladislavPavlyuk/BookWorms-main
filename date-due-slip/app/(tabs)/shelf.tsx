@@ -19,12 +19,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CyrillicTextInput } from "../../src/CyrillicTextInput";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ApiError, ShelfApi } from "../../src/api";
-import { BookCover } from "../../src/BookCover";
-import { HistoryLink } from "../../src/HistoryLink";
 import { CameraGlyph } from "../../src/HeaderGlyphs";
 import { IsbnScanModal, isbnReadyToAdd, normalizeIsbn } from "../../src/IsbnScanModal";
 import { BookCoverCaptureModal } from "../../src/BookCoverCaptureModal";
-import { htmlToPlain } from "../../src/htmlText";
+import { BookIsbnInfoModal } from "../../src/BookIsbnInfoModal";
+import {
+  ShelfDetailActionBtn,
+  ShelfInstanceDetailModal,
+} from "../../src/ShelfInstanceDetailModal";
+import { bookCoverFromDb, useResolvedMediaUrl } from "../../src/mediaUrl";
 import { colors, btnRadius, fs, s } from "../../src/theme";
 import { UserNameLink } from "../../src/UserNameLink";
 import type { BookPriceEval, BookPriceQuote, SaleGift, Shelf } from "../../src/types";
@@ -33,6 +36,36 @@ import { LISTING_CHECKBOX_OPTIONS, SALE_GIFT_OPTIONS } from "../../src/types";
 const MAX_MANUAL_PHOTOS = 8;
 
 type ManualPhoto = { uri: string; name: string; type: string };
+
+/** Grid cover — resolves /media/... against API base (internal storage). */
+function ShelfCoverImage({ uri }: { uri: string | null }) {
+  const src = useResolvedMediaUrl(uri);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+  if (!src || failed) {
+    return (
+      <View style={styles.coverMissing}>
+        <Text style={styles.coverMissingText}>Немає обкладинки</Text>
+      </View>
+    );
+  }
+  return (
+    <Image
+      source={{ uri: src }}
+      style={styles.coverImg}
+      resizeMode="contain"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function ShelfPhotoThumb({ uri }: { uri: string }) {
+  const src = useResolvedMediaUrl(uri);
+  if (!src) return null;
+  return <Image source={{ uri: src }} style={styles.shelfPhotoThumb} />;
+}
 
 export default function ShelfScreen() {
   const router = useRouter();
@@ -70,6 +103,7 @@ export default function ShelfScreen() {
   const [listingShelf, setListingShelf] = useState<Shelf | null>(null);
   const [listingBulk, setListingBulk] = useState(false);
   const [detailShelf, setDetailShelf] = useState<Shelf | null>(null);
+  const [isbnInfoOpen, setIsbnInfoOpen] = useState(false);
   const [listingFlags, setListingFlags] = useState({
     is_fee_sharing: true,
     is_hidden: false,
@@ -96,7 +130,11 @@ export default function ShelfScreen() {
 
   const load = async () => {
     const data = await ShelfApi.mine();
-    setShelves(Array.isArray(data?.shelves) ? data.shelves : []);
+    const nextShelves = Array.isArray(data?.shelves) ? data.shelves : [];
+    setShelves(nextShelves);
+    setDetailShelf((prev) =>
+      prev ? nextShelves.find((s) => s.id === prev.id) ?? prev : null
+    );
     setPending(Array.isArray(data?.pending_returns) ? data.pending_returns : []);
     setLentOutCount(Number(data?.lent_out_count) || 0);
     setPriceTotal(data?.price_total_uah || "0.00");
@@ -123,6 +161,11 @@ export default function ShelfScreen() {
         prev.map((s) =>
           s.book.id === bookId ? { ...s, price_eval: r.price_eval as BookPriceEval } : s
         )
+      );
+      setDetailShelf((prev) =>
+        prev && prev.book.id === bookId
+          ? { ...prev, price_eval: r.price_eval as BookPriceEval }
+          : prev
       );
       Alert.alert("Ціна", "Оновлення оцінки запущено. Оновіть полицю за хвилину.");
       setTimeout(() => {
@@ -648,6 +691,7 @@ export default function ShelfScreen() {
       }
       await ShelfApi.confirmReturn(s.id);
       Alert.alert("Повернення", "Підтверджено.");
+      setDetailShelf(null);
       await load();
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : String(e);
@@ -657,6 +701,19 @@ export default function ShelfScreen() {
       }
       Alert.alert("Повернення", msg);
     }
+  };
+
+  const confirmPendingForOwner = (ownerShelf: Shelf) => {
+    const pid = ownerShelf.pending_return_shelf_id;
+    if (!pid) return;
+    const borrowerRow = pending.find((p) => p.id === pid);
+    confirm(
+      borrowerRow ?? {
+        ...ownerShelf,
+        id: pid,
+        requires_qr_scan: ownerShelf.requires_qr_scan,
+      }
+    );
   };
 
   return (
@@ -762,9 +819,11 @@ export default function ShelfScreen() {
                   Позичальник повідомив про повернення. Підтвердіть, коли книга у вас.
                 </Text>
                 {pending.map((s) => (
-                  <View key={s.id} style={[styles.card, styles.pendingCard]}>
-                    <BookCover uri={s.book.cover_url} size="full" bleed={0} />
-                    <View style={styles.cardBody}>
+                  <View key={s.id} style={[styles.card, styles.pendingCard, styles.pendingCardRow]}>
+                    <View style={styles.pendingThumbWrap}>
+                      <ShelfCoverImage uri={bookCoverFromDb(s.book)} />
+                    </View>
+                    <View style={[styles.cardBody, styles.pendingCardBody]}>
                       <Text style={styles.title}>{s.book.title}</Text>
                       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
                         <Text style={styles.meta}>від </Text>
@@ -785,10 +844,7 @@ export default function ShelfScreen() {
           <Text style={styles.empty}>На полиці ще немає примірників. Додайте ISBN вище.</Text>
         }
         renderItem={({ item }) => {
-          const coverUri =
-            item.book.cover_url ||
-            (item.book.photo_urls && item.book.photo_urls[0]) ||
-            null;
+          const coverUri = bookCoverFromDb(item.book);
           const selectable = !item.borrowed_from;
           const selected = selectedIds.includes(item.id);
           return (
@@ -803,83 +859,61 @@ export default function ShelfScreen() {
                 <Pressable
                   onPress={() => setDetailShelf(item)}
                   accessibilityRole="button"
+                  accessibilityLabel={`Відкрити профіль: ${item.book.title}`}
                   style={styles.coverPress}
                 >
-                  {coverUri ? (
-                    <Image
-                      source={{ uri: coverUri }}
-                      style={styles.coverImg}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <View style={styles.coverMissing}>
-                      <Text style={styles.coverMissingText}>Немає обкладинки</Text>
-                    </View>
-                  )}
+                  <ShelfCoverImage uri={coverUri} />
                 </Pressable>
                 {selectable ? (
                   <Pressable
                     onPress={() => toggleSelect(item.id)}
                     style={[styles.selectCheck, selected && styles.selectCheckOn]}
-                    hitSlop={8}
+                    hitSlop={6}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: selected }}
+                    accessibilityLabel={`Вибрати ${item.book.title}`}
                   >
                     {selected ? <View style={styles.selectCheckMark} /> : null}
                   </Pressable>
                 ) : null}
               </View>
-              <View style={styles.flexCardMeta}>
+              <Pressable
+                onPress={() => setDetailShelf(item)}
+                accessibilityRole="button"
+                style={styles.flexCardMeta}
+              >
                 <Text style={styles.flexTitle} numberOfLines={2}>
                   {item.book.title}
                 </Text>
                 <Text style={styles.flexAuthor} numberOfLines={2}>
                   {item.book.authors || "Автор невідомий"}
                 </Text>
-              </View>
+              </Pressable>
             </View>
           );
         }}
       />
 
-      <Modal
+      <ShelfInstanceDetailModal
         visible={!!detailShelf}
-        animationType="slide"
-        onRequestClose={() => setDetailShelf(null)}
-      >
-        {detailShelf ? (
-          <ScrollView
-            style={{ flex: 1, backgroundColor: colors.screen }}
-            contentContainerStyle={{ padding: 20, paddingTop: 56, paddingBottom: 40 }}
-          >
-            <Pressable onPress={() => setDetailShelf(null)} style={{ marginBottom: 12 }}>
-              <Text style={styles.link}>← Назад до полиці</Text>
-            </Pressable>
-            <BookCover
-              uri={
-                detailShelf.book.cover_url ||
-                (detailShelf.book.photo_urls && detailShelf.book.photo_urls[0]) ||
-                null
-              }
-              size="full"
-              bleed={0}
-            />
-            {(detailShelf.book.photo_urls || []).length > 0 ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.shelfPhotoStrip}
-              >
-                {(detailShelf.book.photo_urls || []).map((u, i) => (
-                  <Image key={`${u}-${i}`} source={{ uri: u }} style={styles.shelfPhotoThumb} />
-                ))}
-              </ScrollView>
-            ) : null}
-            <Text style={styles.title}>{detailShelf.book.title}</Text>
-            {detailShelf.book.title_long &&
-            detailShelf.book.title_long !== detailShelf.book.title ? (
-              <Text style={styles.meta}>{detailShelf.book.title_long}</Text>
-            ) : null}
+        book={detailShelf?.book ?? null}
+        onClose={() => setDetailShelf(null)}
+        onCoverPress={() => setIsbnInfoOpen(true)}
+        photoStrip={
+          detailShelf && (detailShelf.book.photo_urls || []).length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.shelfPhotoStrip}
+            >
+              {(detailShelf.book.photo_urls || []).map((u, i) => (
+                <ShelfPhotoThumb key={`${u}-${i}`} uri={u} />
+              ))}
+            </ScrollView>
+          ) : null
+        }
+        titleLine={
+          detailShelf ? (
             <Text style={styles.meta}>
               {detailShelf.book.authors || "Автор невідомий"}
               {"\n"}
@@ -893,84 +927,226 @@ export default function ShelfScreen() {
                   : ""}
               {` · ${detailShelf.book.reader_age_summary}`}
             </Text>
-            <View style={styles.isbnMetaBlock}>
-              <Text style={styles.isbnMetaH}>Дані ISBN</Text>
-              {(
-                [
-                  ["Видавець", detailShelf.book.publisher],
-                  ["Дата видання", detailShelf.book.publish_date],
-                  ["Палітурка", detailShelf.book.binding],
-                  ["Мова", detailShelf.book.language],
-                  ["Видання", detailShelf.book.edition],
-                  ["Сторінок", detailShelf.book.pages != null ? String(detailShelf.book.pages) : ""],
-                  ["Розміри", detailShelf.book.dimensions],
-                  ["MSRP", detailShelf.book.msrp || ""],
-                  [
-                    "Теми",
-                    (detailShelf.book.subjects || []).length
-                      ? (detailShelf.book.subjects || []).join(", ")
-                      : "",
-                  ],
-                  [
-                    "Dewey",
-                    (detailShelf.book.dewey_decimal || []).length
-                      ? (detailShelf.book.dewey_decimal || []).join(", ")
-                      : "",
-                  ],
-                  ["Джерело", detailShelf.book.catalog_source || ""],
-                ] as [string, string][]
-              )
-                .filter(([, v]) => !!(v && String(v).trim()))
-                .map(([k, v]) => (
-                  <Text key={k} style={styles.meta}>
-                    <Text style={{ fontWeight: "700" }}>{k}: </Text>
-                    {v}
-                  </Text>
-                ))}
-              {(detailShelf.book.other_isbns || []).length ? (
-                <Text style={styles.meta}>
-                  <Text style={{ fontWeight: "700" }}>Інші ISBN: </Text>
-                  {(detailShelf.book.other_isbns || [])
-                    .map((o) => (o.binding ? `${o.isbn} (${o.binding})` : o.isbn))
-                    .join("; ")}
-                </Text>
+          ) : null
+        }
+        footer={
+          detailShelf ? (
+            <ScrollView
+              style={styles.detailFooterScroll}
+              contentContainerStyle={styles.detailFooterContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
+              {detailShelf.pending_return_shelf_id && !detailShelf.borrowed_from ? (
+                <ShelfDetailActionBtn
+                  primary
+                  title={
+                    detailShelf.requires_qr_scan
+                      ? "Скан QR → повернуто"
+                      : "Підтвердити повернення"
+                  }
+                  subtitle={(() => {
+                    const row = pending.find(
+                      (p) => p.id === detailShelf.pending_return_shelf_id
+                    );
+                    return row?.user
+                      ? `${row.user.username} повідомив про повернення`
+                      : "Позичальник повідомив про повернення";
+                  })()}
+                  onPress={() => confirmPendingForOwner(detailShelf)}
+                />
               ) : null}
-              {detailShelf.book.synopsis ? (
-                <View style={styles.proseScrollWrap}>
-                  <Text style={[styles.meta, { fontWeight: "700", marginBottom: 4 }]}>Синопсис</Text>
-                  <ScrollView
-                    style={styles.proseScroll}
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator
-                  >
-                    <Text style={styles.meta}>{htmlToPlain(detailShelf.book.synopsis)}</Text>
-                  </ScrollView>
-                </View>
-              ) : detailShelf.book.overview ? (
-                <View style={styles.proseScrollWrap}>
-                  <Text style={[styles.meta, { fontWeight: "700", marginBottom: 4 }]}>Огляд</Text>
-                  <ScrollView
-                    style={styles.proseScroll}
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator
-                  >
-                    <Text style={styles.meta}>{htmlToPlain(detailShelf.book.overview)}</Text>
-                  </ScrollView>
-                </View>
+              {detailShelf.borrowed_from && !detailShelf.return_pending ? (
+                <ShelfDetailActionBtn
+                  primary
+                  title="Повернути власнику"
+                  subtitle="Повідомити про повернення книги"
+                  onPress={async () => {
+                    await act(detailShelf);
+                    setDetailShelf(null);
+                  }}
+                />
               ) : null}
-              {detailShelf.book.excerpt ? (
-                <View style={styles.proseScrollWrap}>
-                  <Text style={[styles.meta, { fontWeight: "700", marginBottom: 4 }]}>Уривок</Text>
-                  <ScrollView
-                    style={styles.proseScroll}
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator
-                  >
-                    <Text style={styles.meta}>{htmlToPlain(detailShelf.book.excerpt)}</Text>
-                  </ScrollView>
-                </View>
+              <ShelfDetailActionBtn
+                title="Написати пост"
+                subtitle="Відгук про цю книгу"
+                onPress={() =>
+                  router.push({
+                    pathname: "/post/new",
+                    params: {
+                      mode: "feedback",
+                      book_id: String(detailShelf.book.id),
+                    },
+                  })
+                }
+              />
+              <ShelfDetailActionBtn
+                title="Усі примірники ISBN"
+                subtitle="Інші копії з цим ISBN"
+                onPress={() => {
+                  setDetailShelf(null);
+                  router.push(`/book/${detailShelf.book.id}`);
+                }}
+              />
+              <ShelfDetailActionBtn
+                title="Дані ISBN"
+                subtitle="Повна картка з каталогу"
+                onPress={() => setIsbnInfoOpen(true)}
+              />
+              {detailShelf.copy_id ? (
+                <ShelfDetailActionBtn
+                  title="Історія подій"
+                  subtitle="Хто тримав цей примірник"
+                  onPress={() => {
+                    const cid = detailShelf.copy_id!;
+                    setDetailShelf(null);
+                    router.push(`/copy/${cid}`);
+                  }}
+                />
               ) : null}
-            </View>
+              {!detailShelf.borrowed_from && detailShelf.copy_id ? (
+                <ShelfDetailActionBtn
+                  title="Скан QR"
+                  subtitle="Прив’язати або перевірити наклейку"
+                  onPress={() => {
+                    const cid = detailShelf.copy_id!;
+                    setDetailShelf(null);
+                    router.push(`/qr-scan?attach_copy_id=${cid}`);
+                  }}
+                />
+              ) : null}
+              {detailShelf.borrowed_from ? (
+                <ShelfDetailActionBtn
+                  title="Чат з власником"
+                  subtitle={detailShelf.borrowed_from.username}
+                  onPress={() => router.push(`/chat/${detailShelf.borrowed_from!.id}`)}
+                />
+              ) : null}
+              {!detailShelf.borrowed_from ? (
+                <ShelfDetailActionBtn
+                  title="Статуси"
+                  subtitle="Продаж, оренда, обмін, видимість"
+                  onPress={() => {
+                    const s = detailShelf;
+                    setDetailShelf(null);
+                    openListing(s);
+                  }}
+                />
+              ) : null}
+              {!detailShelf.borrowed_from && detailShelf.can_edit_manual ? (
+                <ShelfDetailActionBtn
+                  title="Редагувати"
+                  subtitle="Назва, автори, фото вручну"
+                  onPress={() => {
+                    setDetailShelf(null);
+                    openEditManual(detailShelf);
+                  }}
+                />
+              ) : null}
+              {!detailShelf.borrowed_from ? (
+                <ShelfDetailActionBtn
+                  title="Вік читача"
+                  subtitle="Рекомендований діапазон віку"
+                  onPress={() => {
+                    const mn = String(detailShelf.book.min_readers_age);
+                    const mx = String(detailShelf.book.max_readers_age);
+                    ageSavedKeyRef.current = `${detailShelf.id}:${mn}:${mx}`;
+                    setAgeMin(mn);
+                    setAgeMax(mx);
+                    setAgeShelf(detailShelf);
+                  }}
+                />
+              ) : null}
+              {!detailShelf.borrowed_from &&
+              detailShelf.book.isbn &&
+              !detailShelf.book.isbn.startsWith("9799") &&
+              !detailShelf.book.isbn_missing ? (
+                <ShelfDetailActionBtn
+                  title="Оновити з каталогу"
+                  subtitle="Метадані з ISBNdb / Open Library"
+                  onPress={() => refreshMetadata(detailShelf.book.id)}
+                />
+              ) : null}
+              <ShelfDetailActionBtn
+                title={
+                  detailShelf.price_eval?.status === "ready"
+                    ? "Оновити оцінку ціни"
+                    : detailShelf.price_eval
+                      ? "Оновити ціну"
+                      : "Оцінити ціну"
+                }
+                subtitle={
+                  detailShelf.price_eval?.status === "ready" && detailShelf.price_eval.price_avg
+                    ? `Зараз ≈ ${detailShelf.price_eval.price_avg} ₴`
+                    : "Ринкова оцінка ISBN"
+                }
+                onPress={() => refreshPrice(detailShelf.book.id)}
+              />
+              {detailShelf.price_eval?.status === "ready" &&
+              (detailShelf.price_eval.quotes || []).length > 0 ? (
+                <ShelfDetailActionBtn
+                  title={`Price sources (${detailShelf.price_eval.source_count})`}
+                  subtitle="Джерела ринкової оцінки"
+                  onPress={() => setSourcesOpen(detailShelf.price_eval?.quotes || [])}
+                />
+              ) : null}
+              {!detailShelf.borrowed_from ? (
+                <ShelfDetailActionBtn
+                  danger
+                  title="Видалити з полиці"
+                  subtitle="Прибрати цей примірник"
+                  onPress={() => {
+                    const s = detailShelf;
+                    Alert.alert(
+                      "Видалити",
+                      `Прибрати «${s.book.title}» з полиці?` +
+                        (isSharedLibrary && !iAmLibraryAdmin
+                          ? "\nЗапит піде адміністратору в чат."
+                          : isSharedLibrary && iAmLibraryAdmin
+                            ? "\nВласники отримають лише повідомлення в чаті."
+                            : ""),
+                      [
+                        { text: "Скасувати", style: "cancel" },
+                        {
+                          text: "Видалити",
+                          style: "destructive",
+                          onPress: async () => {
+                            setDetailShelf(null);
+                            await act(s);
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                />
+              ) : null}
+            </ScrollView>
+          ) : null
+        }
+      >
+        {detailShelf ? (
+          <>
+            {detailShelf.pending_return_shelf_id && !detailShelf.borrowed_from ? (
+              <View style={styles.pendingInline}>
+                {(() => {
+                  const row = pending.find((p) => p.id === detailShelf.pending_return_shelf_id);
+                  return row?.user ? (
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
+                      <UserNameLink user={row.user} style={[styles.meta, { color: colors.stampOk }]} />
+                      <Text style={[styles.meta, { color: colors.stampOk, fontWeight: "600" }]}>
+                        {" "}
+                        повідомив про повернення.
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.meta, { color: colors.stampOk, fontWeight: "600" }]}>
+                      Позичальник повідомив про повернення.
+                    </Text>
+                  );
+                })()}
+              </View>
+            ) : null}
             {detailShelf.borrowed_from ? (
               <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 6 }}>
                 <Text style={styles.meta}>Позичено у </Text>
@@ -1014,22 +1190,6 @@ export default function ShelfScreen() {
                     ({detailShelf.price_eval.price_min}–{detailShelf.price_eval.price_max})
                   </Text>
                 </Text>
-                <View style={styles.priceActions}>
-                  <Pressable
-                    onPress={() => setSourcesOpen(detailShelf.price_eval?.quotes || [])}
-                    style={styles.priceBtn}
-                  >
-                    <Text style={styles.priceBtnText}>
-                      Price sources ({detailShelf.price_eval.source_count})
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => refreshPrice(detailShelf.book.id)}
-                    style={styles.priceBtn}
-                  >
-                    <Text style={styles.priceBtnText}>Оновити</Text>
-                  </Pressable>
-                </View>
               </View>
             ) : (
               <View style={styles.priceRow}>
@@ -1040,132 +1200,32 @@ export default function ShelfScreen() {
                       ? "Ціну не знайдено"
                       : "Ціна ще не оцінена"}
                 </Text>
-                <Pressable
-                  onPress={() => refreshPrice(detailShelf.book.id)}
-                  style={styles.priceBtn}
-                >
-                  <Text style={styles.priceBtnText}>
-                    {detailShelf.price_eval ? "Оновити ціну" : "Оцінити ціну"}
-                  </Text>
-                </Pressable>
               </View>
             )}
-            {!detailShelf.borrowed_from &&
-            detailShelf.book.isbn &&
-            !detailShelf.book.isbn.startsWith("9799") &&
-            !detailShelf.book.isbn_missing ? (
-              <Pressable
-                onPress={() => refreshMetadata(detailShelf.book.id)}
-                style={[styles.priceBtn, { alignSelf: "flex-start", marginTop: 8 }]}
-              >
-                <Text style={styles.priceBtnText}>Оновити з каталогу</Text>
-              </Pressable>
-            ) : null}
-            <View style={[styles.actions, { marginTop: 16 }]}>
-              <HistoryLink copyId={detailShelf.copy_id} style={styles.link} />
-              {!detailShelf.borrowed_from && detailShelf.copy_id ? (
-                <Pressable
-                  onPress={() => {
-                    const cid = detailShelf.copy_id!;
-                    setDetailShelf(null);
-                    router.push(`/qr-scan?attach_copy_id=${cid}`);
-                  }}
-                >
-                  <Text style={styles.link}>Скан QR</Text>
-                </Pressable>
-              ) : null}
-              {detailShelf.borrowed_from ? (
-                <Pressable onPress={() => router.push(`/chat/${detailShelf.borrowed_from!.id}`)}>
-                  <Text style={styles.link}>Чат з власником</Text>
-                </Pressable>
-              ) : null}
-              {!detailShelf.borrowed_from ? (
-                <Pressable
-                  onPress={() => {
-                    const s = detailShelf;
-                    setDetailShelf(null);
-                    openListing(s);
-                  }}
-                >
-                  <Text style={styles.link}>Статуси</Text>
-                </Pressable>
-              ) : null}
-              {!detailShelf.borrowed_from && detailShelf.can_edit_manual ? (
-                <Pressable
-                  onPress={() => {
-                    setDetailShelf(null);
-                    openEditManual(detailShelf);
-                  }}
-                >
-                  <Ionicons name="create-outline" size={22} color={colors.ink} />
-                </Pressable>
-              ) : null}
-              {!detailShelf.borrowed_from ? (
-                <Pressable
-                  onPress={() => {
-                    const mn = String(detailShelf.book.min_readers_age);
-                    const mx = String(detailShelf.book.max_readers_age);
-                    ageSavedKeyRef.current = `${detailShelf.id}:${mn}:${mx}`;
-                    setAgeMin(mn);
-                    setAgeMax(mx);
-                    setAgeShelf(detailShelf);
-                  }}
-                >
-                  <Text style={styles.link}>Вік читача</Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: "/post/new",
-                    params: { book_id: String(detailShelf.book.id) },
-                  })
-                }
-              >
-                <Text style={styles.link}>Пост</Text>
-              </Pressable>
-              {detailShelf.borrowed_from ? (
-                <Pressable
-                  onPress={async () => {
-                    await act(detailShelf);
-                    setDetailShelf(null);
-                  }}
-                >
-                  <Text style={styles.action}>Повернути</Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  onPress={() => {
-                    const s = detailShelf;
-                    Alert.alert(
-                      "Видалити",
-                      `Прибрати «${s.book.title}» з полиці?` +
-                        (isSharedLibrary && !iAmLibraryAdmin
-                          ? "\nЗапит піде адміністратору в чат."
-                          : isSharedLibrary && iAmLibraryAdmin
-                            ? "\nВласники отримають лише повідомлення в чаті."
-                            : ""),
-                      [
-                        { text: "Скасувати", style: "cancel" },
-                        {
-                          text: "Видалити",
-                          style: "destructive",
-                          onPress: async () => {
-                            setDetailShelf(null);
-                            await act(s);
-                          },
-                        },
-                      ]
-                    );
-                  }}
-                >
-                  <Text style={styles.action}>Видалити</Text>
-                </Pressable>
-              )}
-            </View>
-          </ScrollView>
+          </>
         ) : null}
-      </Modal>
+      </ShelfInstanceDetailModal>
+
+      <BookIsbnInfoModal
+        book={detailShelf?.book ?? null}
+        visible={isbnInfoOpen && !!detailShelf}
+        onClose={() => setIsbnInfoOpen(false)}
+        footer={
+          detailShelf ? (
+            <Pressable
+              style={styles.isbnModalFooterBtn}
+              onPress={() => {
+                const bid = detailShelf.book.id;
+                setIsbnInfoOpen(false);
+                setDetailShelf(null);
+                router.push(`/book/${bid}`);
+              }}
+            >
+              <Text style={styles.isbnModalFooterText}>Усі примірники ISBN</Text>
+            </Pressable>
+          ) : null
+        }
+      />
 
       <Modal
         visible={manualOpen}
@@ -1626,17 +1686,34 @@ const styles = StyleSheet.create({
   },
   selectCheck: {
     position: "absolute",
-    top: 6,
-    right: 6,
+    top: 8,
+    right: 8,
     zIndex: 10,
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderRadius: 6,
-    padding: 3,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderRadius: 10,
+    borderWidth: 2.5,
+    borderColor: "rgba(42,31,20,0.45)",
     shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 4,
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 6,
+  },
+  selectCheckOn: {
+    backgroundColor: colors.stamp,
+    borderColor: colors.stamp,
+  },
+  selectCheckMark: {
+    width: 18,
+    height: 10,
+    borderLeftWidth: 3.5,
+    borderBottomWidth: 3.5,
+    borderColor: colors.white,
+    transform: [{ rotate: "-45deg" }, { translateY: -2 }],
   },
   flexCardMeta: {
     paddingHorizontal: 8,
@@ -1691,10 +1768,8 @@ const styles = StyleSheet.create({
   slipsLink: { paddingHorizontal: 16, marginBottom: 10 },
   input: { flex: 1, borderBottomWidth: 1, borderColor: colors.line, color: colors.ink, paddingVertical: 8 },
   isbnInput: {
-    width: 148,
-    maxWidth: 148,
-    flexGrow: 0,
-    flexShrink: 0,
+    flex: 1,
+    minWidth: 0,
     borderBottomWidth: 1,
     borderColor: colors.line,
     color: colors.ink,
@@ -1736,6 +1811,27 @@ const styles = StyleSheet.create({
   pendingBox: { marginBottom: 12 },
   pendingHint: { color: colors.muted, fontSize: 12, marginBottom: 10, lineHeight: 16 },
   pendingCard: { borderColor: colors.stampOk, backgroundColor: "#E8F5E9" },
+  pendingCardRow: { flexDirection: "row", alignItems: "stretch" },
+  pendingThumbWrap: {
+    width: 72,
+    height: 108,
+    backgroundColor: "#F3F1EC",
+    overflow: "hidden",
+  },
+  pendingCardBody: { flex: 1 },
+  pendingInline: { marginTop: 10, marginBottom: 4 },
+  detailFooterScroll: { maxHeight: "100%" },
+  detailFooterContent: { paddingBottom: 4 },
+  isbnModalFooterBtn: {
+    marginTop: 16,
+    marginBottom: 8,
+    alignSelf: "stretch",
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    padding: 14,
+  },
+  isbnModalFooterText: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   confirmBtn: {
     marginTop: 10,
     backgroundColor: colors.stampOk,
@@ -1758,24 +1854,6 @@ const styles = StyleSheet.create({
   cardBody: { paddingHorizontal: 16, paddingVertical: 10 },
   title: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4, fontSize: 13 },
-  isbnMetaBlock: {
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-  },
-  isbnMetaH: { color: colors.ink, fontWeight: "800", fontSize: 14, marginBottom: 6 },
-  proseScrollWrap: { marginTop: 8 },
-  proseScroll: {
-    maxHeight: 192,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: "#F7F7F5",
-  },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: 14, marginTop: 10 },
   link: { color: colors.ink, fontWeight: "700" },
   action: { color: colors.stamp, fontWeight: "700" },
   modalH: { fontSize: 20, fontWeight: "800", color: colors.ink, marginBottom: 12 },

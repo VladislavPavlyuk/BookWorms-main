@@ -62,21 +62,27 @@ def to_relative_media_url(url: str | None) -> str | None:
 
 
 def media_url_for_request(url: str | None, request=None) -> str:
-    """Expand relative /media/... for API/RN; leave external URLs alone."""
+    """
+    Expand relative /media/... for API/RN; leave external URLs alone.
+
+    Prefer PUBLIC_BASE_URL over request.build_absolute_uri so mobile clients
+    never get docker-internal hosts (api:8000) while desktop browsers still
+    work via same-origin relative paths in templates.
+    """
     u = (url or "").strip()
     if not u:
         return ""
     rel = to_relative_media_url(u)
     if rel is None:
         return u[:500]
+    base = (getattr(settings, "PUBLIC_BASE_URL", "") or "").rstrip("/")
+    if base:
+        return f"{base}{rel}"[:500]
     if request is not None:
         try:
             return request.build_absolute_uri(rel)[:500]
         except Exception:
             pass
-    base = (getattr(settings, "PUBLIC_BASE_URL", "") or "").rstrip("/")
-    if base:
-        return f"{base}{rel}"[:500]
     return rel[:500]
 
 

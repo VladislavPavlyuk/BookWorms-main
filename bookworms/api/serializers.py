@@ -265,9 +265,14 @@ class BookSerializer(serializers.ModelSerializer):
         )
 
     def get_cover_url(self, obj):
+        from mainApp.book_photos import book_photo_urls
         from mainApp.catalog_media import media_url_for_request
 
-        return media_url_for_request(obj.cover_url, self.context.get("request"))
+        url = media_url_for_request(obj.cover_url, self.context.get("request"))
+        if (url or "").strip():
+            return url
+        photos = book_photo_urls(obj, request=self.context.get("request"))
+        return photos[0] if photos else ""
 
     def get_photo_urls(self, obj):
         from mainApp.book_photos import book_photo_urls

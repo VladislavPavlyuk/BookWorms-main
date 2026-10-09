@@ -29,16 +29,9 @@ def allocate_local_isbn() -> str:
 
 
 def _absolute_url(request, file_field) -> str:
-    url = file_field.url
-    if request is not None:
-        try:
-            return request.build_absolute_uri(url)
-        except Exception:
-            pass
-    base = (getattr(settings, "PUBLIC_BASE_URL", "") or "").rstrip("/")
-    if base:
-        return f"{base}{url}"
-    return url
+    from .catalog_media import media_url_for_request
+
+    return media_url_for_request(file_field.url, request)
 
 
 def _stored_media_url(file_field) -> str:

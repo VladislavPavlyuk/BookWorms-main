@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Image,
   StyleSheet,
@@ -8,6 +8,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { useResolvedMediaUrl } from "./mediaUrl";
 import { colors, fs, s } from "./theme";
 
 type Props = {
@@ -38,12 +39,16 @@ const MISSING_MSG =
  */
 export function BookCover({ uri, size = "full", style }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const src = (uri || "").trim();
+  const src = useResolvedMediaUrl(uri);
   const [failed, setFailed] = useState(false);
   const full = size === "full";
   const dim = full ? null : SIZES[size];
   const landscape = winW > winH;
   const showImg = !!src && !failed;
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
 
   let boxStyle: object;
   let radius: number;
